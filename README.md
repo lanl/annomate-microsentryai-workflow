@@ -1,5 +1,5 @@
 # AnnoMate and MicroSentryAI Workflow
-Human-in-the-loop AIML powered inspection tools AnnoMate and MicroSentryAI
+Human-in-the-loop AI/ML powered inspection tools AnnoMate and MicroSentryAI
 (interrelated)
 
 ## Notice of Copyright Assertion (O5049) 
