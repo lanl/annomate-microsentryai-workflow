@@ -1,0 +1,20 @@
+# --- GUI Framework ---
+PyQt5>=5.15.0
+
+# --- Core AI & Vision ---
+# Anomalib installs PyTorch/Lightning automatically; specified versions ensure compatibility.
+anomalib>=1.0.0
+torch>=2.0.0
+torchvision>=0.15.0
+lightning>=2.0.0
+
+# --- Image Processing & Math ---
+opencv-python>=4.8.0
+Pillow>=10.0.0
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+
+# --- Packaging (Optional) ---
+# Only needed you want to build standalone executable.
+nuitka>=2.0

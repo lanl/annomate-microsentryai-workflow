@@ -1,0 +1,1 @@
+# PaDiM AI Model
