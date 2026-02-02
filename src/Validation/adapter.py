@@ -1,4 +1,3 @@
-# src/Validation/adapter.py
 import os
 import glob
 import cv2
@@ -54,7 +53,6 @@ class MaskGenWorker(QThread):
             with open(self.json_path, 'r') as f:
                 data = json.load(f)
                 image_data_map = data.get('images', {}) 
-                # Handle legacy/alternative JSON structures if necessary
                 if not image_data_map and isinstance(data, dict):
                      image_data_map = data.get('_via_img_metadata', data)
         except Exception as e:
@@ -76,10 +74,17 @@ class MaskGenWorker(QThread):
         for i, filepath in enumerate(files):
             try:
                 filename = os.path.basename(filepath)
-                image_id = get_robust_id(filename) # e.g., "118_003"
+                image_id = get_robust_id(filename) # Returns "118_009"
 
-                # Match ID against JSON keys which likely contain the full timestamped name
+                # 1. Try Exact/Robust Match first (e.g., looking for "118_009")
                 json_key = next((k for k in image_data_map.keys() if image_id in k), None)
+
+                # 2. Fallback: If not found, try matching just the image index (e.g., "009")
+                if not json_key and '_' in image_id:
+                    # Extracts "009" from "118_009"
+                    simple_index = image_id.split('_')[-1] 
+                    # Looks for a key starting with "009." (like "009.jpg")
+                    json_key = next((k for k in image_data_map.keys() if k.startswith(f"{simple_index}.")), None)
 
                 if json_key:
                     img = cv2.imread(filepath)
@@ -94,6 +99,7 @@ class MaskGenWorker(QThread):
                     drawn_polys = 0
                     for ann in annotations:
                         poly_points = ann.get('polygon')
+                        # ... (Rest of the polygon drawing logic remains exactly the same) ...
                         if not poly_points and 'shape_attributes' in ann:
                             sa = ann['shape_attributes']
                             if sa.get('name') == 'polygon':
@@ -105,14 +111,14 @@ class MaskGenWorker(QThread):
                             drawn_polys += 1
                     
                     if drawn_polys > 0:
-                        # Normalize output filename to ensure easier evaluation matching
+                        # Use the original image_id for the output filename to keep it unique
                         clean_name = f"{image_id}_binary_mask.png"
                         out_path = os.path.join(self.output_dir, clean_name)
                         cv2.imwrite(out_path, final_mask)
-                        self.log_message.emit(f"✓ Matched {image_id} -> Mask Saved")
+                        self.log_message.emit(f"✓ Matched {filename} -> Mask Saved")
                         processed_count += 1
                 else:
-                    self.log_message.emit(f"Warning: ID {image_id} not found in JSON.")
+                    self.log_message.emit(f"Warning: ID {image_id} (or index) not found in JSON.")
             except Exception as e:
                 self.log_message.emit(f"Error processing {filename}: {e}")
 
@@ -120,7 +126,7 @@ class MaskGenWorker(QThread):
 
         self.log_message.emit(f"Generation Complete. Processed {processed_count}/{total}.")
         self.finished.emit()
-
+        
 # --- WORKER 2: EVALUATOR ---
 class EvaluationWorker(QThread):
     progress = pyqtSignal(int)

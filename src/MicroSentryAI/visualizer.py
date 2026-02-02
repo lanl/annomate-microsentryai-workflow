@@ -331,23 +331,24 @@ class SyncedGraphicsView(QGraphicsView):
 
 def reconstruct_display_crop(orig: Image.Image, target_size: int) -> Tuple[Image.Image, Tuple[float, float], Tuple[int, int]]:
     """
-    Applies center-cropping and aspect-ratio preservation for canvas display.
+    Resizes the image to fit within target_size x target_size while maintaining aspect ratio.
+    Does NOT crop the image, allowing full-image segmentation visualization.
     
     Returns:
         Tuple containing the processed Image, (scale_x, scale_y), and (offset_x, offset_y).
+        Note: Offsets are (0, 0) as no cropping occurs.
     """
     w, h = orig.size
-    if w < h:
-        new_w, new_h = target_size, int(round(h * (target_size / w)))
-    else:
-        new_h, new_w = target_size, int(round(w * (target_size / h)))
+    # Scale based on the largest dimension to fit within the box
+    scale = target_size / max(w, h)
+    
+    new_w = int(round(w * scale))
+    new_h = int(round(h * scale))
         
     img = orig.resize((new_w, new_h), Image.LANCZOS)
-    left = (new_w - target_size) // 2
-    top = (new_h - target_size) // 2
-    crop = img.crop((left, top, left + target_size, top + target_size))
     
-    return crop, (new_w / w, new_h / h), (left, top)
+    # Return (img, scale_factor, offset)
+    return img, (scale, scale), (0, 0)
 
 
 def pil_to_qpixmap(pil_img: Image.Image) -> QPixmap:
@@ -509,17 +510,15 @@ class MicroSentryWindow(QMainWindow):
         self.display_spin.setValue(self.display_target)
         self.display_spin.setSuffix(" px")
         
-        self.alpha_slider = QSlider(Qt.Horizontal)
-        self.alpha_slider.setRange(0, 100)
-        self.alpha_slider.setValue(int(self.alpha * 100))
-        self.alpha_slider.setFixedWidth(100)
-        self.alpha_label = QLabel(f"α: {self.alpha:.2f}")
+        self.alpha_spin = QDoubleSpinBox()
+        self.alpha_spin.setRange(0.0, 1.0)
+        self.alpha_spin.setSingleStep(0.05)
+        self.alpha_spin.setValue(self.alpha)
 
-        self.heat_thresh_slider = QSlider(Qt.Horizontal)
-        self.heat_thresh_slider.setRange(0, 100)
-        self.heat_thresh_slider.setValue(0) 
-        self.heat_thresh_slider.setFixedWidth(100)
-        self.heat_thresh_label = QLabel(f"Heat Min: 0%")
+        self.heat_thresh_spin = QSpinBox()
+        self.heat_thresh_spin.setRange(0, 100)
+        self.heat_thresh_spin.setValue(00)
+        self.heat_thresh_spin.setSuffix("%")
         
         self.sigma_spin = QSpinBox()
         self.sigma_spin.setRange(0, 16)
@@ -554,12 +553,10 @@ class MicroSentryWindow(QMainWindow):
         row1_layout.addWidget(self.display_spin)
         row1_layout.addSpacing(10)
         row1_layout.addWidget(QLabel("Heat α:"))
-        row1_layout.addWidget(self.alpha_slider)
-        row1_layout.addWidget(self.alpha_label)
+        row1_layout.addWidget(self.alpha_spin)
         row1_layout.addSpacing(10)
         row1_layout.addWidget(QLabel("Heat Min:"))
-        row1_layout.addWidget(self.heat_thresh_slider)
-        row1_layout.addWidget(self.heat_thresh_label)
+        row1_layout.addWidget(self.heat_thresh_spin)
 
         row2_layout.addWidget(QLabel("Smooth (σ):"))
         row2_layout.addWidget(self.sigma_spin)
@@ -632,7 +629,6 @@ class MicroSentryWindow(QMainWindow):
 
     def on_heat_threshold_change(self, v: int):
         """Updates threshold label and triggers heatmap re-rendering."""
-        self.heat_thresh_label.setText(f"Heat Min: {v}%")
         self.render_current_images(push_undo=False)
 
     def _setup_sidebar(self):
@@ -662,9 +658,10 @@ class MicroSentryWindow(QMainWindow):
         
         self.slider.valueChanged.connect(self.on_threshold_change)
         self.display_spin.valueChanged.connect(self.on_display_change)
-        self.alpha_slider.valueChanged.connect(self.on_alpha_change)
+        
+        self.alpha_spin.valueChanged.connect(self.on_alpha_change)
+        self.heat_thresh_spin.valueChanged.connect(self.on_heat_threshold_change)
         self.sigma_spin.valueChanged.connect(self.on_sigma_change)
-        self.heat_thresh_slider.valueChanged.connect(self.on_heat_threshold_change)
         
         self.btn_simpl_sel.clicked.connect(self.simplify_selected)
         self.btn_simpl_all.clicked.connect(self.simplify_all)
@@ -721,10 +718,11 @@ class MicroSentryWindow(QMainWindow):
         if not self.image_files:
             return
         
-        idx = max(0, min(len(self.image_files) - 1, idx))
-        if idx == self.idx:
+        # If we are strictly already at this index (and it wasn't a forced -1 reset), skip
+        if idx == self.idx and idx != -1:
             return
-            
+
+        idx = max(0, min(len(self.image_files) - 1, idx))
         self.idx = idx
         self.process_image()
         
@@ -799,8 +797,12 @@ class MicroSentryWindow(QMainWindow):
             return
         
         self._build_table()
-        self.idx = 0
-        self.process_image()
+        
+        # --- FIXED: Robustly trigger first-image loading ---
+        self.idx = -1  # Force reset so goto_index(0) always triggers
+        self.goto_index(0)
+        # ---------------------------------------------------
+        
         self.folderLoaded.emit(folder, self.image_files)
         
         if self.active_strategy:
@@ -894,14 +896,17 @@ class MicroSentryWindow(QMainWindow):
         self.last_scale = scale
         self.last_offset = offset
 
+        w_disp, h_disp = disp.size
+
         left_bg = QGraphicsPixmapItem(pil_to_qpixmap(disp))
         left_bg.setZValue(-10)
         self.scene_left.addItem(left_bg)
         
-        self.view_left.setSceneRect(QRectF(0, 0, target, target))
-        self.scene_left.setSceneRect(0, 0, target, target)
-        self.view_right.setSceneRect(QRectF(0, 0, target, target))
-        self.scene_right.setSceneRect(0, 0, target, target)
+        rect = QRectF(0, 0, w_disp, h_disp)
+        self.view_left.setSceneRect(rect)
+        self.scene_left.setSceneRect(rect)
+        self.view_right.setSceneRect(rect)
+        self.scene_right.setSceneRect(rect)
 
         if self.score_map is not None:
             self._render_heatmap_and_polygons(disp, target)
@@ -909,29 +914,25 @@ class MicroSentryWindow(QMainWindow):
         self.refresh_view()
 
     def _render_heatmap_and_polygons(self, disp_image: Image.Image, target_size: int):
-        """
-        Generates heatmap overlays and derived polygons from raw anomaly scores.
-        
-        Implements statistical thresholding for visualization and Douglas-Peucker 
-        contour extraction for segmentation.
-        """
+        """Generates heatmap overlays and derived polygons from raw anomaly scores."""
         s = self.score_map
         if self.sigma > 0:
             s = gaussian_filter(s, sigma=self.sigma)
             
         # Normalization and visualization clipping
-        v_percentile = float(self.heat_thresh_slider.value())
+        v_percentile = float(self.heat_thresh_spin.value())
         v_min_thr = np.percentile(s, v_percentile)
         
         s_clipped = np.clip(s, v_min_thr, s.max())
         mx, mn = s_clipped.max(), s_clipped.min()
         s_norm = (s_clipped - mn) / (mx - mn + 1e-12) if mx > mn else (s_clipped - mn)
         
-        # Heatmap colormapping
-        heat_img = Image.fromarray((s_norm * 255).astype(np.uint8), mode="L")
-        heat_img = heat_img.resize((target_size, target_size), Image.BILINEAR)
-        arr = np.array(heat_img) / 255.0
-        colored = (mpl_cmaps["jet"](arr) * 255).astype(np.uint8)
+        w_disp, h_disp = disp_image.size
+        s_norm_resized = cv2.resize(s_norm, (w_disp, h_disp), interpolation=cv2.INTER_LINEAR)
+        
+        # Colorize
+        heat_img_arr = (s_norm_resized * 255).astype(np.uint8)
+        colored = (mpl_cmaps["jet"](heat_img_arr / 255.0) * 255).astype(np.uint8)
         
         overlay = Image.fromarray(colored, mode="RGBA")
         r, g, b, a = overlay.split()
@@ -948,7 +949,7 @@ class MicroSentryWindow(QMainWindow):
         seg_thr = np.percentile(s, percentile)
 
         mask = (s > seg_thr).astype(np.uint8) * 255
-        mask = cv2.resize(mask, (target_size, target_size), interpolation=cv2.INTER_NEAREST)
+        mask = cv2.resize(mask, (w_disp, h_disp), interpolation=cv2.INTER_NEAREST)
         kernel = np.ones((3, 3), np.uint8)
         mask = cv2.erode(mask, kernel, iterations=1)
         
@@ -982,8 +983,7 @@ class MicroSentryWindow(QMainWindow):
         self.render_current_images(push_undo=False)
 
     def on_alpha_change(self, v):
-        self.alpha = v / 100.0
-        self.alpha_label.setText(f"α: {self.alpha:.2f}")
+        self.alpha = float(v)
         self.render_current_images(push_undo=False)
 
     def on_sigma_change(self, v):
@@ -1045,8 +1045,11 @@ class MicroSentryWindow(QMainWindow):
             left_bg = QGraphicsPixmapItem(pil_to_qpixmap(disp))
             left_bg.setZValue(-10)
             self.scene_left.addItem(left_bg)
-            self.view_left.setSceneRect(QRectF(0, 0, target, target))
-            self.scene_left.setSceneRect(0, 0, target, target)
+            
+            w_disp, h_disp = disp.size
+            rect = QRectF(0, 0, w_disp, h_disp)
+            self.view_left.setSceneRect(rect)
+            self.scene_left.setSceneRect(rect)
             
         for poly in polys:
             pts = [QPointF(x, y) for (x, y) in poly['pts']]

@@ -3,7 +3,7 @@ PyQt5>=5.15.0
 
 # --- Core AI & Vision ---
 # Anomalib installs PyTorch/Lightning automatically; specified versions ensure compatibility.
-anomalib>=1.0.0
+anomalib>=2.2.0
 torch>=2.0.0
 torchvision>=0.15.0
 lightning>=2.0.0

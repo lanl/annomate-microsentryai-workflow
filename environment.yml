@@ -1,0 +1,24 @@
+name: annomate_microsentryai
+channels:
+  - pytorch
+  - nvidia  # Needed if you are on Windows/Linux with GPU
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pyqt
+  - opencv
+  - numpy
+  - scipy
+  - matplotlib
+  - pillow
+  - nuitka
+  - pytorch
+  - torchvision
+  - pytorch-cuda=11.8  # Change to 'cpuonly' if on Mac/No-GPU
+  
+  # Pip dependencies (Things not easily found/up-to-date on Conda)
+  - pip
+  - pip:
+    - anomalib
+    - lightning
