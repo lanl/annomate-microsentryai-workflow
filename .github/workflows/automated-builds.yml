@@ -1,0 +1,53 @@
+name: Automated Builds
+
+on:
+  push:
+    branches: [ "9-automate-release-files-on-prs" ] 
+  workflow_dispatch: 
+
+jobs:
+  build:
+    # Run on windows, unbuntu, and mac
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12' 
+          cache: 'pip'
+
+      # Linux requires underlying display libraries to compile PyQt5 apps
+      - name: Install System Dependencies (Linux Only)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxcb-xinerama0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0 libxcb-randr0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 libxkbcommon-x11-0
+          
+      - name: Install Python Dependencies
+        run: pip install pyqt5 numpy anomalib lightning # Or pip install -r requirements.txt
+
+      - name: Build with Nuitka
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          # --output-dir=build is handled automatically by the Action
+          nuitka-version: main
+          script-name: src/main.py
+          mode: standalone
+          enable-plugins: |
+            pyqt5
+            numpy
+          include-data-dir: logos=logos 
+          include-package: |
+            anomalib
+            lightning
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Executable-${{ matrix.os }}
+          path: build
+          include-hidden-files: true # This makes sure we grab any dlls 
