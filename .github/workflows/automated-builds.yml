@@ -5,12 +5,20 @@ on:
     branches: [ "9-automate-release-files-on-prs" ] 
   workflow_dispatch: 
 
+
+    
 jobs:
   build:
-    # Run on windows, unbuntu, and mac
+    # Run on windows, ubuntu, and mac
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            nuitka_mode: standalone
+          - os: ubuntu-latest
+            nuitka_mode: standalone
+          - os: macos-latest
+            nuitka_mode: app
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -37,7 +45,7 @@ jobs:
           # --output-dir=build is handled automatically by the Action
           nuitka-version: main
           script-name: src/main.py
-          mode: standalone
+          mode: ${{ matrix.nuitka_mode }}
           enable-plugins: |
             pyqt5
             numpy
