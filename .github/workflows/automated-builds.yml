@@ -13,10 +13,10 @@ jobs:
         include:
           - os: windows-latest
             nuitka_mode: standalone
-          - os: ubuntu-latest
-            nuitka_mode: standalone
-          - os: macos-latest
-            nuitka_mode: app
+          #- os: ubuntu-latest
+           # nuitka_mode: standalone
+          #-os: macos-latest
+           # nuitka_mode: app
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -37,27 +37,26 @@ jobs:
       - name: Install Python Dependencies
         run: pip install pyqt5 numpy anomalib lightning 
 
-      # Nuitka Caching Step for ccache
-      - name: Cache Nuitka C Compiler Data
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/Nuitka
-            ~/Library/Caches/Nuitka
-            ~\AppData\Local\Nuitka\Nuitka\Cache
-          key: ${{ runner.os }}-nuitka-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-nuitka-
-
       - name: Build with Nuitka
         uses: Nuitka/Nuitka-Action@main
         with:
           nuitka-version: main
           script-name: src/main.py
-          mode: ${{ matrix.nuitka_mode }}          
+          mode: ${{ matrix.nuitka_mode }}
+          module-parameter: torch-disable-jit=yes
+          plugin-flag: anti-bloat=no-include-setuptools
+          nofollow-import-to: |
+            pytest
+            IPython
+            setuptools
           enable-plugins: |
             pyqt5
-          include-data-dir: logos=logos 
+            torch
+            numpy
+            matplotlib
+            anti-bloat
+          include-data-dir: logos=logos
+          show-progress: true
           
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
