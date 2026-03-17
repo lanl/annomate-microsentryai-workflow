@@ -44,6 +44,7 @@ jobs:
           script-name: src/main.py
           mode: ${{ matrix.nuitka_mode }}
           show-scons: true
+          low-memory: true
           module-parameter: |
             torch-disable-jit=yes
             anti-bloat=noinclude-setuptools-mode=error
