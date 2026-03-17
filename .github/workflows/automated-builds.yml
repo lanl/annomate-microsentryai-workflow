@@ -43,12 +43,22 @@ jobs:
           nuitka-version: main
           script-name: src/main.py
           mode: ${{ matrix.nuitka_mode }}
-          module-parameter: torch-disable-jit=yes
-          plugin-flag: anti-bloat=no-include-setuptools
+          module-parameter: |
+            torch-disable-jit=yes
+            anti-bloat=noinclude-setuptools-mode=error
+            anti-bloat=noinclude-pytest-mode=nofollow
+            anti-bloat=noinclude-IPython-mode=nofollow
           nofollow-import-to: |
+            torch.testing
+            torch.utils.benchmark
+            torch.distributed
+            torch.package
+            torch.fx.experimental
             pytest
             IPython
             setuptools
+            matplotlib.tests
+            matplotlib.backends.qt_editor
           enable-plugins: |
             pyqt5
             torch
@@ -56,7 +66,6 @@ jobs:
             matplotlib
             anti-bloat
           include-data-dir: logos=logos
-          show-progress: true
           
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
