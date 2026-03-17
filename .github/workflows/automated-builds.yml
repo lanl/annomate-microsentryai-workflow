@@ -43,6 +43,7 @@ jobs:
           nuitka-version: main
           script-name: src/main.py
           mode: ${{ matrix.nuitka_mode }}
+          show-scons: true
           module-parameter: |
             torch-disable-jit=yes
             anti-bloat=noinclude-setuptools-mode=error
