@@ -180,19 +180,6 @@ class ImageLabel(QLabel):
     def display_to_original(self, p_disp: QPointF) -> Tuple[float, float]:
         return (p_disp.x() / self._base_scale, p_disp.y() / self._base_scale)
 
-    def maybe_close_on_first_vertex(self, pos_view: QPointF, thresh_px: float = 8.0) -> bool:
-        if len(self.current_polygon_points) < 3:
-            return False
-            
-        pos_disp = self.view_to_display(pos_view)
-        start_pt = self.current_polygon_points[0]
-        
-        dx = pos_disp.x() - start_pt.x()
-        dy = pos_disp.y() - start_pt.y()
-        
-        distance = (dx * dx + dy * dy) ** 0.5
-        return distance <= thresh_px
-
     def finish_current_polygon(self):
         if self.current_polygon_points and self.main_window is not None:
             pts_orig = [
@@ -206,9 +193,6 @@ class ImageLabel(QLabel):
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_Escape:
             self.clear_current_polygon()
-            self.set_tool(None)
-            if self.main_window:
-                self.main_window.btn_poly.setChecked(False)
             return
 
         if self.current_tool == POLYGON and self.current_polygon_points:
@@ -293,11 +277,9 @@ class ImageLabel(QLabel):
                     if self.main_window and hasattr(self.main_window, 'on_polygon_selected'):
                         self.main_window.on_polygon_selected(found_idx)
                 
-                if self.maybe_close_on_first_vertex(QPointF(event.pos())):
-                    self.finish_current_polygon()
-                else:
-                    self.current_polygon_points.append(self.view_to_display(QPointF(event.pos())))
-                    self.update()
+                # Always append point on single click
+                self.current_polygon_points.append(self.view_to_display(QPointF(event.pos())))
+                self.update()
                 return
 
             # 3. Normal Selection & Polygon Dragging (When Polygon Tool is OFF)

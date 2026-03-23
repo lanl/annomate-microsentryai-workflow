@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
     QColorDialog,
     QHeaderView,
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QEvent
 from PySide6.QtGui import QColor, QBrush, QIcon, QPixmap
 
 # --- Local Imports ---
@@ -68,6 +68,8 @@ class ImageAnnotator(QMainWindow):
     def __init__(self):
         """Initialize the main window, UI components, and internal state."""
         super().__init__()
+        # Install an application-wide event filter to catch hotkeys globally
+        QtWidgets.QApplication.instance().installEventFilter(self)
         self.setWindowTitle("AnnoMate")
         self.setStyleSheet(MAIN_STYLESHEET)
         self._set_window_icon()
@@ -1070,13 +1072,32 @@ class ImageAnnotator(QMainWindow):
             except Exception as e:
                 logger.debug(f"Failed to maximize window: {e}")
 
-    def keyPressEvent(self, event):
-        """Captures hotkeys for modifying the selected polygon."""
-        if event.key() == Qt.Key_BracketLeft:
-            self.scale_selected_polygon(0.9)
-        elif event.key() == Qt.Key_BracketRight:
-            self.scale_selected_polygon(1.1)
-        super().keyPressEvent(event)
+    def eventFilter(self, obj, event):
+        """Catches hotkeys globally, ignoring them if a text box is focused."""
+        if event.type() == QEvent.KeyPress:
+            # 1. Check if the user is currently typing in a text box
+            focus_widget = QtWidgets.QApplication.focusWidget()
+            if isinstance(focus_widget, (QLineEdit, QTextEdit)):
+                # Let the text box handle the key normally!
+                return super().eventFilter(obj, event)
+
+            # 2. Catch our global hotkeys
+            if event.key() == Qt.Key_P:
+                new_state = not self.btn_poly.isChecked()
+                self.btn_poly.setChecked(new_state)
+                self._set_tool_from_button(POLYGON, self.btn_poly)
+                return True  # Return True to tell Qt we handled this key
+                
+            elif event.key() == Qt.Key_BracketLeft:
+                self.scale_selected_polygon(0.9)
+                return True
+                
+            elif event.key() == Qt.Key_BracketRight:
+                self.scale_selected_polygon(1.1)
+                return True
+
+        # For all other events, process them normally
+        return super().eventFilter(obj, event)
 
     def scale_selected_polygon(self, factor: float):
         """Scales the currently selected polygon from its centroid."""
