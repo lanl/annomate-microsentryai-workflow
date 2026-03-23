@@ -6,7 +6,7 @@ and default visual styling options (such as the default color palette for classe
 """
 
 from typing import List
-from PyQt5.QtGui import QColor
+from PySide6.QtGui import QColor
 
 APP_NAME = "AnnoMate and MicroSentryAI"
 APP_VERSION = "1.0"

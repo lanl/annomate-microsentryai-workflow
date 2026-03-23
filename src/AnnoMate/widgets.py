@@ -5,9 +5,9 @@ This module provides specialized Qt widgets used throughout the application,
 including a collapsible splitter handle and a table widget with cyclic navigation.
 """
 
-from PyQt5.QtWidgets import QSplitter, QSplitterHandle, QTableWidget
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QMouseEvent, QKeyEvent
+from PySide6.QtWidgets import QSplitter, QSplitterHandle, QTableWidget
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent, QKeyEvent
 
 
 class SidebarHandle(QSplitterHandle):

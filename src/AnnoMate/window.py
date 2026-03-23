@@ -18,8 +18,8 @@ from datetime import datetime
 # Third-party imports moved to top per PEP 8
 from PIL import Image, ImageDraw
 
-from PyQt5 import QtWidgets
-from PyQt5.QtWidgets import (
+from PySide6 import QtWidgets
+from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QFileDialog,
@@ -39,8 +39,8 @@ from PyQt5.QtWidgets import (
     QColorDialog,
     QHeaderView,
 )
-from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QColor, QBrush, QIcon, QPixmap
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QBrush, QIcon, QPixmap
 
 # --- Local Imports ---
 from .image_label import ImageLabel, POLYGON
@@ -62,8 +62,8 @@ class ImageAnnotator(QMainWindow):
     """
 
     # Signals for external sync
-    viewChanged = pyqtSignal(float, float, float)
-    folderLoaded = pyqtSignal(str, list)
+    viewChanged = Signal(float, float, float)
+    folderLoaded = Signal(str, list)
 
     def __init__(self):
         """Initialize the main window, UI components, and internal state."""

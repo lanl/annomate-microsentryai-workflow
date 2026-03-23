@@ -12,9 +12,9 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from PyQt5.QtCore import pyqtSignal, Qt, QObject, QEvent
-from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Signal, Qt, QObject, QEvent
+from PySide6.QtGui import QKeyEvent
+from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QApplication,
@@ -74,8 +74,8 @@ class AnnotatorTab(QWidget):
                                  Args: (index, absolute_file_path)
     """
 
-    folderChanged = pyqtSignal(str, list)
-    indexChanged = pyqtSignal(int, str)
+    folderChanged = Signal(str, list)
+    indexChanged = Signal(int, str)
 
     def __init__(self, parent: Optional[QWidget] = None):
         """Initialize the tab and embed the ImageAnnotator."""

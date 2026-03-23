@@ -6,9 +6,9 @@ import os
 import glob
 from typing import List, Optional
 
-from PyQt5.QtCore import Qt, QObject, pyqtSignal, QEvent
-from PyQt5.QtGui import QKeyEvent
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import Qt, QObject, Signal, QEvent
+from PySide6.QtGui import QKeyEvent
+from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QApplication, QMainWindow,
     QLineEdit, QTextEdit, QPlainTextEdit,
 )
@@ -39,7 +39,7 @@ class _KeyForwarder(QObject):
 
 
 class MicroSentryTab(QWidget):
-    folderLoaded = pyqtSignal(str, list)
+    folderLoaded = Signal(str, list)
 
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(parent)

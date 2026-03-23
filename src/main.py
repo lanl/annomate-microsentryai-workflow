@@ -1,7 +1,7 @@
 """
 Application Entry Point for AnnoMate and MicroSentryAI.
 
-This module initializes the PyQt5 application, configures the main window with
+This module initializes the PySide6 application, configures the main window with
 integrated tabs (AnnoMate, MicroSentryAI, and Validation), and establishes
 bidirectional synchronization for navigation, data transfer, and view state.
 """
@@ -9,14 +9,14 @@ bidirectional synchronization for navigation, data transfer, and view state.
 import sys
 from typing import List
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
     QTabWidget,
     QInputDialog,
     QColorDialog,
 )
-from PyQt5.QtCore import Qt
+from PySide6.QtCore import Qt
 
 # Local Application Imports
 from AnnoMate.adapter import AnnotatorTab
@@ -140,17 +140,20 @@ class AppWindow(QMainWindow):
 
 def main():
     """
-    Initializes the PyQt5 application and event loop.
+    Initializes the PySide6 application and event loop.
     """
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # NOTE: In Qt6/PySide6, High DPI scaling is enabled by default. 
+    # The Qt.AA_EnableHighDpiScaling and Qt.AA_UseHighDpiPixmaps attributes 
+    # were completely removed from the framework, so these are commented out.
+    # QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
     app = QApplication(sys.argv)
     
     main_window = AppWindow()
     main_window.showMaximized()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec()) # Changed from exec_() to exec()
 
 
 if __name__ == "__main__":

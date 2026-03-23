@@ -2,7 +2,7 @@
 MicroSentryAI Visualizer Module.
 
 This module provides a high-fidelity Graphical User Interface (GUI) for 
-AI-assisted defect detection and validation. It utilizes the PyQt5 framework 
+AI-assisted defect detection and validation. It utilizes the PySide6 framework 
 to synchronize dual viewports for side-by-side analysis of raw data and 
 statistical anomaly heatmaps.
 """
@@ -21,18 +21,18 @@ from typing import List, Optional, Tuple, Any, Dict
 from scipy.ndimage import gaussian_filter
 from matplotlib import colormaps as mpl_cmaps
 
-from PyQt5.QtCore import (
-    Qt, QPointF, QRectF, pyqtSignal, QTimer, QThread, QSize, QObject
+from PySide6.QtCore import (
+    Qt, QPointF, QRectF, Signal, QTimer, QThread, QSize, QObject
 )
-from PyQt5.QtGui import (
+from PySide6.QtGui import (
     QPixmap, QImage, QPen, QBrush, QColor, QPainterPath,
-    QKeySequence, QIcon, QMouseEvent
+    QKeySequence, QIcon, QMouseEvent, QShortcut
 )
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton, QFileDialog,
     QHBoxLayout, QVBoxLayout, QMessageBox, QSlider, QStatusBar, QGridLayout,
     QSpinBox, QDoubleSpinBox, QGraphicsView, QGraphicsScene,
-    QGraphicsPixmapItem, QGraphicsPathItem, QGraphicsEllipseItem, QShortcut,
+    QGraphicsPixmapItem, QGraphicsPathItem, QGraphicsEllipseItem,
     QProgressBar, QTableWidgetItem, QTableWidget, QHeaderView, QAbstractItemView, QSplitter,
     QInputDialog
 )
@@ -229,7 +229,7 @@ class SegPathItem(QGraphicsPathItem):
 
 class SyncedGraphicsView(QGraphicsView):
     """A viewport implementation that facilitates synchronized multi-view rendering."""
-    viewChanged = pyqtSignal(float, float, float)
+    viewChanged = Signal(float, float, float)
 
     def __init__(self, scene, parent=None):
         super().__init__(scene, parent)
@@ -314,9 +314,9 @@ def pil_to_qpixmap(pil_img: Image.Image) -> QPixmap:
 
 class InferenceWorker(QThread):
     """Concurrent execution engine for anomaly model inference."""
-    resultReady = pyqtSignal(str, object) 
-    progress = pyqtSignal(int)
-    finished = pyqtSignal()
+    resultReady = Signal(str, object) 
+    progress = Signal(int)
+    finished = Signal()
 
     def __init__(self, strategy, file_list: List[str]):
         super().__init__()
@@ -350,10 +350,10 @@ class MicroSentryWindow(QMainWindow):
     """
     Main controller for the MicroSentryAI ecosystem.
     """
-    polygonsSent = pyqtSignal(list, str)
-    imageIndexChanged = pyqtSignal(int)
-    viewChanged = pyqtSignal(float, float, float)
-    folderLoaded = pyqtSignal(str, list)
+    polygonsSent = Signal(list, str)
+    imageIndexChanged = Signal(int)
+    viewChanged = Signal(float, float, float)
+    folderLoaded = Signal(str, list)
 
     def __init__(self):
         super().__init__()
@@ -601,9 +601,9 @@ class MicroSentryWindow(QMainWindow):
         self.btn_simpl_all.clicked.connect(self.simplify_all)
 
     def _setup_shortcuts(self):
-        QShortcut(QKeySequence('Ctrl+Z'), self, activated=self.undo)
-        QShortcut(QKeySequence('Ctrl+Y'), self, activated=self.redo)
-        QShortcut(QKeySequence('S'), self, activated=self.simplify_selected_shortcut)
+        QShortcut(QKeySequence('Ctrl+Z'), self).activated.connect(self.undo)
+        QShortcut(QKeySequence('Ctrl+Y'), self).activated.connect(self.redo)
+        QShortcut(QKeySequence('S'), self).activated.connect(self.simplify_selected_shortcut)
 
     # --- DATASET MANAGEMENT ---
 

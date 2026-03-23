@@ -1,7 +1,7 @@
 """
 Image Label Widget for AnnoMate.
 
-This module defines the `ImageLabel` class, a custom PyQt5 widget that handles:
+This module defines the `ImageLabel` class, a custom PyQt5/PySide6 widget that handles:
 1.  Displaying images with high-performance zooming and panning.
 2.  Interactive polygon annotation (drawing, canceling, finishing).
 3.  Rendering overlays (existing annotations) on top of the image.
@@ -11,8 +11,8 @@ from typing import List, Tuple, Optional
 import cv2
 import numpy as np
 
-from PyQt5.QtCore import Qt, QPointF, QRect, QSize
-from PyQt5.QtGui import (
+from PySide6.QtCore import Qt, QPointF, QRect, QSize
+from PySide6.QtGui import (
     QPainter,
     QPen,
     QPolygonF,
@@ -25,7 +25,7 @@ from PyQt5.QtGui import (
     QKeyEvent,
     QPaintEvent,
 )
-from PyQt5.QtWidgets import QLabel, QSizePolicy
+from PySide6.QtWidgets import QLabel, QSizePolicy
 
 # Tool Constants
 POLYGON = "polygon"
@@ -402,20 +402,16 @@ class ImageLabel(QLabel):
         if delta == 0:
             return
 
-        # --- BUG FIX 1: Touchpad Sensitivity ---
         steps = delta / 120.0
         steps = max(-5.0, min(5.0, steps)) # Clamp extreme inputs
         factor = 1.15 ** steps
 
-        # --- BUG FIX 2: Order of Operations for Cursor Anchor ---
-        # We MUST calculate the original point under the cursor BEFORE updating the zoom!
-        cursor_pos = QPointF(event.pos())
+        cursor_pos = event.position()
         point_in_disp = self.view_to_display(cursor_pos)
         
         old_zoom = self._zoom
         self._zoom = max(0.2, min(8.0, old_zoom * factor))
 
-        # Now update pan so that 'point_in_disp' remains exactly under 'cursor_pos'
         self._pan = QPointF(
             cursor_pos.x() - point_in_disp.x() * self._zoom,
             cursor_pos.y() - point_in_disp.y() * self._zoom,

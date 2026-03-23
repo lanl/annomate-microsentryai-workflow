@@ -12,12 +12,12 @@ import numpy as np
 import json
 import re
 
-from PyQt5.QtWidgets import (
+from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
     QFileDialog, QProgressBar, QGroupBox, QScrollArea, QFrame
 )
-from PyQt5.QtCore import QThread, pyqtSignal, Qt
-from PyQt5.QtGui import QPixmap
+from PySide6.QtCore import QThread, Signal, Qt
+from PySide6.QtGui import QPixmap
 
 # Relative imports
 from .mask_comparator import MaskComparator
@@ -26,16 +26,33 @@ from .comparison_logger import write_log_header, log_results, log_skip
 
 def get_robust_id(filename: str) -> str:
     """
-    Extracts 'Tray_ImageIndex' to ensure matches across different timestamps.
-    Example: '118_images_003_01-25-26-20-43-41_poly.jpg' -> '118_003'
+    Extracts an identifier to match JSON keys and tie GT masks to predictions.
+    Supports formats like:
+    - '118_images_003_01-25-26-20-43-41_poly.jpg' -> '118_003'
+    - 'hole_003_02-16-26-01-41-33_poly.jpg' -> '003'
+    - '003_binary_mask.png' -> '003'
     """
+    # 1. Match 'Tray_images_Index' format
     match = re.search(r'(\d+)_images_(\d+)', filename)
     if match:
         return f"{match.group(1)}_{match.group(2)}"
     
+    # 2. Match class_index_timestamp format (e.g., hole_003_...)
+    match = re.search(r'_(\d{3,})_', filename)
+    if match:
+        return match.group(1)
+        
+    # 3. Fallback: extract 3+ digit numbers
     fallback = re.findall(r'(\d{3,})', filename)
     if len(fallback) >= 2:
         return f"{fallback[0]}_{fallback[1]}"
+    elif len(fallback) == 1:
+        return fallback[0]
+        
+    # 4. Catch-all: grab the very first number found
+    first_num = re.search(r'(\d+)', filename)
+    if first_num:
+        return first_num.group(1)
         
     return os.path.splitext(filename)[0]
 
@@ -45,9 +62,9 @@ def get_robust_id(filename: str) -> str:
 
 class MaskGenWorker(QThread):
     """Background worker to parse JSON annotations and generate binary masks."""
-    progress = pyqtSignal(int)
-    log_message = pyqtSignal(str)
-    finished = pyqtSignal()
+    progress = Signal(int)
+    log_message = Signal(str)
+    finished = Signal()
 
     def __init__(self, input_dir: str, json_path: str, output_dir: str):
         super().__init__()
@@ -85,7 +102,12 @@ class MaskGenWorker(QThread):
                     filename = os.path.basename(filepath)
                     image_id = get_robust_id(filename)
 
-                    json_key = next((k for k in image_data_map.keys() if image_id in k), None)
+                    # Try an exact file match first (e.g., "003" -> "003.png")
+                    json_key = next((k for k in image_data_map.keys() if k == f"{image_id}.png" or k == f"{image_id}.jpg"), None)
+                    
+                    # Fallback to substring search
+                    if not json_key:
+                        json_key = next((k for k in image_data_map.keys() if image_id in k), None)
 
                     if not json_key and '_' in image_id:
                         simple_index = image_id.split('_')[-1] 
@@ -138,10 +160,10 @@ class MaskGenWorker(QThread):
 
 class EvaluationWorker(QThread):
     """Background worker to calculate IoU between ground truth and predictions."""
-    progress = pyqtSignal(int)
-    log_message = pyqtSignal(str)       
-    match_found = pyqtSignal(str, str, float)
-    finished = pyqtSignal()
+    progress = Signal(int)
+    log_message = Signal(str)       
+    match_found = Signal(str, str, float)
+    finished = Signal()
 
     def __init__(self, gt_dir: str, pred_dir: str, out_dir: str):
         super().__init__()
