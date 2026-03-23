@@ -54,8 +54,11 @@ class ImageLabel(QLabel):
         self._last_mouse_pos: Optional[QPointF] = None
         self._mouse_pos: Optional[QPointF] = None
 
+        self.line_thickness = 2.0  # Default brush thickness
+
         self.current_polygon_points: List[QPointF] = []
         self._overlays: List[Tuple[List[QPointF], QColor]] = []
+
         
         # --- UI State Trackers ---
         self.selected_polygon_idx: int = -1  
@@ -116,14 +119,14 @@ class ImageLabel(QLabel):
     def set_active_color(self, color: QColor):
         self._active_color = color if isinstance(color, QColor) else QColor(0, 200, 0)
 
-    def set_overlays(self, poly_list: List[Tuple[List[Tuple[float, float]], QColor]]):
+    def set_overlays(self, poly_list: List[Tuple[List[Tuple[float, float]], QColor, float]]):
         self._overlays = []
-        for pts_orig, color in poly_list:
+        for pts_orig, color, thickness in poly_list:
             disp_pts = [
                 QPointF(x * self._base_scale, y * self._base_scale)
                 for (x, y) in pts_orig
             ]
-            self._overlays.append((disp_pts, color))
+            self._overlays.append((disp_pts, color, thickness))
         self.update()
 
     def clear_current_polygon(self):
@@ -211,7 +214,7 @@ class ImageLabel(QLabel):
         if event.button() == Qt.LeftButton:
             pos_disp = self.view_to_display(QPointF(event.pos()))
             found_idx = -1
-            for i, (pts, _) in enumerate(reversed(self._overlays)):
+            for i, (pts, *_) in enumerate(reversed(self._overlays)):
                 if QPolygonF(pts).containsPoint(pos_disp, Qt.OddEvenFill):
                     found_idx = len(self._overlays) - 1 - i
                     break
@@ -235,14 +238,14 @@ class ImageLabel(QLabel):
 
             # --- PRE-CHECK: Identify if we clicked inside any existing polygon ---
             found_idx = -1
-            for i, (pts, _) in enumerate(reversed(self._overlays)):
+            for i, (pts, *_) in enumerate(reversed(self._overlays)):
                 if QPolygonF(pts).containsPoint(pos_disp, Qt.OddEvenFill):
                     found_idx = len(self._overlays) - 1 - i
                     break
 
             # 1. Edit Mode: Vertex Dragging & Polygon Dragging
             if self.editing_polygon_idx != -1:
-                pts, _ = self._overlays[self.editing_polygon_idx]
+                pts, *_ = self._overlays[self.editing_polygon_idx]
                 closest_idx = -1
                 min_dist = float('inf')
                 
@@ -302,7 +305,7 @@ class ImageLabel(QLabel):
         # --- NEW: Live update vertex while dragging ---
         if self.dragging_vertex_idx != -1 and self.editing_polygon_idx != -1:
             new_pos = self.view_to_display(self._mouse_pos)
-            pts, _ = self._overlays[self.editing_polygon_idx]
+            pts, *_ = self._overlays[self.editing_polygon_idx]
             pts[self.dragging_vertex_idx] = new_pos
             self.update()
             return
@@ -312,7 +315,7 @@ class ImageLabel(QLabel):
             delta_view = self._mouse_pos - self._last_mouse_pos
             delta_disp = QPointF(delta_view.x() / self._zoom, delta_view.y() / self._zoom)
             
-            pts, _ = self._overlays[self.selected_polygon_idx]
+            pts, *_ = self._overlays[self.selected_polygon_idx]
             for i in range(len(pts)):
                 pts[i] = QPointF(pts[i].x() + delta_disp.x(), pts[i].y() + delta_disp.y())
             
@@ -333,7 +336,7 @@ class ImageLabel(QLabel):
             
         # --- NEW: Hover detection for precision cursor ---
         if self.editing_polygon_idx != -1 and not self._dragging_polygon and not self._panning:
-            pts, _ = self._overlays[self.editing_polygon_idx]
+            pts, *_ = self._overlays[self.editing_polygon_idx]
             hovering = False
             for p_disp in pts:
                 p_view = QPointF(
@@ -355,7 +358,7 @@ class ImageLabel(QLabel):
             # Commit Vertex Drag
             if self.dragging_vertex_idx != -1:
                 if self.main_window and hasattr(self.main_window, 'update_polygon_points'):
-                    pts, _ = self._overlays[self.editing_polygon_idx]
+                    pts, *_ = self._overlays[self.editing_polygon_idx]
                     pts_orig = [self.display_to_original(p) for p in pts]
                     self.main_window.update_polygon_points(self.editing_polygon_idx, pts_orig)
                 self.dragging_vertex_idx = -1
@@ -364,7 +367,7 @@ class ImageLabel(QLabel):
             # Commit Polygon Drag
             if self._dragging_polygon:
                 if self.main_window and hasattr(self.main_window, 'update_polygon_points'):
-                    pts, _ = self._overlays[self.selected_polygon_idx]
+                    pts, *_ = self._overlays[self.selected_polygon_idx]
                     pts_orig = [self.display_to_original(p) for p in pts]
                     self.main_window.update_polygon_points(self.selected_polygon_idx, pts_orig)
                 self._dragging_polygon = False
@@ -429,6 +432,8 @@ class ImageLabel(QLabel):
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing) # NEW: Smooth line rendering
+        
         if self._display_qpix is None:
             return
 
@@ -437,32 +442,68 @@ class ImageLabel(QLabel):
         painter.drawPixmap(0, 0, self._display_qpix)
 
         # Draw Overlays with Selection Highlighting
-        for i, (pts, color) in enumerate(self._overlays):
+        for i, (pts, color, poly_thickness) in enumerate(self._overlays):
             if len(pts) >= 2:
                 is_selected = (i == self.selected_polygon_idx)
-                pen = QPen(color, 4 if is_selected else 2) # Thicker if selected
-                alpha = 150 if is_selected else 60         # Darker fill if selected
+                
+                # Adjusted opacity for lines and fills
+                line_alpha = 100  
+                fill_alpha = 90 if is_selected else 35  
+                
+                pen_color = QColor(color.red(), color.green(), color.blue(), line_alpha)
+                brush_color = QColor(color.red(), color.green(), color.blue(), fill_alpha)
+                
+                # Use the POLYGON'S thickness, scale slightly if selected
+                drawn_thickness = poly_thickness * 1.5 if is_selected else poly_thickness
+                
+                pen = QPen(pen_color, drawn_thickness)
+                pen.setJoinStyle(Qt.RoundJoin) # Rounded corners on thick lines
                 
                 painter.setPen(pen)
-                painter.setBrush(QBrush(QColor(color.red(), color.green(), color.blue(), alpha)))
+                painter.setBrush(QBrush(brush_color))
                 painter.drawPolygon(QPolygonF(pts + [pts[0]]))
-                # --- NEW: Draw Editing Handles ---
+                
+                # --- Draw Editing Handles ---
                 if i == self.editing_polygon_idx:
-                    # Scale handles so they don't get tiny when zoomed out
                     r = max(4.0 / self._zoom, 1.0) 
                     painter.setBrush(QBrush(QColor("#FFEB3B"))) 
-                    painter.setPen(QPen(QColor(20, 20, 20), 1))
+                    painter.setPen(QPen(QColor(20, 20, 20, 90), 1))
                     for p in pts:
                         painter.drawEllipse(p, r, r)
 
+        # --- Draw the actively drawing, in-progress polygon ---
         if self.current_tool == POLYGON and self.current_polygon_points:
-            painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(self._active_color, 2))
-            painter.drawPolyline(QPolygonF(self.current_polygon_points))
             
-            if self._mouse_pos:
-                cursor_in_disp = self.view_to_display(self._mouse_pos)
-                painter.drawLine(
-                    self.current_polygon_points[-1],
-                    cursor_in_disp,
-                )
+            # --- 1. SET OPACITY HERE ---
+            # 150 is the alpha value (~60% opaque). Change this from 0 to 255.
+            drawing_alpha = 150 
+            drawing_color = QColor(
+                self._active_color.red(), 
+                self._active_color.green(), 
+                self._active_color.blue(), 
+                drawing_alpha
+            )
+
+            active_pen = QPen(drawing_color, self.line_thickness)
+            active_pen.setJoinStyle(Qt.RoundJoin)
+            painter.setPen(active_pen)
+
+            # Draw solid lines between the points you've already clicked
+            for i in range(len(self.current_polygon_points) - 1):
+                painter.drawLine(self.current_polygon_points[i], self.current_polygon_points[i+1])
+
+            # Draw a dynamic preview line from the last point to your mouse cursor
+            if self._mouse_pos is not None:
+                cursor_disp = self.view_to_display(self._mouse_pos)
+                painter.drawLine(self.current_polygon_points[-1], cursor_disp)
+
+            # --- 2. SET CIRCLE SIZE HERE ---
+            painter.setBrush(QBrush(drawing_color))
+            painter.setPen(Qt.NoPen) # Removes the hard outline from the circles for a cleaner look
+            
+            r = max(4 / self._zoom, 1.5) 
+            
+            for p in self.current_polygon_points:
+                painter.drawEllipse(p, r, r)
+
+                
