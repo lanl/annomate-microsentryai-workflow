@@ -1,7 +1,7 @@
 """
 Image Label Widget for AnnoMate.
 
-This module defines the `ImageLabel` class, a custom PyQt5/PySide6 widget that handles:
+This module defines the `ImageLabel` class, a custom PySide6 widget that handles:
 1.  Displaying images with high-performance zooming and panning.
 2.  Interactive polygon annotation (drawing, canceling, finishing).
 3.  Rendering overlays (existing annotations) on top of the image.
