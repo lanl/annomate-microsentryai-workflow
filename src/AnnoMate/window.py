@@ -42,8 +42,8 @@ from PySide6.QtWidgets import (
     QSlider,
     QDialogButtonBox
 )
-from PySide6.QtCore import Qt, Signal, QEvent
-from PySide6.QtGui import QColor, QBrush, QIcon, QPixmap, QAction
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QBrush, QIcon, QPixmap
 
 # --- Local Imports ---
 from .image_label import ImageLabel, POLYGON

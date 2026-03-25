@@ -1,7 +1,7 @@
 """
 Image Label Widget for AnnoMate.
 
-This module defines the `ImageLabel` class, a custom PyQt5/PySide6 widget that handles:
+This module defines the `ImageLabel` class, a custom PySide6 widget that handles:
 1.  Displaying images with high-performance zooming and panning.
 2.  Interactive polygon annotation (drawing, canceling, finishing).
 3.  Rendering overlays (existing annotations) on top of the image.
@@ -474,36 +474,9 @@ class ImageLabel(QLabel):
         # --- Draw the actively drawing, in-progress polygon ---
         if self.current_tool == POLYGON and self.current_polygon_points:
             
-            # --- 1. SET OPACITY HERE ---
-            # 150 is the alpha value (~60% opaque). Change this from 0 to 255.
-            drawing_alpha = 150 
-            drawing_color = QColor(
-                self._active_color.red(), 
-                self._active_color.green(), 
-                self._active_color.blue(), 
-                drawing_alpha
-            )
-
-            active_pen = QPen(drawing_color, self.line_thickness)
-            active_pen.setJoinStyle(Qt.RoundJoin)
-            painter.setPen(active_pen)
-
-            # Draw solid lines between the points you've already clicked
-            for i in range(len(self.current_polygon_points) - 1):
-                painter.drawLine(self.current_polygon_points[i], self.current_polygon_points[i+1])
-
-            # Draw a dynamic preview line from the last point to your mouse cursor
-            if self._mouse_pos is not None:
-                cursor_disp = self.view_to_display(self._mouse_pos)
-                painter.drawLine(self.current_polygon_points[-1], cursor_disp)
-
-            # --- 2. SET CIRCLE SIZE HERE ---
-            painter.setBrush(QBrush(drawing_color))
-            painter.setPen(Qt.NoPen) # Removes the hard outline from the circles for a cleaner look
-            
-            r = max(4 / self._zoom, 1.5) 
-            
-            for p in self.current_polygon_points:
-                painter.drawEllipse(p, r, r)
-
-                
+            if self._mouse_pos:
+                cursor_in_disp = self.view_to_display(self._mouse_pos)
+                painter.drawLine(
+                    self.current_polygon_points[-1],
+                    cursor_in_disp,
+                )
