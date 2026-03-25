@@ -1,5 +1,5 @@
 # --- GUI Framework ---
-PyQt5>=5.15.0
+PySide6>=6.11.0
 
 # --- Core AI & Vision ---
 # Anomalib installs PyTorch/Lightning automatically; specified versions ensure compatibility.

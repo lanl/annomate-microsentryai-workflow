@@ -1,4 +1,4 @@
-name: annomate_microsentryai
+name: annomate
 channels:
   - pytorch
   - nvidia  # Needed if you are on Windows/Linux with GPU
@@ -6,7 +6,7 @@ channels:
   - defaults
 dependencies:
   - python=3.10
-  - pyqt
+  - pyside6
   - opencv
   - numpy
   - scipy
