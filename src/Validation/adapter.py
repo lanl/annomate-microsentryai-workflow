@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QProgressBar, QGroupBox, QScrollArea, QFrame
 )
 from PySide6.QtCore import QThread, Signal, Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QPalette
 
 # Relative imports
 from .mask_comparator import MaskComparator
@@ -342,7 +342,9 @@ class ValidationTab(QWidget):
     def add_log_text(self, text: str):
         """Appends a text message to the evaluation feed."""
         lbl = QLabel(text)
-        lbl.setStyleSheet("color: #333; font-family: monospace;")
+        lbl.setWordWrap(True)
+        text_color = self.palette().color(QPalette.ColorRole.WindowText).name()
+        lbl.setStyleSheet(f"color: {text_color}; font-family: monospace; background: transparent;")
         self.results_layout.addWidget(lbl)
         self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
 
@@ -351,19 +353,22 @@ class ValidationTab(QWidget):
         card = QFrame()
         card.setFrameShape(QFrame.StyledPanel)
         color = "#4CAF50" if iou > 50 else "#F44336"
-        card.setStyleSheet(f"background-color: white; border: 2px solid {color}; border-radius: 5px; margin-bottom: 10px;")
-        
+        card.setStyleSheet(
+            f"background-color: white; border: 2px solid {color}; border-radius: 5px; margin-bottom: 10px;"
+        )
+
         l = QVBoxLayout(card)
         t = QLabel(text)
-        t.setStyleSheet("font-weight: bold; font-size: 14px; border: none;")
+        t.setWordWrap(True)
+        t.setStyleSheet("color: #111111; font-weight: bold; font-size: 14px; border: none; background: transparent;")
         l.addWidget(t)
-        
+
         img_lbl = QLabel()
         pix = QPixmap(image_path)
         if not pix.isNull():
             img_lbl.setPixmap(pix.scaledToWidth(400, Qt.SmoothTransformation))
         l.addWidget(img_lbl)
-        
+
         self.results_layout.addWidget(card)
         self.scroll_area.verticalScrollBar().setValue(self.scroll_area.verticalScrollBar().maximum())
 
