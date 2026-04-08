@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from AnnoMate.styles import MAIN_STYLESHEET
+
 # Local Application Imports
 from AnnoMate.adapter import AnnotatorTab
 from MicroSentryAI.adapter import MicroSentryTab
@@ -149,6 +151,14 @@ def main():
     # QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
     app = QApplication(sys.argv)
+    
+    # Force Qt to prefer light appearance instead of following OS dark mode.
+    style_hints = app.styleHints()
+    if hasattr(style_hints, "setColorScheme"):
+        style_hints.setColorScheme(Qt.ColorScheme.Light)
+
+    # Apply the app's existing light-themed stylesheet globally.
+    app.setStyleSheet(MAIN_STYLESHEET)
     
     main_window = AppWindow()
     main_window.showMaximized()
