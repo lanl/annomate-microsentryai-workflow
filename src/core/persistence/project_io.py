@@ -107,7 +107,9 @@ class ProjectIO:
             "modified_at": now,
             "project_name": project_name,
             "dataset": {
-                "image_dir": dataset_state.image_dir or "",
+                "image_dir": self._make_relative_if_inside(
+                    dataset_state.image_dir or "", project_dir
+                ),
                 "class_names": list(dataset_state.class_names),
                 "class_colors": {
                     name: list(rgb)
@@ -115,7 +117,6 @@ class ProjectIO:
                 },
             },
             "annotations_file": _COCO_FILENAME,
-            "annotations_file_abs": coco_path,
             "validation": {
                 "poly_path": validation_state.poly_path,
                 "json_path": validation_state.json_path,
@@ -133,7 +134,7 @@ class ProjectIO:
             "inference": {
                 "score_cache": dict(inference_state.inference_cache),
                 "score_maps_file": score_maps_file,
-                "model_path": model_path,
+                "model_path": self._make_relative_if_inside(model_path, project_dir),
             },
         }
 
@@ -167,6 +168,15 @@ class ProjectIO:
             data = json.load(f)
 
         data["_annoproj_path"] = annoproj_path
+
+        proj_dir = str(Path(annoproj_path).parent)
+        ds_data = data.get("dataset", {})
+        if "image_dir" in ds_data:
+            ds_data["image_dir"] = self._resolve_path(ds_data["image_dir"], proj_dir)
+        inf_data = data.get("inference", {})
+        if "model_path" in inf_data:
+            inf_data["model_path"] = self._resolve_path(inf_data["model_path"], proj_dir)
+
         data["resolved_coco_path"] = self._resolve_coco_path(annoproj_path, data)
 
         npz_file = data.get("inference", {}).get("score_maps_file", "")
@@ -437,3 +447,21 @@ class ProjectIO:
             .replace("__slash__", "/")
             .replace("__dot__", ".")
         )
+
+    def _make_relative_if_inside(self, path: str, base_dir: str) -> str:
+        """Return path relative to base_dir if it lives inside it, else unchanged."""
+        if not path:
+            return path
+        try:
+            return str(Path(path).relative_to(base_dir))
+        except ValueError:
+            return path
+
+    def _resolve_path(self, path: str, base_dir: str) -> str:
+        """Resolve a possibly-relative path against base_dir. Absolute paths pass through."""
+        if not path:
+            return path
+        p = Path(path)
+        if p.is_absolute():
+            return path
+        return str((Path(base_dir) / p).resolve())

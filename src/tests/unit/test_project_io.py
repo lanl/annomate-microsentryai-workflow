@@ -311,6 +311,58 @@ class TestProjectRoundTrip:
         assert resolved.endswith("annotations.coco.json")
         assert "proj" in resolved
 
+    def test_image_dir_stored_as_relative_when_inside_project(self, pio, tmp_path):
+        proj_dir = tmp_path / "proj"
+        proj_dir.mkdir()
+        img_dir = proj_dir / "data"
+        img_dir.mkdir()
+        from PIL import Image as PILImage
+        PILImage.new("RGB", (10, 10)).save(img_dir / "img.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img.jpg"]
+
+        path = pio.save_project(str(proj_dir), "test", ds, ValidationState(), InferenceState())
+        raw = json.loads((proj_dir / "test.annoproj").read_text())
+        assert raw["dataset"]["image_dir"] == "data"
+
+    def test_relative_image_dir_resolves_on_load(self, pio, tmp_path):
+        proj_dir = tmp_path / "proj"
+        proj_dir.mkdir()
+        img_dir = proj_dir / "data"
+        img_dir.mkdir()
+        from PIL import Image as PILImage
+        PILImage.new("RGB", (10, 10)).save(img_dir / "img.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img.jpg"]
+
+        path = pio.save_project(str(proj_dir), "test", ds, ValidationState(), InferenceState())
+        data = pio.load_project(path)
+        assert data["dataset"]["image_dir"] == str(img_dir)
+
+    def test_model_path_stored_as_relative_when_inside_project(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        model_path = str(tmp_path / "proj" / "model.pt")
+
+        path = pio.save_project(proj_dir, "test", ds, ValidationState(), InferenceState(),
+                                model_path=model_path)
+        raw = json.loads((tmp_path / "proj" / "test.annoproj").read_text())
+        assert raw["inference"]["model_path"] == "model.pt"
+
+    def test_model_path_outside_project_stays_absolute(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        model_path = str(tmp_path / "elsewhere" / "model.pt")
+
+        path = pio.save_project(proj_dir, "test", ds, ValidationState(), InferenceState(),
+                                model_path=model_path)
+        raw = json.loads((tmp_path / "proj" / "test.annoproj").read_text())
+        assert raw["inference"]["model_path"] == model_path
+
     def test_project_schema_version_present(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
