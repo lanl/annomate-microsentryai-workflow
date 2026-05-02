@@ -46,6 +46,11 @@ class WIPStatusBar(QWidget):
         self._lbl_tool = QLabel("Tool: None")
         h.addWidget(self._lbl_tool)
 
+        self._lbl_tool_hint = QLabel("")
+        self._lbl_tool_hint.setStyleSheet("color: grey; font-style: italic;")
+        self._lbl_tool_hint.setVisible(False)
+        h.addWidget(self._lbl_tool_hint)
+
         h.addStretch()
 
         self._lbl_loading = QLabel("Loading model…")
@@ -81,8 +86,15 @@ class WIPStatusBar(QWidget):
     def set_dimensions(self, w: int, h: int) -> None:
         self._lbl_dims.setText(f"{w} × {h} px")
 
+    _TOOL_HINTS = {
+        "polygon": "double-click to close · Backspace to undo point · Esc to cancel",
+    }
+
     def set_tool(self, name: str) -> None:
         self._lbl_tool.setText(f"Tool: {name.capitalize() if name else 'None'}")
+        hint = self._TOOL_HINTS.get(name, "")
+        self._lbl_tool_hint.setText(f"  —  {hint}" if hint else "")
+        self._lbl_tool_hint.setVisible(bool(hint))
 
     def set_model_loading(self, loading: bool) -> None:
         self._lbl_loading.setVisible(loading)
