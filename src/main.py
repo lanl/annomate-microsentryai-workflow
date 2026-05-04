@@ -6,7 +6,7 @@ and starts the Qt event loop. Contains no UI code.
 """
 
 import sys
-
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from core.utils.logger import setup_logging
@@ -31,6 +31,9 @@ from views.app_window import AppWindow
 def main() -> None:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
+    # Force Light Theme globally across all OS platforms
+    app.styleHints().setColorScheme(Qt.ColorScheme.Light)
 
     # States
     dataset_state    = DatasetState()
