@@ -33,12 +33,18 @@ class TestFolderLoad:
 class TestAnnotationFlow:
     def test_polygon_finish_updates_ann_list(self, qtbot, app_window):
         window, model, _ = app_window
+        model.add_class("Crack", (255, 0, 0))
+        window.refresh_class_combo()
+        window.class_combo.setCurrentText("Crack")
         window.table_view.selectRow(0)
         window.finish_polygon([(0.0, 0.0), (100.0, 0.0), (100.0, 100.0)])
         assert window.ann_list.count() == 1
 
     def test_delete_annotation_clears_ann_list(self, qtbot, app_window):
         window, model, _ = app_window
+        model.add_class("Crack", (255, 0, 0))
+        window.refresh_class_combo()
+        window.class_combo.setCurrentText("Crack")
         window.table_view.selectRow(0)
         window.finish_polygon([(0, 0), (1, 0), (1, 1)])
         window.ann_list.setCurrentRow(0)

@@ -29,9 +29,8 @@ class TestAnnotationCRUD:
 
 
 class TestClassRegistry:
-    def test_default_class_exists(self, state):
-        assert "Defect" in state.class_names
-        assert state.class_colors["Defect"] == (255, 0, 0)
+    def test_default_class_list_is_empty(self, state):
+        assert state.class_names == []
 
     def test_add_class(self, state):
         state.add_class("Crack", (200, 100, 0))
@@ -39,9 +38,10 @@ class TestClassRegistry:
         assert state.class_colors["Crack"] == (200, 100, 0)
 
     def test_add_duplicate_class_is_idempotent(self, state):
-        original_count = len(state.class_names)
+        state.add_class("Defect", (255, 0, 0))
+        assert len(state.class_names) == 1
         state.add_class("Defect", (0, 0, 0))
-        assert len(state.class_names) == original_count
+        assert len(state.class_names) == 1
 
     def test_delete_class_removes_annotations(self, state):
         state.add_class("Crack", (200, 100, 0))
