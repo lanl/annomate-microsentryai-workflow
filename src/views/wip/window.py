@@ -352,10 +352,12 @@ class WIPWindow(QWidget):
             self._current_bgr = None
             self._current_ai_contours = []
             self._selected_ai_idx = -1
+            self._active_class = ""
             self._review_bar.setVisible(False)
             self._ai_popup.setVisible(False)
             self.canvas.clear_image()
             self.right_panel.set_current_row(-1)
+            self.status_bar.set_class("")
 
     def _load_row(self, row: int) -> None:
         bgr = self.io_controller.load_image_for_display(row)
@@ -389,6 +391,18 @@ class WIPWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_tool_selected(self, tool_name: str) -> None:
+        if tool_name == "polygon":
+            class_names = self.dataset_model.get_class_names()
+            if not class_names:
+                QMessageBox.warning(self, "No Classes Defined",
+                    "Add an annotation class before drawing.")
+                self.tool_palette.deselect_all()
+                return
+            if not self._active_class or self._active_class not in class_names:
+                QMessageBox.warning(self, "No Class Selected",
+                    "Select an annotation class in the panel before drawing.")
+                self.tool_palette.deselect_all()
+                return
         self._active_tool = tool_name
         self.canvas.set_tool("polygon" if tool_name == "polygon" else None)
         self.status_bar.set_tool(tool_name)
@@ -406,6 +420,7 @@ class WIPWindow(QWidget):
         self._active_class = name
         r, g, b = self.dataset_model.get_class_color(name)
         self.canvas.set_active_color(QColor(r, g, b))
+        self.status_bar.set_class(name)
 
     def _on_polygon_finished(self, pts: list) -> None:
         if self._current_row < 0 or not pts:

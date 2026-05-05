@@ -13,6 +13,4 @@ DEFAULT_CLASS_COLORS: list[tuple] = [
     (255, 230,   0),   # Yellow
 ]
 
-DEFAULT_CLASSES: dict[str, tuple] = {
-    "Defect": DEFAULT_CLASS_COLORS[0],
-}
+DEFAULT_CLASSES: dict[str, tuple] = {}

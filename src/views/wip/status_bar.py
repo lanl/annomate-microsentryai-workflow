@@ -51,6 +51,10 @@ class WIPStatusBar(QWidget):
         self._lbl_tool_hint.setVisible(False)
         h.addWidget(self._lbl_tool_hint)
 
+        h.addWidget(self._pipe())
+        self._lbl_class = QLabel("Class: —")
+        h.addWidget(self._lbl_class)
+
         h.addStretch()
 
         self._lbl_loading = QLabel("Loading model…")
@@ -95,6 +99,9 @@ class WIPStatusBar(QWidget):
         hint = self._TOOL_HINTS.get(name, "")
         self._lbl_tool_hint.setText(f"  —  {hint}" if hint else "")
         self._lbl_tool_hint.setVisible(bool(hint))
+
+    def set_class(self, name: str) -> None:
+        self._lbl_class.setText(f"Class: {name}" if name else "Class: —")
 
     def set_model_loading(self, loading: bool) -> None:
         self._lbl_loading.setVisible(loading)
