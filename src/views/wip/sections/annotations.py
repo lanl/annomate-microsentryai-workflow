@@ -1,7 +1,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QToolButton,
+    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QComboBox,
 )
 
 # ── Column-width constants ────────────────────────────────────────────────────
@@ -25,16 +25,19 @@ _NAME_MIN_W  = 60
 
 
 class _AnnotationRow(QWidget):
-    """One annotation row: color dot | class name | vertex count | trash.
+    """One annotation row: color dot | class combo | vertex count | trash.
 
-    Clicking anywhere on the row (except the trash button) emits row_clicked.
+    Clicking anywhere on the row (except the combo and trash) emits row_clicked.
+    The combo emits class_changed when the user picks a different class.
     """
 
-    row_clicked      = Signal(int)   # annotation index
-    delete_requested = Signal(int)   # annotation index
+    row_clicked      = Signal(int)        # annotation index
+    delete_requested = Signal(int)        # annotation index
+    class_changed    = Signal(int, str)   # (annotation index, new class name)
 
     def __init__(self, idx: int, name: str, verts: int,
                  r: int, g: int, b: int,
+                 class_names: list,
                  parent: QWidget = None) -> None:
         super().__init__(parent)
         self._idx = idx
@@ -57,9 +60,13 @@ class _AnnotationRow(QWidget):
         dot_h.addWidget(dot, alignment=Qt.AlignCenter)
         h.addWidget(dot_col)
 
-        name_lbl = QLabel(name)
-        name_lbl.setMinimumWidth(_NAME_MIN_W)
-        h.addWidget(name_lbl, stretch=1)
+        combo = QComboBox()
+        combo.addItems(class_names)
+        combo.setCurrentText(name)
+        combo.setMinimumWidth(_NAME_MIN_W)
+        combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        combo.textActivated.connect(lambda text: self.class_changed.emit(self._idx, text))
+        h.addWidget(combo, stretch=1)
 
         lbl_v = QLabel(str(verts))
         lbl_v.setFixedWidth(_COUNT_W)
@@ -176,14 +183,16 @@ class AnnotationsSection(QWidget):
         if self._selected_idx >= len(annos):
             self._selected_idx = -1
 
+        class_names = self.dataset_model.get_class_names()
         for idx, anno in enumerate(annos):
             name = anno["category_name"]
             verts = len(anno["polygon"])
             r, g, b = self.dataset_model.get_class_color(name)
 
-            row_w = _AnnotationRow(idx, name, verts, r, g, b, self)
+            row_w = _AnnotationRow(idx, name, verts, r, g, b, class_names, self)
             row_w.row_clicked.connect(self._on_row_clicked)
             row_w.delete_requested.connect(self._on_delete_requested)
+            row_w.class_changed.connect(self._on_class_changed)
             if idx == self._selected_idx:
                 row_w.set_selected(True)
             self._row_widgets.append(row_w)
@@ -201,3 +210,6 @@ class AnnotationsSection(QWidget):
         if self._selected_idx == idx:
             self._selected_idx = -1
         self.dataset_model.delete_annotation(self._current_row, idx)
+
+    def _on_class_changed(self, idx: int, new_class: str) -> None:
+        self.dataset_model.update_annotation_class(self._current_row, idx, new_class)

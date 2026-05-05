@@ -83,6 +83,12 @@ class DatasetState:
         if 0 <= index < len(annos):
             annos[index]["thickness"] = thickness
 
+    def update_annotation_class(self, image_name: str, index: int, new_class: str) -> None:
+        """Change the category_name of a specific annotation."""
+        annos = self.annotations.get(image_name, [])
+        if 0 <= index < len(annos):
+            annos[index]["category_name"] = new_class
+
     def delete_annotation(self, image_name: str, index: int) -> None:
         """Remove the annotation at *index* for *image_name*.
 

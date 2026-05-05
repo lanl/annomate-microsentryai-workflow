@@ -167,6 +167,13 @@ class DatasetTableModel(QAbstractTableModel):
         self.state.update_annotation_thickness(self.state.image_files[row], annotation_idx, thickness)
         self._emit_row(row)
 
+    def update_annotation_class(self, row: int, annotation_idx: int, new_class: str) -> None:
+        """Change the class of an existing annotation."""
+        if not (0 <= row < self.rowCount()):
+            return
+        self.state.update_annotation_class(self.state.image_files[row], annotation_idx, new_class)
+        self._emit_row(row)
+
     def delete_annotation(self, row: int, annotation_idx: int) -> None:
         """Remove a specific annotation from the image at *row*.
 
