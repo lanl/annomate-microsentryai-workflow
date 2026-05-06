@@ -31,7 +31,8 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
 # Tool Constants
-POLYGON = "polygon"
+POLYGON   = "polygon"
+SAM_BBOX  = "sam_bbox"
 
 
 class ImageLabel(QLabel):
@@ -59,13 +60,14 @@ class ImageLabel(QLabel):
         toolCanceled (): Emitted when ``Escape`` is pressed while a tool is active.
     """
 
-    polygonFinished   = Signal(list)        # pts: List[Tuple[float, float]] in original coords
-    polygonEdited     = Signal(int, list)   # (polygon_idx, pts in original coords)
-    polygonSelected   = Signal(int)         # polygon index (-1 for deselect)
-    toolCanceled      = Signal()            # Escape pressed while polygon tool active
-    zoom_changed      = Signal(float)       # emitted whenever _zoom changes
-    image_loaded      = Signal(int, int)    # (orig_w, orig_h) emitted when a new image is set
+    polygonFinished    = Signal(list)        # pts: List[Tuple[float, float]] in original coords
+    polygonEdited      = Signal(int, list)   # (polygon_idx, pts in original coords)
+    polygonSelected    = Signal(int)         # polygon index (-1 for deselect)
+    toolCanceled       = Signal()            # Escape pressed while a tool is active
+    zoom_changed       = Signal(float)       # emitted whenever _zoom changes
+    image_loaded       = Signal(int, int)    # (orig_w, orig_h) emitted when a new image is set
     ai_polygon_clicked = Signal(int, QPointF)  # (ai_idx, view_pos); -1 = deselect
+    samBboxDrawn       = Signal(float, float, float, float)  # x1,y1,x2,y2 in original image coords
 
     def __init__(self, parent: object = None) -> None:
         """Initialize ImageLabel with default zoom, pan, and annotation state.
@@ -106,6 +108,11 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx: int = -1
         self._dragging_vertex_poly: int = -1
         self._selected_ai_idx: int = -1
+
+        # --- SAM tool state (display coords) ---
+        self._sam_bbox_start: Optional[QPointF] = None
+        self._sam_bbox_end:   Optional[QPointF] = None
+        self._sam_ghost: Optional[Tuple[List[QPointF], float]] = None  # (display_pts, confidence)
 
     def set_image(self, bgr: np.ndarray, max_display_dim: int = 1200) -> None:
         """Load a BGR ndarray and prepare it for display.
@@ -165,6 +172,9 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
+        self._sam_bbox_start = None
+        self._sam_bbox_end = None
+        self._sam_ghost = None
 
         self.update()
 
@@ -225,6 +235,9 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
+        self._sam_bbox_start = None
+        self._sam_bbox_end = None
+        self._sam_ghost = None
         self.update()
 
     def set_tool(self, tool_name: Optional[str]) -> None:
@@ -232,9 +245,18 @@ class ImageLabel(QLabel):
 
         Args:
             tool_name (Optional[str]): Tool identifier — ``"polygon"`` to
-                enable polygon drawing, or ``None`` to deactivate all tools.
+                enable polygon drawing, ``"sam_bbox"`` for SAM-assisted
+                segmentation, or ``None`` to deactivate all tools.
         """
+        if self.current_tool == SAM_BBOX and tool_name != SAM_BBOX:
+            self._sam_bbox_start = None
+            self._sam_bbox_end = None
+            self._sam_ghost = None
         self.current_tool = tool_name
+        if tool_name == SAM_BBOX:
+            self.setCursor(Qt.CrossCursor)
+        elif tool_name is None:
+            self.setCursor(Qt.ArrowCursor)
 
     def set_active_color(self, color: QColor) -> None:
         """Set the stroke color used when drawing a new polygon.
@@ -318,6 +340,55 @@ class ImageLabel(QLabel):
         """Discard all in-progress polygon vertices and repaint."""
         self.current_polygon_points.clear()
         self.update()
+
+    # ------------------------------------------------------------------ #
+    # SAM ghost helpers
+    # ------------------------------------------------------------------ #
+
+    def set_sam_ghost(self, pts_orig: List[Tuple[float, float]], confidence: float) -> None:
+        """Store a SAM ghost polygon for preview rendering.
+
+        Args:
+            pts_orig: Polygon vertices in original image coordinates.
+            confidence: Area-ratio confidence score in [0, 1].
+        """
+        if not pts_orig:
+            self._sam_ghost = None
+        else:
+            disp_pts = [
+                QPointF(x * self._base_scale, y * self._base_scale)
+                for (x, y) in pts_orig
+            ]
+            self._sam_ghost = (disp_pts, confidence)
+        self.update()
+
+    def clear_sam_ghost(self) -> None:
+        """Discard the SAM ghost polygon, bbox, and repaint."""
+        self._sam_ghost = None
+        self._sam_bbox_start = None
+        self._sam_bbox_end = None
+        self.update()
+
+    def accept_sam_ghost(self) -> bool:
+        """Convert the SAM ghost polygon into a finished annotation.
+
+        Emits :attr:`polygonFinished` with the ghost's vertices in original
+        image coordinates, which feeds into the normal data flow.
+
+        Returns:
+            bool: ``True`` if a ghost existed and was accepted, ``False``
+                if there was no ghost to accept.
+        """
+        if self._sam_ghost is None:
+            return False
+        pts_disp, _ = self._sam_ghost
+        pts_orig = [self.display_to_original(p) for p in pts_disp]
+        self._sam_ghost = None
+        self._sam_bbox_start = None
+        self._sam_bbox_end = None
+        self.polygonFinished.emit(pts_orig)
+        self.update()
+        return True
 
     def is_dragging(self) -> bool:
         """Return whether a vertex or polygon drag is currently in progress.
@@ -415,6 +486,16 @@ class ImageLabel(QLabel):
         Args:
             event (QKeyEvent): The key press event.
         """
+        if self.current_tool == SAM_BBOX:
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                self.accept_sam_ghost()
+                return
+            if event.key() == Qt.Key_Escape:
+                self.clear_sam_ghost()
+                self.set_tool(None)
+                self.toolCanceled.emit()
+                return
+
         if event.key() == Qt.Key_Escape:
             self.clear_current_polygon()
             self.set_tool(None)
@@ -461,6 +542,15 @@ class ImageLabel(QLabel):
 
         if event.button() == Qt.LeftButton:
             pos_view = QPointF(event.pos())
+
+            # --- SAM bbox tool: start rubber-band on press ---
+            if self.current_tool == SAM_BBOX:
+                self._sam_bbox_start = self.view_to_display(pos_view)
+                self._sam_bbox_end = self._sam_bbox_start
+                self._sam_ghost = None
+                self.update()
+                return
+
             pos_disp = self.view_to_display(pos_view)
 
             # --- PRE-CHECK: Identify if we clicked inside any existing polygon ---
@@ -533,6 +623,12 @@ class ImageLabel(QLabel):
         """
         self._mouse_pos = QPointF(event.pos())
 
+        # --- SAM bbox rubber-band update ---
+        if self.current_tool == SAM_BBOX and self._sam_bbox_start is not None:
+            self._sam_bbox_end = self.view_to_display(self._mouse_pos)
+            self.update()
+            return
+
         # --- Drag vertex ---
         if self._dragging_vertex_idx != -1:
             new_pos = self.view_to_display(self._mouse_pos)
@@ -585,6 +681,23 @@ class ImageLabel(QLabel):
             event (QMouseEvent): The mouse release event.
         """
         if event.button() == Qt.LeftButton:
+            # --- SAM bbox complete: clear rubber-band and emit original-coords bbox ---
+            if self.current_tool == SAM_BBOX and self._sam_bbox_start is not None:
+                end = self.view_to_display(QPointF(event.pos()))
+                x1 = min(self._sam_bbox_start.x(), end.x())
+                y1 = min(self._sam_bbox_start.y(), end.y())
+                x2 = max(self._sam_bbox_start.x(), end.x())
+                y2 = max(self._sam_bbox_start.y(), end.y())
+                # Clear rubber-band immediately so it disappears on release
+                self._sam_bbox_start = None
+                self._sam_bbox_end = None
+                self.update()
+                if (x2 - x1) > 4 and (y2 - y1) > 4:
+                    ox1, oy1 = self.display_to_original(QPointF(x1, y1))
+                    ox2, oy2 = self.display_to_original(QPointF(x2, y2))
+                    self.samBboxDrawn.emit(ox1, oy1, ox2, oy2)
+                return
+
             if self._dragging_vertex_idx != -1:
                 poly_i = self._dragging_vertex_poly
                 pts, _, _ = self._overlays[poly_i]
@@ -703,6 +816,22 @@ class ImageLabel(QLabel):
             painter.drawPixmap(0, 0, self._heatmap_pix)
             painter.setOpacity(1.0)
 
+        # Draw SAM bounding-box rubber-band while the user is dragging
+        if (self.current_tool == SAM_BBOX
+                and self._sam_bbox_start is not None
+                and self._sam_bbox_end is not None):
+            from PySide6.QtCore import QRectF
+            x1 = min(self._sam_bbox_start.x(), self._sam_bbox_end.x())
+            y1 = min(self._sam_bbox_start.y(), self._sam_bbox_end.y())
+            x2 = max(self._sam_bbox_start.x(), self._sam_bbox_end.x())
+            y2 = max(self._sam_bbox_start.y(), self._sam_bbox_end.y())
+            bbox_color = self._active_color
+            bbox_pen = QPen(bbox_color, 1.5 / self._zoom, Qt.SolidLine)
+            painter.setPen(bbox_pen)
+            fill = QColor(bbox_color.red(), bbox_color.green(), bbox_color.blue(), 30)
+            painter.setBrush(QBrush(fill))
+            painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))
+
         # Draw Overlays with Selection Highlighting
         for i, (pts, color, thick) in enumerate(self._overlays):
             if len(pts) >= 2:
@@ -732,6 +861,24 @@ class ImageLabel(QLabel):
             fill_alpha = 60 if is_selected else 20
             painter.setBrush(QBrush(QColor(255, 80, 80, fill_alpha)))
             painter.drawPolygon(QPolygonF(pts + [pts[0]]))
+
+        # Draw SAM ghost polygon (pending accept/reject)
+        if self._sam_ghost is not None:
+            ghost_pts, confidence = self._sam_ghost
+            if len(ghost_pts) >= 3:
+                ghost_pen = QPen(QColor(0, 210, 90), 2.0 / self._zoom, Qt.DashLine)
+                ghost_pen.setDashPattern([8, 4])
+                painter.setPen(ghost_pen)
+                painter.setBrush(QBrush(QColor(0, 210, 90, 45)))
+                painter.drawPolygon(QPolygonF(ghost_pts + [ghost_pts[0]]))
+                xs = [p.x() for p in ghost_pts]
+                ys = [p.y() for p in ghost_pts]
+                label_pos = QPointF(min(xs), min(ys) - 6.0 / self._zoom)
+                painter.setPen(QPen(QColor(0, 140, 50)))
+                f = painter.font()
+                f.setPointSizeF(max(8.0, 9.0 / self._zoom))
+                # painter.setFont(f)
+                # painter.drawText(label_pos, f"SAM  {confidence:.2f}")
 
         if self.current_tool == POLYGON and self.current_polygon_points:
             painter.setBrush(Qt.NoBrush)

@@ -22,10 +22,11 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 
-from views.annomate.image_label import ImageLabel
+from views.annomate.image_label import ImageLabel, SAM_BBOX
 from views.wip.right_panel import RightPanel
 from views.wip.tool_palette import ToolPalette
 from views.wip.status_bar import WIPStatusBar
+from controllers.sam_controller import SAMController
 
 
 class _AIAcceptPopup(QFrame):
@@ -229,6 +230,8 @@ class WIPWindow(QWidget):
         self._current_ai_contours: list = []
         self._selected_ai_idx: int = -1
         self._saved_model_path: str = ""
+        self._sam_controller = SAMController(parent=self)
+        self._sam_loading: bool = False
         self._init_ui()
 
         # Dataset changes
@@ -264,6 +267,14 @@ class WIPWindow(QWidget):
 
         # Route thickness signal directly to canvas setter
         self.tool_palette.thickness_changed.connect(self._on_thickness_changed)
+
+        # SAM tool
+        self.canvas.samBboxDrawn.connect(self._on_sam_bbox_drawn)
+        self.tool_palette.sam_variant_changed.connect(self._on_sam_variant_changed)
+        self._sam_controller.result_ready.connect(self._on_sam_result_ready)
+        self._sam_controller.inference_failed.connect(self._on_sam_inference_failed)
+        self._sam_controller.loading_done.connect(self._on_sam_loading_done)
+        self._sam_controller.loading_failed.connect(self._on_sam_loading_failed)
 
         # Inference controller signals
         if self.inference_controller is not None:
@@ -391,7 +402,7 @@ class WIPWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_tool_selected(self, tool_name: str) -> None:
-        if tool_name == "polygon":
+        if tool_name in ("polygon", "sam_bbox"):
             class_names = self.dataset_model.get_class_names()
             if not class_names:
                 QMessageBox.warning(self, "No Classes Defined",
@@ -403,6 +414,19 @@ class WIPWindow(QWidget):
                     "Select an annotation class in the panel before drawing.")
                 self.tool_palette.deselect_all()
                 return
+
+        if tool_name == "sam_bbox":
+            self._active_tool = "sam_bbox"
+            self.canvas.set_tool(SAM_BBOX)
+            self.status_bar.set_tool("sam_bbox")
+            if not self._sam_loading:
+                self._sam_loading = True
+                variant = self.tool_palette.current_sam_variant()
+                self._sam_controller.set_variant(variant)
+                self.status_bar.set_sam_hint("Loading SAM model…")
+                self._sam_controller.ensure_loaded_async()
+            return
+
         self._active_tool = tool_name
         self.canvas.set_tool("polygon" if tool_name == "polygon" else None)
         self.status_bar.set_tool(tool_name)
@@ -411,6 +435,7 @@ class WIPWindow(QWidget):
         self.tool_palette.deselect_all()
         self._active_tool = ""
         self.status_bar.set_tool("")
+        self.status_bar.set_sam_hint("")
 
     # ------------------------------------------------------------------ #
     # Annotation slots
@@ -759,6 +784,8 @@ class WIPWindow(QWidget):
         """
         if event.key() == Qt.Key_P:
             self.tool_palette.toggle_polygon()
+        elif event.key() == Qt.Key_S:
+            self.tool_palette.toggle_sam()
         elif event.key() == Qt.Key_Delete:
             self._delete_selected_annotation()
         super().keyPressEvent(event)
@@ -767,3 +794,52 @@ class WIPWindow(QWidget):
         idx = self.canvas.selected_polygon_idx
         if idx != -1 and self._current_row >= 0:
             self.dataset_model.delete_annotation(self._current_row, idx)
+
+    # ------------------------------------------------------------------ #
+    # SAM tool slots
+    # ------------------------------------------------------------------ #
+
+    def _on_sam_variant_changed(self, variant: str) -> None:
+        self._sam_controller.set_variant(variant)
+        self._sam_loading = False
+        self.tool_palette.sam_status_lbl.setText("Model: not loaded")
+        self.tool_palette.sam_status_lbl.setStyleSheet("color: grey; font-style: italic;")
+
+    def _on_sam_loading_done(self) -> None:
+        self._sam_loading = False
+        display_name = self.tool_palette.sam_variant_combo.currentText()
+        self.tool_palette.sam_status_lbl.setText(f"Ready: {display_name}")
+        self.tool_palette.sam_status_lbl.setStyleSheet("color: green; font-style: normal;")
+        self.status_bar.set_sam_hint(f"Ready: {display_name}  ·  draw bbox to segment")
+
+    def _on_sam_loading_failed(self, msg: str) -> None:
+        self._sam_loading = False
+        self.tool_palette.deselect_all()
+        self._active_tool = ""
+        self.canvas.set_tool(None)
+        self.status_bar.set_tool("")
+        self.status_bar.set_sam_hint("")
+        self.tool_palette.sam_status_lbl.setText("Load failed")
+        self.tool_palette.sam_status_lbl.setStyleSheet("color: red; font-style: normal;")
+        QMessageBox.critical(self, "SAM Load Error", f"Could not load model:\n{msg}")
+
+    def _on_sam_bbox_drawn(self, x1: float, y1: float, x2: float, y2: float) -> None:
+        if self._current_row < 0 or self._current_bgr is None:
+            return
+        self.canvas.setCursor(Qt.WaitCursor)
+        self.status_bar.set_sam_hint("Running SAM…")
+        self._sam_controller.run_inference(self._current_bgr, (x1, y1, x2, y2))
+
+    def _on_sam_result_ready(self, pts: list, confidence: float) -> None:
+        self.canvas.setCursor(Qt.CrossCursor)
+        if not pts:
+            self.status_bar.set_sam_hint("No mask found — try a larger bbox")
+            return
+        self.canvas.set_sam_ghost(pts, confidence)
+        self.status_bar.set_sam_hint(
+            f"conf={confidence:.2f}  ·  Enter=accept  ·  Esc=cancel"
+        )
+
+    def _on_sam_inference_failed(self, msg: str) -> None:
+        self.canvas.setCursor(Qt.CrossCursor)
+        self.status_bar.set_sam_hint(f"Inference error — {msg}")

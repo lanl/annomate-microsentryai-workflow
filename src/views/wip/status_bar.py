@@ -91,7 +91,8 @@ class WIPStatusBar(QWidget):
         self._lbl_dims.setText(f"{w} × {h} px")
 
     _TOOL_HINTS = {
-        "polygon": "double-click to close · Backspace to undo point · Esc to cancel",
+        "polygon":  "double-click to close · Backspace to undo point · Esc to cancel",
+        "sam_bbox": "draw bbox over object · Enter=accept · Esc=cancel",
     }
 
     def set_tool(self, name: str) -> None:
@@ -99,6 +100,11 @@ class WIPStatusBar(QWidget):
         hint = self._TOOL_HINTS.get(name, "")
         self._lbl_tool_hint.setText(f"  —  {hint}" if hint else "")
         self._lbl_tool_hint.setVisible(bool(hint))
+
+    def set_sam_hint(self, text: str) -> None:
+        """Update the tool hint area with a dynamic SAM status message."""
+        self._lbl_tool_hint.setText(f"  —  {text}" if text else "")
+        self._lbl_tool_hint.setVisible(bool(text))
 
     def set_class(self, name: str) -> None:
         self._lbl_class.setText(f"Class: {name}" if name else "Class: —")

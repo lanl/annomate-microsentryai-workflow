@@ -9,6 +9,7 @@ dependencies:
       - torch==2.4.1+cu118
       - torchvision==0.19.1+cu118
       - anomalib>=2.2.0
+      - sam2
       - lightning>=2.0.0
       - PySide6>=6.11.0
       - opencv-python
