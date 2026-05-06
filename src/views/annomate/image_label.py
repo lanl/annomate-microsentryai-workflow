@@ -66,6 +66,7 @@ class ImageLabel(QLabel):
     zoom_changed      = Signal(float)       # emitted whenever _zoom changes
     image_loaded      = Signal(int, int)    # (orig_w, orig_h) emitted when a new image is set
     ai_polygon_clicked = Signal(int, QPointF)  # (ai_idx, view_pos); -1 = deselect
+    view_state_changed = Signal(float, QPointF)  # (zoom, pan) emitted after user-initiated view change
 
     def __init__(self, parent: object = None) -> None:
         """Initialize ImageLabel with default zoom, pan, and annotation state.
@@ -638,6 +639,7 @@ class ImageLabel(QLabel):
             cursor_pos.x() - point_in_disp.x() * self._zoom,
             cursor_pos.y() - point_in_disp.y() * self._zoom,
         )
+        self.view_state_changed.emit(self._zoom, QPointF(self._pan))
         self.update()
 
     def zoom_in(self) -> None:
@@ -652,6 +654,14 @@ class ImageLabel(QLabel):
         """Reset zoom to ``1.0`` and pan to the origin, then repaint."""
         self._zoom = 1.0
         self._pan = QPointF(0, 0)
+        self.zoom_changed.emit(self._zoom)
+        self.view_state_changed.emit(self._zoom, QPointF(self._pan))
+        self.update()
+
+    def set_view_state(self, zoom: float, pan: QPointF) -> None:
+        """Apply zoom and pan from a peer canvas without re-emitting view_state_changed."""
+        self._zoom = zoom
+        self._pan = QPointF(pan)
         self.zoom_changed.emit(self._zoom)
         self.update()
 
@@ -678,6 +688,7 @@ class ImageLabel(QLabel):
             center.x() - point_in_disp.x() * self._zoom,
             center.y() - point_in_disp.y() * self._zoom
         )
+        self.view_state_changed.emit(self._zoom, QPointF(self._pan))
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:

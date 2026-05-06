@@ -51,6 +51,7 @@ class MicrosentrySection(QWidget):
     load_previous_model_requested = Signal()
     settings_changed              = Signal()
     accept_polygons_requested     = Signal()
+    viewport_mode_changed         = Signal(str)  # "single" or "dual"
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -105,6 +106,14 @@ class MicrosentrySection(QWidget):
 
         lw.addSpacing(4)
 
+        # Viewport mode toggle
+        self._btn_dual = QToolButton()
+        self._btn_dual.setText("Dual Viewport")
+        self._btn_dual.setCheckable(True)
+        self._btn_dual.setToolTip("Split canvas: annotations on left, heatmap + AI on right")
+        self._btn_dual.toggled.connect(self._on_viewport_toggled)
+        lw.addWidget(self._btn_dual)
+
         # Heatmap toggle + transparency slider inline
         self._btn_heatmap = QToolButton()
         self._btn_heatmap.setText("Heatmap")
@@ -120,13 +129,14 @@ class MicrosentrySection(QWidget):
         self._alpha.valueChanged.connect(
             lambda v: (self._alpha_val.setText(f"{v}%"), self._debounce.start())
         )
-        heatmap_row = QHBoxLayout()
-        heatmap_row.setContentsMargins(0, 0, 0, 0)
-        heatmap_row.setSpacing(4)
-        heatmap_row.addWidget(self._btn_heatmap)
-        heatmap_row.addWidget(self._alpha, stretch=1)
-        heatmap_row.addWidget(self._alpha_val)
-        lw.addLayout(heatmap_row)
+        self._heatmap_row = QWidget()
+        hr = QHBoxLayout(self._heatmap_row)
+        hr.setContentsMargins(0, 0, 0, 0)
+        hr.setSpacing(4)
+        hr.addWidget(self._btn_heatmap)
+        hr.addWidget(self._alpha, stretch=1)
+        hr.addWidget(self._alpha_val)
+        lw.addWidget(self._heatmap_row)
 
         # Segmentation toggle + threshold slider inline
         self._btn_seg = QToolButton()
@@ -143,13 +153,14 @@ class MicrosentrySection(QWidget):
         self._thresh.valueChanged.connect(
             lambda v: (self._thresh_val.setText(str(v)), self._debounce.start())
         )
-        seg_row = QHBoxLayout()
-        seg_row.setContentsMargins(0, 0, 0, 0)
-        seg_row.setSpacing(4)
-        seg_row.addWidget(self._btn_seg)
-        seg_row.addWidget(self._thresh, stretch=1)
-        seg_row.addWidget(self._thresh_val)
-        lw.addLayout(seg_row)
+        self._seg_row = QWidget()
+        sr = QHBoxLayout(self._seg_row)
+        sr.setContentsMargins(0, 0, 0, 0)
+        sr.setSpacing(4)
+        sr.addWidget(self._btn_seg)
+        sr.addWidget(self._thresh, stretch=1)
+        sr.addWidget(self._thresh_val)
+        lw.addWidget(self._seg_row)
 
         # Accept AI Polygons button
         self._btn_accept = QPushButton("Accept AI Polygons")
@@ -223,6 +234,12 @@ class MicrosentrySection(QWidget):
     def _on_seg_toggled(self, checked: bool) -> None:
         self._btn_accept.setEnabled(checked)
         self._debounce.start()
+
+    def _on_viewport_toggled(self, dual: bool) -> None:
+        self._heatmap_row.setVisible(not dual)
+        self._seg_row.setVisible(not dual)
+        self._btn_dual.setText("Single Viewport" if dual else "Dual Viewport")
+        self.viewport_mode_changed.emit("dual" if dual else "single")
 
     def _on_advanced_toggled(self, checked: bool) -> None:
         self._advanced_widget.setVisible(checked)

@@ -32,6 +32,7 @@ class RightPanel(QWidget):
     load_previous_model_requested = Signal()
     microsentry_settings_changed  = Signal()
     accept_polygons_requested     = Signal()
+    viewport_mode_changed         = Signal(str)  # "single" or "dual"
 
     def __init__(self, dataset_model, inference_model=None, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -50,6 +51,7 @@ class RightPanel(QWidget):
         self._ms_section.load_previous_model_requested.connect(self.load_previous_model_requested)
         self._ms_section.settings_changed.connect(self.microsentry_settings_changed)
         self._ms_section.accept_polygons_requested.connect(self.accept_polygons_requested)
+        self._ms_section.viewport_mode_changed.connect(self.viewport_mode_changed)
         ms_sec.body_layout().addWidget(self._ms_section)
         outer.addWidget(ms_sec)
         self._ms_collapsible = ms_sec
