@@ -12,9 +12,11 @@ from PySide6.QtCore import Qt, QEvent, QPointF, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QSizePolicy,
-    QSplitter, QToolButton, QFileDialog, QMessageBox, QHBoxLayout, QComboBox,
+    QToolButton, QFileDialog, QMessageBox, QHBoxLayout, QComboBox,
     QApplication,
 )
+
+from views.wip._splitter import StyledSplitter
 
 from views.wip.image_label import ImageLabel, SAM_BBOX
 from views.wip.right_panel import RightPanel
@@ -301,8 +303,8 @@ class WIPWindow(QWidget):
         self.tool_palette = ToolPalette(self)
         h_layout.addWidget(self.tool_palette)
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(4)
+        splitter = StyledSplitter(Qt.Horizontal, margin=0)
+        splitter.setHandleWidth(8)
         splitter.setChildrenCollapsible(False)
 
         self.canvas = ImageLabel(self)
@@ -448,7 +450,7 @@ class WIPWindow(QWidget):
         if not class_names:
             return
         target = self._active_class if self._active_class in class_names else class_names[0]
-        self.dataset_model.add_annotation(self._current_row, target, pts, self.canvas._line_thickness)
+        self.dataset_model.add_annotation(self._current_row, target, pts, self.canvas.line_thickness)
         self._refresh_canvas_render()
 
     def _on_polygon_edited(self, idx: int, pts: list) -> None:
@@ -466,18 +468,7 @@ class WIPWindow(QWidget):
 
     def _on_canvas_polygon_selected(self, idx: int) -> None:
         """Sync the right panel list and slider when a polygon is clicked on the canvas."""
-        ann_section = self.right_panel.annotations
-        
-        # Safely deselect the old item in the list
-        if 0 <= ann_section._selected_idx < len(ann_section._row_widgets):
-            ann_section._row_widgets[ann_section._selected_idx].set_selected(False)
-        
-        # Select the new item in the list
-        ann_section._selected_idx = idx
-        if 0 <= idx < len(ann_section._row_widgets):
-            ann_section._row_widgets[idx].set_selected(True)
-            
-        # Trigger the normal selection logic (updates canvas & slider)
+        self.right_panel.annotations.select_annotation(idx)
         self._on_annotation_selected(idx)
     def _on_review_decision(self, decision) -> None:
         if self._current_row >= 0:

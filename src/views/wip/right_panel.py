@@ -1,5 +1,7 @@
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QScrollArea, QSplitter, QSizePolicy
+from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QScrollArea, QSizePolicy
+
+from views.wip._splitter import StyledSplitter
 
 from views.wip.sections import (
     _CollapsibleSection,
@@ -55,8 +57,8 @@ class RightPanel(QWidget):
         self._ms_collapsible = ms_sec
 
         # Splitter: Dataset Navigator (top, resizable) | rest (bottom, scrollable)
-        splitter = QSplitter(Qt.Vertical)
-        splitter.setHandleWidth(6)
+        splitter = StyledSplitter(Qt.Vertical)
+        splitter.setHandleWidth(8)
         splitter.setChildrenCollapsible(False)
 
         nav_sec = _CollapsibleSection("Dataset Navigator", expandable=True)

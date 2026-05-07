@@ -17,7 +17,7 @@ from typing import List, Optional, Tuple
 
 from PySide6.QtCore import QObject, Signal
 
-from core.persistence.autosave import AutosaveManager
+from controllers.autosave import AutosaveManager
 from core.persistence.project_io import ProjectIO
 
 logger = logging.getLogger("AnnoMate.ProjectController")

@@ -267,9 +267,14 @@ class ImageLabel(QLabel):
         """
         self._active_color = color if isinstance(color, QColor) else QColor(0, 200, 0)
 
+    @property
+    def line_thickness(self) -> float:
+        """Current line thickness for drawing polygons and overlays."""
+        return self._line_thickness
+
     def set_line_thickness(self, thickness: float) -> None:
         """Set the line thickness for drawing polygons and overlays.
-        
+
         Args: thickness (float): The brush width in pixels.
         """
         self._line_thickness = thickness

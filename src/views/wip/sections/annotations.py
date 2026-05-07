@@ -198,12 +198,16 @@ class AnnotationsSection(QWidget):
             self._row_widgets.append(row_w)
             self._rows_layout.addWidget(row_w)
 
-    def _on_row_clicked(self, idx: int) -> None:
+    def select_annotation(self, idx: int) -> None:
+        """Silently highlight *idx* without emitting annotation_selected."""
         if self._selected_idx >= 0 and self._selected_idx < len(self._row_widgets):
             self._row_widgets[self._selected_idx].set_selected(False)
         self._selected_idx = idx
-        if idx < len(self._row_widgets):
+        if 0 <= idx < len(self._row_widgets):
             self._row_widgets[idx].set_selected(True)
+
+    def _on_row_clicked(self, idx: int) -> None:
+        self.select_annotation(idx)
         self.annotation_selected.emit(idx)
 
     def _on_delete_requested(self, idx: int) -> None:
