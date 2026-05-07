@@ -877,15 +877,17 @@ class ImageLabel(QLabel):
         if self._sam_ghost is not None:
             ghost_pts, confidence = self._sam_ghost
             if len(ghost_pts) >= 3:
-                ghost_pen = QPen(QColor(0, 210, 90), 2.0 / self._zoom, Qt.DashLine)
+                ghost_color = QColor(self._active_color)
+                ghost_pen = QPen(ghost_color, 2.0 / self._zoom, Qt.DashLine)
                 ghost_pen.setDashPattern([8, 4])
                 painter.setPen(ghost_pen)
-                painter.setBrush(QBrush(QColor(0, 210, 90, 45)))
+                ghost_color.setAlpha(45)
+                painter.setBrush(QBrush(ghost_color))
                 painter.drawPolygon(QPolygonF(ghost_pts + [ghost_pts[0]]))
                 xs = [p.x() for p in ghost_pts]
                 ys = [p.y() for p in ghost_pts]
                 label_pos = QPointF(min(xs), min(ys) - 6.0 / self._zoom)
-                painter.setPen(QPen(QColor(0, 140, 50)))
+                painter.setPen(QPen(self._active_color))
                 f = painter.font()
                 f.setPointSizeF(max(8.0, 9.0 / self._zoom))
                 # painter.setFont(f)
