@@ -1,11 +1,6 @@
-"""
-AppWindow — top-level application shell view.
+"""AppWindow — top-level application shell view.
 
-Rules (consistent with other views):
-  V1  All file/folder dialogs and message boxes live here, not in controllers.
-  V2  State is never accessed directly; all data reads go through model query APIs.
-  V3  No disk I/O here; controllers handle all file operations.
-  V4  Colors are (r, g, b) tuples until the last Qt draw boundary.
+See CLAUDE.md § Architecture Rules for the full layer contract.
 """
 
 import os
@@ -17,8 +12,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QAction, QKeySequence
 
-from views.annomate.window import ImageAnnotator
-from views.microsentry.window import MicroSentryWindow
 from views.validation.window import ValidationWindow
 from views.wip.window import WIPWindow
 
@@ -30,7 +23,7 @@ class AppWindow(QMainWindow):
 
     Owns the tab widget and the File menu. Receives all models and
     controllers as constructor arguments — creates nothing itself.
-    All dialogs (QFileDialog, QMessageBox, QInputDialog) live here per V1.
+    All dialogs (QFileDialog, QMessageBox, QInputDialog) live here.
 
     Args:
         dataset_model: DatasetTableModel instance.
@@ -65,26 +58,13 @@ class AppWindow(QMainWindow):
         self.project_controller   = project_controller
 
         # Sub-views
-        self.annomate_view   = ImageAnnotator(dataset_model, io_controller)
-        self.sentry_view     = MicroSentryWindow(
-            dataset_model, inference_model, inference_controller, io_controller
-        )
         self.validation_view = ValidationWindow(validation_model, validation_controller)
         self.wip_view        = WIPWindow(dataset_model, io_controller, inference_model, inference_controller)
 
-        # Cross-tab row sync
-        self.annomate_view.row_selection_changed.connect(self.sentry_view.select_row)
-        self.sentry_view.row_selection_changed.connect(self.annomate_view.select_row)
-
-        # Polygon transfer: MicroSentry → AnnoMate
-        self.sentry_view.polygonsSent.connect(self._handle_polygon_transfer)
-
         # Tab widget
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.annomate_view,   "AnnoMate")
-        self.tabs.addTab(self.sentry_view,     "MicroSentry AI")
-        self.tabs.addTab(self.validation_view, "Validation")
         self.tabs.addTab(self.wip_view,        "WIP")
+        self.tabs.addTab(self.validation_view, "Validation")
 
         self._btn_ms = QToolButton()
         self._btn_ms.setText("Enable Microsentry")
@@ -172,8 +152,6 @@ class AppWindow(QMainWindow):
             QMessageBox.critical(self, "Open Project", f"Could not read project:\n{exc}")
             return
 
-        self.annomate_view.refresh_class_combo()
-
         if warnings:
             QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
 
@@ -198,7 +176,6 @@ class AppWindow(QMainWindow):
         if not parent_dir:
             return
 
-        # V2: use model query, not state directly
         image_dir = self.dataset_model.get_image_dir()
         from pathlib import Path
         default_name = Path(image_dir).name if image_dir else "project"
@@ -239,7 +216,6 @@ class AppWindow(QMainWindow):
         if not directory:
             return
         self.io_controller.load_folder(directory)
-        self.annomate_view.refresh_class_combo()
 
     def _relocate_images(self) -> None:
         """Point to a new image directory without clearing annotations."""
@@ -253,7 +229,6 @@ class AppWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Relocate Images", f"Could not scan folder:\n{exc}")
             return
-        self.annomate_view.refresh_class_combo()
 
         orphan_msg = self.project_controller.orphaned_annotations_warning()
         if orphan_msg:
@@ -280,7 +255,6 @@ class AppWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Import JSON Data", f"Import failed:\n{exc}")
             return
-        self.annomate_view.refresh_class_combo()
 
     def _export_polygons(self) -> None:
         out_dir = QFileDialog.getExistingDirectory(
@@ -353,21 +327,3 @@ class AppWindow(QMainWindow):
     def _on_tab_changed(self, index: int) -> None:
         self._btn_ms.setVisible(index == self.tabs.indexOf(self.wip_view))
 
-    # ================================================================== #
-    # Polygon transfer
-    # ================================================================== #
-
-    def _handle_polygon_transfer(self, polygons: list, default_class: str) -> None:
-        """Show class-selection dialog then forward polygons to AnnoMate."""
-        class_names = self.dataset_model.get_class_names()
-        if not class_names:
-            class_names = [default_class]
-
-        chosen, ok = QInputDialog.getItem(
-            self, "Choose Class", "Assign polygons to class:",
-            class_names,
-            class_names.index(default_class) if default_class in class_names else 0,
-            False,
-        )
-        if ok and chosen:
-            self.annomate_view.receive_polygons(polygons, chosen)

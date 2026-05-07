@@ -1,12 +1,6 @@
-"""
-WIPWindow — experimental Photoshop-style layout tab.
+"""WIPWindow — unified annotation and inference tab.
 
-Rules (consistent with other views):
-  V1  All file/folder dialogs live here, not in controllers.
-  V2  State is never accessed directly; all data reads go through model query APIs.
-  V3  No disk I/O here; controllers handle all file operations.
-  V4  Colors are (r, g, b) tuples until the last Qt draw boundary.
-
+See CLAUDE.md § Architecture Rules for the full layer contract.
 Color scheme: no explicit stylesheet colors — Qt platform palette only.
 """
 
@@ -22,7 +16,7 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 
-from views.annomate.image_label import ImageLabel, SAM_BBOX
+from views.wip.image_label import ImageLabel, SAM_BBOX
 from views.wip.right_panel import RightPanel
 from views.wip.tool_palette import ToolPalette
 from views.wip.status_bar import WIPStatusBar
@@ -509,7 +503,7 @@ class WIPWindow(QWidget):
                 self.canvas.set_line_thickness(thick)
 
     def _refresh_overlays(self) -> None:
-        """Rebuild canvas overlays from annotations only (no AI polygons). V4: QColor here."""
+        """Rebuild canvas overlays from annotations only (no AI polygons)."""
         current_sel = self.canvas.selected_polygon_idx
         annos = self.dataset_model.get_annotations(self._current_row)
         overlays = [

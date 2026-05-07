@@ -1,9 +1,6 @@
-"""
-ValidationWindow — MVC view for the Validation pane.
+"""ValidationWindow — view for the Validation pane.
 
-QWidget designed for tab embedding.
-All dialogs here; all computation delegated to ValidationController.
-MVC rule: never access ValidationState directly — use ValidationModel API only.
+See CLAUDE.md § Architecture Rules for the full layer contract.
 """
 
 import logging
@@ -28,7 +25,7 @@ class ValidationWindow(QWidget):
     Step 1 — Generate binary ground-truth masks from JSON polygon annotations.
     Step 2 — Run IoU evaluation comparing GT masks against model predictions.
 
-    Owns all file dialogs (V1 MVC rule). Delegates all computation to
+    Owns all file dialogs. Delegates all computation to
     :class:`~controllers.validation_controller.ValidationController` via
     worker threads. Reads path configuration via the model's query API.
 
