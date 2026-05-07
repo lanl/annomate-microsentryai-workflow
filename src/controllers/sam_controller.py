@@ -16,7 +16,7 @@ from typing import Optional, Tuple
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal
 
-from ai_strategies.sam_strategy import SAMStrategy
+from ai_strategies.sam_strategy import SAMStrategy, weights_cached
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,10 @@ class _ModelLoadWorker(QThread):
     def run(self) -> None:
         try:
             self._strategy.load()
+            logger.info("SAM model loaded successfully")
             self.done.emit()
         except Exception as exc:
+            logger.error("SAM model load failed: %s", exc)
             self.failed.emit(str(exc))
 
 
@@ -111,6 +113,19 @@ class SAMController(QObject):
         else:
             self._strategy.set_variant(variant)
 
+    def try_autoload(self, variant: str) -> bool:
+        """Start a background load if the checkpoint is already on disk.
+
+        Returns True if loading was started, False if the weights are absent.
+        """
+        if not weights_cached(variant):
+            logger.info("SAM autoload skipped — %s not found on disk", variant)
+            return False
+        logger.info("SAM weights found on disk (%s) — starting autoload", variant)
+        self.set_variant(variant)
+        self.ensure_loaded_async()
+        return True
+
     def ensure_loaded_async(self) -> None:
         """Trigger model load on a background thread.
 
@@ -120,9 +135,11 @@ class SAMController(QObject):
             self._strategy = SAMStrategy()
 
         if self._strategy.is_loaded:
+            logger.info("SAM model already loaded, skipping reload")
             self.loading_done.emit()
             return
 
+        logger.info("SAM model load starting in background thread")
         self._stop_load_worker()
         self._load_worker = _ModelLoadWorker(self._strategy, parent=self)
         self._load_worker.done.connect(self.loading_done)

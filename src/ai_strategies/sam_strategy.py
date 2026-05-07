@@ -38,6 +38,21 @@ _HF_IDS = {
 }
 
 
+def weights_cached(variant: str) -> bool:
+    """Return True if the checkpoint for *variant* is already on disk.
+
+    Uses the same HF_MODEL_ID_TO_FILENAMES table as load() so the path check
+    always matches what the loader will actually look for.
+    """
+    try:
+        from sam2.build_sam import HF_MODEL_ID_TO_FILENAMES
+        hf_id = _HF_IDS.get(variant, "facebook/sam2.1-hiera-tiny")
+        _, ckpt_filename = HF_MODEL_ID_TO_FILENAMES[hf_id]
+        return (_SAM_WEIGHTS_DIR / ckpt_filename).exists()
+    except Exception:
+        return False
+
+
 class SAMStrategy:
     """Wraps Meta SAM 2 for bounding-box-prompted segmentation.
 

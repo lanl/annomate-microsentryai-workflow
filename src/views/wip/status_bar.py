@@ -95,8 +95,14 @@ class WIPStatusBar(QWidget):
         "sam_bbox": "draw bbox over object · Enter=accept · Esc=cancel",
     }
 
+    _TOOL_DISPLAY = {
+        "polygon":  "Polygon",
+        "sam_bbox": "SAM BBox",
+    }
+
     def set_tool(self, name: str) -> None:
-        self._lbl_tool.setText(f"Tool: {name.capitalize() if name else 'None'}")
+        display = self._TOOL_DISPLAY.get(name, name.capitalize() if name else "None")
+        self._lbl_tool.setText(f"Tool: {display}")
         hint = self._TOOL_HINTS.get(name, "")
         self._lbl_tool_hint.setText(f"  —  {hint}" if hint else "")
         self._lbl_tool_hint.setVisible(bool(hint))

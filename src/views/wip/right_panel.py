@@ -78,6 +78,8 @@ class RightPanel(QWidget):
         nav_fl.setSpacing(0)
         nav_fl.addWidget(nav_sec)
         splitter.addWidget(nav_frame)
+        self._nav_frame = nav_frame
+        nav_sec.toggled.connect(self._on_navigator_toggled)
 
         bottom_scroll = QScrollArea()
         bottom_scroll.setWidgetResizable(True)
@@ -122,6 +124,14 @@ class RightPanel(QWidget):
             self._splitter.setSizes([220, 400])
         else:
             self._splitter.setSizes([20, 560])
+
+    def _on_navigator_toggled(self, expanded: bool) -> None:
+        if expanded:
+            self._nav_frame.setMinimumHeight(60)
+            self._splitter.setSizes([220, 400])
+        else:
+            self._nav_frame.setMinimumHeight(0)
+            self._splitter.setSizes([34, 10000])
 
     def select_row(self, row: int) -> None:
         """Silently highlight *row* in the navigator list."""

@@ -64,6 +64,7 @@ class ImageLabel(QLabel):
     polygonEdited      = Signal(int, list)   # (polygon_idx, pts in original coords)
     polygonSelected    = Signal(int)         # polygon index (-1 for deselect)
     toolCanceled       = Signal()            # Escape pressed while a tool is active
+    draw_attempted     = Signal()            # left-click while a drawing tool is active
     zoom_changed       = Signal(float)       # emitted whenever _zoom changes
     image_loaded       = Signal(int, int)    # (orig_w, orig_h) emitted when a new image is set
     ai_polygon_clicked = Signal(int, QPointF)  # (ai_idx, view_pos); -1 = deselect
@@ -546,6 +547,11 @@ class ImageLabel(QLabel):
         self.setFocus()
 
         if event.button() == Qt.LeftButton:
+            if self.current_tool in (SAM_BBOX, POLYGON):
+                self.draw_attempted.emit()
+                if self.current_tool is None:   # handler cleared the tool (e.g. no class)
+                    return
+
             pos_view = QPointF(event.pos())
 
             # --- SAM bbox tool: start rubber-band on press ---

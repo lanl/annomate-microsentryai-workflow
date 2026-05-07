@@ -1,3 +1,4 @@
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget, QFrame, QVBoxLayout, QPushButton, QSizePolicy,
 )
@@ -10,7 +11,13 @@ class _CollapsibleSection(QWidget):
         expandable: When True, the section uses an Expanding vertical size
             policy so it can grow inside a QSplitter. Default is Maximum
             (shrinks to content height).
+
+    Signals:
+        toggled (bool): Emitted after the body visibility changes.
+            True = expanded, False = collapsed.
     """
+
+    toggled = Signal(bool)
 
     def __init__(self, title: str, parent: QWidget = None, expandable: bool = False) -> None:
         super().__init__(parent)
@@ -53,3 +60,4 @@ class _CollapsibleSection(QWidget):
         self._body.setVisible(checked)
         arrow = "▾" if checked else "▸"
         self._toggle_btn.setText(f"{arrow}  {self._title}")
+        self.toggled.emit(checked)

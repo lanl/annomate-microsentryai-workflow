@@ -4,6 +4,7 @@ See CLAUDE.md § Architecture Rules for the full layer contract.
 Color scheme: no explicit stylesheet colors — Qt platform palette only.
 """
 
+import logging
 import os
 
 import cv2
@@ -17,6 +18,8 @@ from PySide6.QtWidgets import (
 )
 
 from views.wip._splitter import StyledSplitter
+
+logger = logging.getLogger(__name__)
 
 from views.wip.image_label import ImageLabel, SAM_BBOX
 from views.wip.right_panel import RightPanel
@@ -260,6 +263,7 @@ class WIPWindow(QWidget):
 
         # Tool palette
         self.tool_palette.tool_selected.connect(self._on_tool_selected)
+        self.canvas.draw_attempted.connect(self._on_draw_attempted)
 
         # Route thickness signal directly to canvas setter
         self.tool_palette.thickness_changed.connect(self._on_thickness_changed)
@@ -271,6 +275,13 @@ class WIPWindow(QWidget):
         self._sam_controller.inference_failed.connect(self._on_sam_inference_failed)
         self._sam_controller.loading_done.connect(self._on_sam_loading_done)
         self._sam_controller.loading_failed.connect(self._on_sam_loading_failed)
+
+        # Auto-load SAM silently if the checkpoint is already on disk
+        variant = self.tool_palette.current_sam_variant()
+        logger.info("WIPWindow startup: checking for cached SAM weights (%s)", variant)
+        if self._sam_controller.try_autoload(variant):
+            self._sam_loading = True
+            logger.info("WIPWindow startup: SAM autoload initiated")
 
         # Inference controller signals
         if self.inference_controller is not None:
@@ -398,19 +409,6 @@ class WIPWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_tool_selected(self, tool_name: str) -> None:
-        if tool_name in ("polygon", "sam_bbox"):
-            class_names = self.dataset_model.get_class_names()
-            if not class_names:
-                QMessageBox.warning(self, "No Classes Defined",
-                    "Add an annotation class before drawing.")
-                self.tool_palette.deselect_all()
-                return
-            if not self._active_class or self._active_class not in class_names:
-                QMessageBox.warning(self, "No Class Selected",
-                    "Select an annotation class in the panel before drawing.")
-                self.tool_palette.deselect_all()
-                return
-
         if tool_name == "sam_bbox":
             self._active_tool = "sam_bbox"
             self.canvas.set_tool(SAM_BBOX)
@@ -432,6 +430,25 @@ class WIPWindow(QWidget):
         self._active_tool = ""
         self.status_bar.set_tool("")
         self.status_bar.set_sam_hint("")
+
+    def _on_draw_attempted(self) -> None:
+        """Guard against drawing without a valid class; cancels the tool if missing."""
+        class_names = self.dataset_model.get_class_names()
+        if not class_names:
+            self.canvas.set_tool(None)
+            self.tool_palette.deselect_all()
+            self._active_tool = ""
+            self.status_bar.set_tool("")
+            QMessageBox.warning(self, "No Classes Defined",
+                "Add an annotation class before drawing.")
+            return
+        if not self._active_class or self._active_class not in class_names:
+            self.canvas.set_tool(None)
+            self.tool_palette.deselect_all()
+            self._active_tool = ""
+            self.status_bar.set_tool("")
+            QMessageBox.warning(self, "No Class Selected",
+                "Select an annotation class in the panel before drawing.")
 
     # ------------------------------------------------------------------ #
     # Annotation slots
