@@ -20,20 +20,16 @@ logger = logging.getLogger("Validation.Window")
 
 
 class ValidationWindow(QWidget):
-    """Two-step mask validation UI for ground truth generation and IoU evaluation.
+    """Mask evaluation UI for comparing GT masks against model predictions.
 
-    Step 1 — Generate binary ground-truth masks from JSON polygon annotations.
-    Step 2 — Run IoU evaluation comparing GT masks against model predictions.
-
-    Owns all file dialogs. Delegates all computation to
-    :class:`~controllers.validation_controller.ValidationController` via
-    worker threads. Reads path configuration via the model's query API.
+    Owns all file dialogs. Delegates computation to
+    :class:`~controllers.validation_controller.ValidationController` via a
+    worker thread. Reads path configuration via the model's query API.
 
     Attributes:
         model (ValidationModel): Domain model holding path configuration.
-        controller (ValidationController): Controller that owns the worker
-            threads for mask generation and evaluation.
-        _gen_worker: Active mask-generation worker, or ``None``.
+        controller (ValidationController): Controller that owns the evaluation
+            worker thread.
         _eval_worker: Active evaluation worker, or ``None``.
     """
 
@@ -51,9 +47,8 @@ class ValidationWindow(QWidget):
             parent: Optional Qt parent widget. Defaults to ``None``.
         """
         super().__init__(parent)
-        self.model      = model
-        self.controller = controller
-        self._gen_worker  = None
+        self.model        = model
+        self.controller   = controller
         self._eval_worker = None
 
         self._init_ui()
@@ -63,33 +58,11 @@ class ValidationWindow(QWidget):
     # ------------------------------------------------------------------
 
     def _init_ui(self) -> None:
-        """Build the two-step validation UI with progress bar and results feed."""
+        """Build the validation UI with progress bar and results feed."""
         root = QVBoxLayout(self)
 
-        # ---- Step 1 ----
-        grp_gen = QGroupBox("Step 1: Generate Ground Truth Masks from JSON")
-        gen_layout = QVBoxLayout(grp_gen)
-
-        self.lbl_poly, r1 = self._make_row("Select Images:",  self._select_poly)
-        self.lbl_json, r2 = self._make_row("Select JSON:",    self._select_json)
-        self.lbl_mask_out, r3 = self._make_row(
-            "Mask Output:", self._select_mask_out,
-            tooltip="Selecting this folder also pre-fills the Step 2 GT path.",
-        )
-        gen_layout.addLayout(r1)
-        gen_layout.addLayout(r2)
-        gen_layout.addLayout(r3)
-
-        self.btn_gen = QPushButton("Generate Binary Masks")
-        self.btn_gen.setStyleSheet(
-            "background-color: #2196F3; color: white; font-weight: bold; height: 35px;"
-        )
-        self.btn_gen.clicked.connect(self._run_generation)
-        gen_layout.addWidget(self.btn_gen)
-        root.addWidget(grp_gen)
-
-        # ---- Step 2 ----
-        grp_eval = QGroupBox("Step 2: Run Evaluation")
+        # ---- Evaluation ----
+        grp_eval = QGroupBox("Run Evaluation")
         eval_layout = QVBoxLayout(grp_eval)
 
         self.lbl_gt,   r4 = self._make_row("Select GT Masks:",    self._select_gt)
@@ -156,41 +129,6 @@ class ValidationWindow(QWidget):
     # Dialog slots — the only place QFileDialog lives
     # ------------------------------------------------------------------
 
-    def _select_poly(self) -> None:
-        """Open a folder picker and store the selected images directory in the model."""
-        p = QFileDialog.getExistingDirectory(self, "Select Images Folder")
-        if p:
-            self.model.set_poly_path(p)
-            self.lbl_poly.setText(p)
-            self.lbl_poly.setStyleSheet("color: black;")
-
-    def _select_json(self) -> None:
-        """Open a file picker and store the selected JSON annotation path in the model."""
-        p, _ = QFileDialog.getOpenFileName(
-            self, "Select JSON Annotation File", "", "JSON (*.json)"
-        )
-        if p:
-            self.model.set_json_path(p)
-            self.lbl_json.setText(p)
-            self.lbl_json.setStyleSheet("color: black;")
-
-    def _select_mask_out(self) -> None:
-        """Open a folder picker for the mask output directory.
-
-        Stores the selection in the model and pre-fills the GT path label if
-        the model seeds it from the mask output path.
-        """
-        p = QFileDialog.getExistingDirectory(self, "Select Mask Output Folder")
-        if p:
-            self.model.set_mask_out_path(p)
-            self.lbl_mask_out.setText(p)
-            self.lbl_mask_out.setStyleSheet("color: black;")
-            # model.set_mask_out_path seeds gt_path if it was empty
-            gt = self.model.get_gt_path()
-            if gt == p:
-                self.lbl_gt.setText(p)
-                self.lbl_gt.setStyleSheet("color: black;")
-
     def _select_gt(self) -> None:
         """Open a folder picker and store the selected ground-truth masks path in the model."""
         p = QFileDialog.getExistingDirectory(self, "Select Ground Truth Masks Folder")
@@ -210,32 +148,6 @@ class ValidationWindow(QWidget):
     # ------------------------------------------------------------------
     # Worker launch
     # ------------------------------------------------------------------
-
-    def _run_generation(self) -> None:
-        """Validate inputs, launch the mask-generation worker, and wire its signals."""
-        if not self.model.can_generate():
-            QMessageBox.warning(
-                self,
-                "Missing Inputs",
-                "Please select an images folder, a JSON file, and a mask output folder.",
-            )
-            return
-
-        self._clear_results()
-        self._set_ui_state(False)
-
-        try:
-            worker = self.controller.start_generation()
-        except ValueError as e:
-            QMessageBox.critical(self, "Error", str(e))
-            self._set_ui_state(True)
-            return
-
-        worker.progress.connect(self.pbar.setValue)
-        worker.log_message.connect(self._add_log_text)
-        worker.finished.connect(lambda: self._set_ui_state(True))
-        self._gen_worker = worker
-        worker.start()
 
     def _run_evaluation(self) -> None:
         """Validate inputs, launch the evaluation worker, and wire its signals."""
@@ -326,13 +238,12 @@ class ValidationWindow(QWidget):
         sb.setValue(sb.maximum())
 
     def _set_ui_state(self, enabled: bool) -> None:
-        """Enable or disable the Generate and Run buttons.
+        """Enable or disable the Run button.
 
         Called with ``False`` before starting a worker and with ``True``
         from the worker's ``finished`` signal.
 
         Args:
-            enabled (bool): ``True`` to enable buttons; ``False`` to disable.
+            enabled (bool): ``True`` to enable button; ``False`` to disable.
         """
-        self.btn_gen.setEnabled(enabled)
         self.btn_run.setEnabled(enabled)

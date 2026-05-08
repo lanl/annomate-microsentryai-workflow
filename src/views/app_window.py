@@ -125,6 +125,7 @@ class AppWindow(QMainWindow):
         add(data_menu, "Import JSON Data…",      "", self._import_coco)
         data_menu.addSeparator()
         add(data_menu, "Export Polygons + Data…", "", self._export_polygons)
+        add(data_menu, "Export Binary Masks…",    "", self._export_binary_masks)
         add(data_menu, "Export CSV…",             "", self._export_csv)
 
     # ================================================================== #
@@ -265,6 +266,18 @@ class AppWindow(QMainWindow):
         try:
             msg = self.io_controller.export_polygons_and_data(out_dir)
             QMessageBox.information(self, "Export", msg)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
+
+    def _export_binary_masks(self) -> None:
+        out_dir = QFileDialog.getExistingDirectory(
+            self, "Choose ground truth output folder", os.getcwd()
+        )
+        if not out_dir:
+            return
+        try:
+            msg = self.io_controller.export_binary_masks(out_dir)
+            QMessageBox.information(self, "Export Binary Masks", msg)
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 

@@ -222,6 +222,60 @@ class IOController:
 
         return f"CSV saved to:\n{out_path}"
 
+    def export_binary_masks(self, out_dir: str) -> str:
+        """Write binary mask PNGs to *out_dir* from in-memory annotations.
+
+        For each image that has at least one polygon annotation, renders all
+        polygons onto a black canvas as white-filled regions and writes the
+        result as a PNG. Images without annotations are skipped — they
+        represent defect-free ("good") samples that need no mask.
+
+        Args:
+            out_dir (str): Absolute path to the output directory.
+
+        Returns:
+            str: Human-readable success message with the count saved.
+
+        Raises:
+            RuntimeError: If no images are currently loaded in the model.
+        """
+        state = self.model.state
+        if not state.image_files:
+            raise RuntimeError("No images loaded.")
+
+        out_path = Path(out_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+
+        saved = 0
+        for name in state.image_files:
+            anns = state.annotations.get(name, [])
+            if not anns:
+                continue
+
+            src = Path(state.image_dir) / name
+            if not src.exists():
+                logger.warning("Image not found on disk, skipping: %s", src)
+                continue
+
+            img = cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                logger.warning("Could not read image: %s", src)
+                continue
+
+            h, w = img.shape[:2]
+            mask = np.zeros((h, w), dtype=np.uint8)
+
+            for a in anns:
+                pts = np.array(a["polygon"], dtype=np.int32).reshape((-1, 1, 2))
+                cv2.fillPoly(mask, [pts], 255)
+
+            stem = Path(name).stem
+            cv2.imwrite(str(out_path / f"{stem}.png"), mask)
+            saved += 1
+
+        logger.debug("Exported %d binary mask(s) to: %s", saved, out_dir)
+        return f"Saved {saved} binary mask(s) to:\n{out_dir}"
+
     # ------------------------------------------------------------------ #
     # Import
     # ------------------------------------------------------------------ #
