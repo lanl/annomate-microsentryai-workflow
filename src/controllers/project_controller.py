@@ -82,6 +82,9 @@ class ProjectController(QObject):
         self._created_at: Optional[str] = None
         self._is_dirty: bool = False
         self._loading: bool = False
+        # Preserved from the last loaded project so that saving without loading
+        # a model doesn't erase a model path that was previously persisted.
+        self._last_project_model_path: str = ""
 
         # Connect model signals for dirty tracking. The _loading guard
         # suppresses spurious dirty events fired during our own load sequence.
@@ -158,6 +161,7 @@ class ProjectController(QObject):
         self._project_dir = None
         self._project_name = ""
         self._created_at = None
+        self._last_project_model_path = ""
         self._autosave_manager.stop()
         self.clear_dirty()
 
@@ -228,6 +232,7 @@ class ProjectController(QObject):
         self._project_dir = str(Path(annoproj_path).parent)
         self._project_name = project_data.get("project_name", Path(annoproj_path).stem)
         self._created_at = project_data.get("created_at")
+        self._last_project_model_path = project_data.get("inference", {}).get("model_path", "")
         self._autosave_manager.set_project_dir(self._project_dir)
         self.clear_dirty()
         self.project_opened.emit(self._project_name)
@@ -255,6 +260,17 @@ class ProjectController(QObject):
         self._autosave_manager.set_project_dir(project_dir)
         return path
 
+    def _resolve_model_path(self) -> str:
+        """Return the best available model path for persistence.
+
+        Prefers the currently-loaded model path from the inference controller.
+        Falls back to the path that was saved in the last opened project so
+        that saving without loading a model doesn't erase a previously-persisted
+        path.
+        """
+        live = self._inference_controller.get_model_path() if self._inference_controller else ""
+        return live or self._last_project_model_path
+
     def _write_project(self, project_dir: str, project_name: str) -> str:
         orphaned = self._orphaned_filenames()
         if orphaned:
@@ -271,9 +287,7 @@ class ProjectController(QObject):
             inference_state=self._inference_model.state,
             created_at=self._created_at,
             save_score_maps=True,
-            model_path=self._inference_controller.get_model_path()
-            if self._inference_controller
-            else "",
+            model_path=self._resolve_model_path(),
         )
         if self._created_at is None:
             self._created_at = datetime.now(timezone.utc).isoformat()
@@ -299,9 +313,7 @@ class ProjectController(QObject):
                 inference_state=self._inference_model.state,
                 created_at=self._created_at,
                 save_score_maps=False,
-                model_path=self._inference_controller.get_model_path()
-                if self._inference_controller
-                else "",
+                model_path=self._resolve_model_path(),
             )
             self.autosave_written.emit(path)
         except Exception as exc:
