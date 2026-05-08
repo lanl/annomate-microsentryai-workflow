@@ -1,5 +1,5 @@
 """
-ToolPalette — left tool column for the WIP tab.
+ToolPalette — left tool column for the AnnoMate main window.
 
 Layout (top to bottom):
   ⬠  Polygon tool

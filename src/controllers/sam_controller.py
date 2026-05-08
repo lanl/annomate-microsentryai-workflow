@@ -7,7 +7,7 @@ Two QThreads:
   SAMWorker         — runs a single predict_bbox() call off the main thread.
 
 SAMController      — QObject that owns the strategy and both workers, and
-                      re-emits results as typed signals for WIPWindow.
+                      re-emits results as typed signals for AnnoMateWindow.
 """
 
 import logging

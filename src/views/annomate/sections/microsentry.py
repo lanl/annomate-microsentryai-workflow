@@ -1,5 +1,5 @@
 """
-MicrosentrySection — unified Microsentry controls panel for the WIP right panel.
+MicrosentrySection — unified Microsentry controls panel for the AnnoMate right panel.
 
 Layout (when model loaded):
   Load Model button

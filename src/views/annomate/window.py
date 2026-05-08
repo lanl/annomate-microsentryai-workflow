@@ -1,4 +1,4 @@
-"""WIPWindow — unified annotation and inference tab.
+"""AnnoMateWindow — unified annotation and inference main window.
 
 See CLAUDE.md § Architecture Rules for the full layer contract.
 Color scheme: no explicit stylesheet colors — Qt platform palette only.
@@ -17,14 +17,14 @@ from PySide6.QtWidgets import (
     QApplication,
 )
 
-from views.wip._splitter import StyledSplitter
+from views.annomate._splitter import StyledSplitter
 
 logger = logging.getLogger(__name__)
 
-from views.wip.image_label import ImageLabel, SAM_BBOX
-from views.wip.right_panel import RightPanel
-from views.wip.tool_palette import ToolPalette
-from views.wip.status_bar import WIPStatusBar
+from views.annomate.image_label import ImageLabel, SAM_BBOX
+from views.annomate.right_panel import RightPanel
+from views.annomate.tool_palette import ToolPalette
+from views.annomate.status_bar import AnnoMateStatusBar
 from controllers.sam_controller import SAMController
 
 
@@ -196,7 +196,7 @@ class _ZoomToolbar(QFrame):
         self.move(x, y)
 
 
-class WIPWindow(QWidget):
+class AnnoMateWindow(QWidget):
     """Experimental Photoshop-style layout tab.
 
     Receives the dataset model and IO controller so later phases can wire up
@@ -278,10 +278,10 @@ class WIPWindow(QWidget):
 
         # Auto-load SAM silently if the checkpoint is already on disk
         variant = self.tool_palette.current_sam_variant()
-        logger.info("WIPWindow startup: checking for cached SAM weights (%s)", variant)
+        logger.info("AnnoMateWindow startup: checking for cached SAM weights (%s)", variant)
         if self._sam_controller.try_autoload(variant):
             self._sam_loading = True
-            logger.info("WIPWindow startup: SAM autoload initiated")
+            logger.info("AnnoMateWindow startup: SAM autoload initiated")
 
         # Inference controller signals
         if self.inference_controller is not None:
@@ -300,7 +300,7 @@ class WIPWindow(QWidget):
 
         root.addWidget(self._build_workspace(), stretch=1)
 
-        self.status_bar = WIPStatusBar(self)
+        self.status_bar = AnnoMateStatusBar(self)
         root.addWidget(self.status_bar)
 
     def _build_workspace(self) -> QWidget:

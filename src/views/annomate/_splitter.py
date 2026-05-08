@@ -1,4 +1,4 @@
-"""Reusable styled splitter handle for the WIP tab.
+"""Reusable styled splitter handle for the AnnoMate main window.
 
 Handle colors (plain RGB tuples — converted to QColor only at paint time):
   HANDLE_DEFAULT  subtle grey  — resting state

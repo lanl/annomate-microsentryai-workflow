@@ -5,15 +5,13 @@ See CLAUDE.md § Architecture Rules for the full layer contract.
 
 import os
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QMainWindow, QTabWidget, QVBoxLayout, QWidget, QInputDialog,
-    QFileDialog, QMessageBox, QToolButton,
+    QMainWindow, QInputDialog, QFileDialog, QMessageBox,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
 from views.validation.window import ValidationWindow
-from views.wip.window import WIPWindow
+from views.annomate.window import AnnoMateWindow
 
 _APP_TITLE = "AnnoMate & MicroSentryAI"
 
@@ -59,28 +57,11 @@ class AppWindow(QMainWindow):
 
         # Sub-views
         self.validation_view = ValidationWindow(validation_model, validation_controller)
-        self.wip_view        = WIPWindow(dataset_model, io_controller, inference_model, inference_controller)
+        self.validation_view.setWindowTitle("Validation")
+        self.validation_view.resize(900, 650)
+        self.annomate_view = AnnoMateWindow(dataset_model, io_controller, inference_model, inference_controller)
 
-        # Tab widget
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self.wip_view,        "WIP")
-        self.tabs.addTab(self.validation_view, "Validation")
-
-        self._btn_ms = QToolButton()
-        self._btn_ms.setText("Enable Microsentry")
-        self._btn_ms.setCheckable(True)
-        self._btn_ms.setChecked(False)
-        self._btn_ms.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
-        self._btn_ms.toggled.connect(self.wip_view._on_microsentry_toggled)
-        self._btn_ms.setVisible(False)
-        self.tabs.setCornerWidget(self._btn_ms, Qt.TopRightCorner)
-        self.tabs.currentChanged.connect(self._on_tab_changed)
-
-        central = QWidget()
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.tabs)
-        self.setCentralWidget(central)
+        self.setCentralWidget(self.annomate_view)
 
         # React to ProjectController signals
         self.project_controller.dirty_changed.connect(self._update_title)
@@ -128,6 +109,16 @@ class AppWindow(QMainWindow):
         add(data_menu, "Export Binary Masks…",    "", self._export_binary_masks)
         add(data_menu, "Export CSV…",             "", self._export_csv)
 
+        validation_menu = self.menuBar().addMenu("&Validation")
+        add(validation_menu, "Open Validation…", "", self._open_validation)
+
+        view_menu = self.menuBar().addMenu("V&iew")
+        self._ms_action = QAction("Enable MicroSentryAI", self)
+        self._ms_action.setCheckable(True)
+        self._ms_action.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
+        self._ms_action.toggled.connect(self.annomate_view._on_microsentry_toggled)
+        view_menu.addAction(self._ms_action)
+
     # ================================================================== #
     # Project slots
     # ================================================================== #
@@ -157,10 +148,10 @@ class AppWindow(QMainWindow):
             QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
 
         model_path = project_data.get("inference", {}).get("model_path", "")
-        self.wip_view.set_saved_model_path(model_path)
+        self.annomate_view.set_saved_model_path(model_path)
         if model_path and not self.inference_controller.has_model():
             self.statusBar().showMessage(
-                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the WIP Microsentry panel.",
+                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the MicroSentryAI panel.",
                 8000,
             )
 
@@ -337,6 +328,8 @@ class AppWindow(QMainWindow):
         self.project_controller.autosave_manager.stop()
         super().closeEvent(event)
 
-    def _on_tab_changed(self, index: int) -> None:
-        self._btn_ms.setVisible(index == self.tabs.indexOf(self.wip_view))
+    def _open_validation(self) -> None:
+        self.validation_view.show()
+        self.validation_view.raise_()
+        self.validation_view.activateWindow()
 

@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 
-from views.wip.image_label import ImageLabel, SAM_BBOX, POLYGON
+from views.annomate.image_label import ImageLabel, SAM_BBOX, POLYGON
 
 
 @pytest.fixture

@@ -1,9 +1,9 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QScrollArea, QSizePolicy
 
-from views.wip._splitter import StyledSplitter
+from views.annomate._splitter import StyledSplitter
 
-from views.wip.sections import (
+from views.annomate.sections import (
     _CollapsibleSection,
     DataNavigatorSection,
     ClassesSection,
@@ -14,7 +14,7 @@ from views.wip.sections import (
 
 
 class RightPanel(QWidget):
-    """Scrollable right panel with collapsible sections for the WIP tab.
+    """Scrollable right panel with collapsible sections for the AnnoMate main window.
 
     Signals:
         image_selected (int): Forwarded from DataNavigatorSection.

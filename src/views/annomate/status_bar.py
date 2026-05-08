@@ -1,5 +1,5 @@
 """
-WIPStatusBar — bottom status strip for the WIP tab.
+AnnoMateStatusBar — bottom status strip for the AnnoMate main window.
 
 Shows live zoom %, image dimensions, active tool, and a right-aligned
 task/ready indicator. No custom colors — system palette only.
@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 
-class WIPStatusBar(QWidget):
+class AnnoMateStatusBar(QWidget):
     """Fixed-height status bar with zoom, dimensions, tool, and task fields.
 
     Public methods are the only write path — no direct label access from outside.
