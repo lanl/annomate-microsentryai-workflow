@@ -1,6 +1,6 @@
 """AppWindow — top-level application shell view.
 
-See CLAUDE.md § Architecture Rules for the full layer contract.
+See MVC.md § Architecture Rules for the full layer contract.
 """
 
 import os

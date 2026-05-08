@@ -1,6 +1,6 @@
 """AnnoMateWindow — unified annotation and inference main window.
 
-See CLAUDE.md § Architecture Rules for the full layer contract.
+See MVC.md § Architecture Rules for the full layer contract.
 Color scheme: no explicit stylesheet colors — Qt platform palette only.
 """
 
