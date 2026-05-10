@@ -16,12 +16,12 @@ import platform
 from pathlib import Path
 from typing import Tuple, Optional
 
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
 import numpy as np
 import torch
 from anomalib.deploy import TorchInferencer
 import cv2
+
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 logger = logging.getLogger("MicroSentryAI.AnomalibStrategy")
 
