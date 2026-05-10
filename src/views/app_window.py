@@ -112,7 +112,7 @@ class AppWindow(QMainWindow):
         validation_menu = self.menuBar().addMenu("&Validation")
         add(validation_menu, "Open Validation…", "", self._open_validation)
 
-        view_menu = self.menuBar().addMenu("V&iew")
+        view_menu = self.menuBar().addMenu("&Microsentry")
         self._ms_action = QAction("Enable MicroSentryAI", self)
         self._ms_action.setCheckable(True)
         self._ms_action.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
