@@ -21,6 +21,12 @@ pip install -r requirements.txt
 conda env create -f environment.yml
 ```
 
+### pre-commit
+The automated testing will fail your PR if you do not pass the linter. We use ruff for linting, and have a pre-commit setup on the repo ensure you enable it or run Ruff.  
+
+```
+pre-commit install
+```
 
 ## Usage
 
