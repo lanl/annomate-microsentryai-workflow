@@ -8,7 +8,6 @@ Rules:
 """
 
 import logging
-from pathlib import Path
 from typing import Optional, List, Tuple, Type
 
 import numpy as np
@@ -44,9 +43,9 @@ class InferenceWorker(QThread):
         finished (): Emitted once the loop exits, regardless of outcome.
     """
 
-    resultReady = Signal(str, object)   # (absolute_path, score_map: np.ndarray)
-    progress    = Signal(int)           # count of images processed so far
-    finished    = Signal()
+    resultReady = Signal(str, object)  # (absolute_path, score_map: np.ndarray)
+    progress = Signal(int)  # count of images processed so far
+    finished = Signal()
 
     def __init__(self, strategy, file_list: List[str]) -> None:
         """Initialize InferenceWorker with a strategy and file list.
@@ -110,8 +109,8 @@ class InferenceController(QObject):
     """
 
     result_ready = Signal(str, object)  # (path, score_map)
-    progress     = Signal(int)          # images processed so far
-    batch_done   = Signal()             # all images in a batch finished
+    progress = Signal(int)  # images processed so far
+    batch_done = Signal()  # all images in a batch finished
 
     def __init__(
         self,
@@ -158,12 +157,13 @@ class InferenceController(QObject):
         """
         if self._strategy_class is None:
             from ai_strategies.anomalib_strategy import AnomalibStrategy
+
             strategy_class = AnomalibStrategy
         else:
             strategy_class = self._strategy_class
         strategy = strategy_class()
         strategy.set_device(device.lower())
-        strategy.load_from_file(model_path)   # raises on failure
+        strategy.load_from_file(model_path)  # raises on failure
         self._strategy = strategy
         self._model_path = model_path
         logger.info("Model loaded: %s on %s", strategy.model_name, model_path)
@@ -237,7 +237,9 @@ class InferenceController(QObject):
         cancellation.
         """
         if self._worker and self._worker.isRunning():
-            self._worker.blockSignals(True)   # prevent stale signals from reaching proxies
+            self._worker.blockSignals(
+                True
+            )  # prevent stale signals from reaching proxies
             self._worker.stop()
             self._worker.wait()
         if self._worker:
@@ -303,7 +305,11 @@ class InferenceController(QObject):
         v_min_thr = np.percentile(s, heat_min_pct)
         s_clipped = np.clip(s, v_min_thr, s.max())
         mx, mn = s_clipped.max(), s_clipped.min()
-        s_norm = (s_clipped - mn) / (mx - mn + 1e-12) if mx > mn else np.zeros_like(s_clipped)
+        s_norm = (
+            (s_clipped - mn) / (mx - mn + 1e-12)
+            if mx > mn
+            else np.zeros_like(s_clipped)
+        )
 
         s_resized = cv2.resize(s_norm, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         heat_arr = (s_resized * 255).astype(np.uint8)
@@ -359,7 +365,9 @@ class InferenceController(QObject):
         kernel = np.ones((3, 3), np.uint8)
         mask = cv2.erode(mask, kernel, iterations=1)
 
-        raw_contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        raw_contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
         contours = []
         for cnt in raw_contours:
             if len(cnt) < 3:

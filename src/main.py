@@ -9,9 +9,6 @@ import sys
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from core.utils.logger import setup_logging
-setup_logging()
-
 from core.states.dataset_state import DatasetState
 from core.states.inference_state import InferenceState
 from core.states.validation_state import ValidationState
@@ -27,6 +24,10 @@ from controllers.project_controller import ProjectController
 
 from views.app_window import AppWindow
 
+from core.utils.logger import setup_logging
+
+setup_logging()
+
 
 def main() -> None:
     app = QApplication(sys.argv)
@@ -36,20 +37,20 @@ def main() -> None:
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
 
     # States
-    dataset_state    = DatasetState()
-    inference_state  = InferenceState()
+    dataset_state = DatasetState()
+    inference_state = InferenceState()
     validation_state = ValidationState()
 
     # Models
-    dataset_model    = DatasetTableModel(dataset_state)
-    inference_model  = InferenceModel(inference_state)
+    dataset_model = DatasetTableModel(dataset_state)
+    inference_model = InferenceModel(inference_state)
     validation_model = ValidationModel(validation_state)
 
     # Controllers
-    io_controller         = IOController(dataset_model)
-    inference_controller  = InferenceController(dataset_model, inference_model)
+    io_controller = IOController(dataset_model)
+    inference_controller = InferenceController(dataset_model, inference_model)
     validation_controller = ValidationController(validation_model)
-    project_controller    = ProjectController(
+    project_controller = ProjectController(
         dataset_model,
         inference_model,
         validation_model,

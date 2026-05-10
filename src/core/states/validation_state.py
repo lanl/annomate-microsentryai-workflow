@@ -26,11 +26,11 @@ class ValidationState:
 
     def __init__(self) -> None:
         """Initialize ValidationState with empty paths and a default eval output dir."""
-        self.poly_path:     str = ""
-        self.json_path:     str = ""
+        self.poly_path: str = ""
+        self.json_path: str = ""
         self.mask_out_path: str = ""
-        self.gt_path:       str = ""
-        self.pred_path:     str = ""
+        self.gt_path: str = ""
+        self.pred_path: str = ""
         self.eval_out_path: str = os.path.join(os.getcwd(), "evaluation_results")
 
     def clear(self) -> None:
@@ -39,8 +39,8 @@ class ValidationState:
         ``eval_out_path`` is intentionally preserved so the user's chosen
         output directory survives a workflow reset.
         """
-        self.poly_path     = ""
-        self.json_path     = ""
+        self.poly_path = ""
+        self.json_path = ""
         self.mask_out_path = ""
-        self.gt_path       = ""
-        self.pred_path     = ""
+        self.gt_path = ""
+        self.pred_path = ""

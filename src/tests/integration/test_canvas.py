@@ -38,9 +38,9 @@ class TestImageLabelInteraction:
         qtbot.mouseClick(active_canvas, Qt.MouseButton.LeftButton, pos=p3)
 
         # Assert intermediate state
-        assert (
-            len(active_canvas.current_polygon_points) == 3
-        ), "Canvas should have 3 pending points."
+        assert len(active_canvas.current_polygon_points) == 3, (
+            "Canvas should have 3 pending points."
+        )
 
         # Act: Double click to finish
         with qtbot.waitSignal(active_canvas.polygonFinished, timeout=1000) as blocker:
@@ -49,9 +49,9 @@ class TestImageLabelInteraction:
         # Assert final state
         emitted_points = blocker.args[0]
         assert len(emitted_points) == 3, "Should emit a 3-point polygon."
-        assert (
-            len(active_canvas.current_polygon_points) == 0
-        ), "Pending points should clear after finishing."
+        assert len(active_canvas.current_polygon_points) == 0, (
+            "Pending points should clear after finishing."
+        )
 
     def test_zoom_in_and_out(self, qtbot, active_canvas):
         """Verify programmatic zooming adjusts internal scale properly."""
@@ -68,9 +68,9 @@ class TestImageLabelInteraction:
         active_canvas.zoom_out()
 
         # Assert
-        assert active_canvas._zoom == pytest.approx(
-            initial_zoom
-        ), "Zoom factor should return to base."
+        assert active_canvas._zoom == pytest.approx(initial_zoom), (
+            "Zoom factor should return to base."
+        )
 
 
 class TestSegPathItemGeometry:
@@ -94,9 +94,9 @@ class TestSegPathItemGeometry:
 
         # Assert
         simplified_pts = item._pts
-        assert (
-            len(simplified_pts) == 4
-        ), "The intermediate near-collinear point should be removed."
+        assert len(simplified_pts) == 4, (
+            "The intermediate near-collinear point should be removed."
+        )
         assert simplified_pts[0] == QPointF(0, 0)
         assert simplified_pts[1] == QPointF(10, 0)
         assert simplified_pts[2] == QPointF(10, 10)

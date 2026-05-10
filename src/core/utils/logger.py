@@ -1,6 +1,7 @@
 import sys
 import logging
 
+
 def setup_logging() -> None:
     """Configure the root logger for the application.
 
@@ -9,7 +10,7 @@ def setup_logging() -> None:
     are emitted to ``stdout`` with a timestamp, level, module, and
     line-number prefix.
     """
-    is_compiled = getattr(sys, 'frozen', False)
+    is_compiled = getattr(sys, "frozen", False)
 
     log_level = logging.CRITICAL if is_compiled else logging.DEBUG
     log_format = "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"

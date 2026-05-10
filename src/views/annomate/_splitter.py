@@ -11,17 +11,17 @@ from PySide6.QtGui import QPainter, QColor, QPalette
 from PySide6.QtWidgets import QSplitter, QSplitterHandle
 
 # ── Reusable handle color palette ────────────────────────────────────────────
-HANDLE_DEFAULT = (176, 176, 176)   # subtle grey
-HANDLE_HOVER   = (255, 140,   0)   # orange
-HANDLE_DRAG    = ( 64,  64,  64)   # dark grey
+HANDLE_DEFAULT = (176, 176, 176)  # subtle grey
+HANDLE_HOVER = (255, 140, 0)  # orange
+HANDLE_DRAG = (64, 64, 64)  # dark grey
 # ─────────────────────────────────────────────────────────────────────────────
 
-_MARGIN_DEFAULT = 2   # px inset on the long axis — shortens the visible bar
-_CORNER_RADIUS  =  4   # px rounded corner radius
-_DOT_COUNT     =  3   # number of grip dots
-_DOT_SIZE      =  3   # px diameter of each dot
-_DOT_SPACING   =  5   # px between dot centres
-_DOT_ALPHA     = 160  # opacity of grip dots (0–255)
+_MARGIN_DEFAULT = 2  # px inset on the long axis — shortens the visible bar
+_CORNER_RADIUS = 4  # px rounded corner radius
+_DOT_COUNT = 3  # number of grip dots
+_DOT_SIZE = 3  # px diameter of each dot
+_DOT_SPACING = 5  # px between dot centres
+_DOT_ALPHA = 160  # opacity of grip dots (0–255)
 
 
 class _StyledHandle(QSplitterHandle):
@@ -30,9 +30,9 @@ class _StyledHandle(QSplitterHandle):
     def __init__(self, orientation, parent, margin: int = _MARGIN_DEFAULT) -> None:
         super().__init__(orientation, parent)
         self.setMouseTracking(True)
-        self._hovered  = False
+        self._hovered = False
         self._dragging = False
-        self._margin   = margin
+        self._margin = margin
 
     # ── State transitions ─────────────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ class _StyledHandle(QSplitterHandle):
 
     def mouseReleaseEvent(self, event) -> None:
         self._dragging = False
-        self._hovered  = True   # mouse is still over the handle at release
+        self._hovered = True  # mouse is still over the handle at release
         self.update()
         super().mouseReleaseEvent(event)
 

@@ -1,5 +1,9 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QLineEdit, QTextEdit,
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QLineEdit,
+    QTextEdit,
 )
 
 
@@ -46,7 +50,9 @@ class MetadataSection(QWidget):
         self._note_edit.blockSignals(True)
 
         if self._current_row >= 0:
-            self._inspector_edit.setText(self.dataset_model.get_inspector(self._current_row))
+            self._inspector_edit.setText(
+                self.dataset_model.get_inspector(self._current_row)
+            )
             self._note_edit.setPlainText(self.dataset_model.get_note(self._current_row))
             self._inspector_edit.setEnabled(True)
             self._note_edit.setEnabled(True)
@@ -62,9 +68,13 @@ class MetadataSection(QWidget):
     def _store_inspector(self) -> None:
         if self._current_row < 0:
             return
-        self.dataset_model.set_inspector(self._current_row, self._inspector_edit.text().strip())
+        self.dataset_model.set_inspector(
+            self._current_row, self._inspector_edit.text().strip()
+        )
 
     def _store_note(self) -> None:
         if self._current_row < 0:
             return
-        self.dataset_model.set_note(self._current_row, self._note_edit.toPlainText().strip())
+        self.dataset_model.set_note(
+            self._current_row, self._note_edit.toPlainText().strip()
+        )

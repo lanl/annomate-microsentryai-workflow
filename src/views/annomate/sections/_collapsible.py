@@ -1,6 +1,10 @@
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QPushButton, QSizePolicy,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QPushButton,
+    QSizePolicy,
 )
 
 
@@ -19,7 +23,9 @@ class _CollapsibleSection(QWidget):
 
     toggled = Signal(bool)
 
-    def __init__(self, title: str, parent: QWidget = None, expandable: bool = False) -> None:
+    def __init__(
+        self, title: str, parent: QWidget = None, expandable: bool = False
+    ) -> None:
         super().__init__(parent)
         v_policy = QSizePolicy.Expanding if expandable else QSizePolicy.Maximum
         self.setSizePolicy(QSizePolicy.Expanding, v_policy)

@@ -6,8 +6,6 @@ No ML model is required — all tests operate on canvas state and signals only.
 import numpy as np
 import pytest
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
 
 from views.annomate.image_label import ImageLabel, SAM_BBOX, POLYGON
 
@@ -27,6 +25,7 @@ def canvas(qtbot):
 # Tool activation
 # ---------------------------------------------------------------------------
 
+
 def test_sam_tool_sets_crosscursor(canvas):
     canvas.set_tool(SAM_BBOX)
     assert canvas.cursor().shape() == Qt.CrossCursor
@@ -35,7 +34,7 @@ def test_sam_tool_sets_crosscursor(canvas):
 def test_polygon_tool_does_not_affect_sam_state(canvas):
     canvas.set_tool(SAM_BBOX)
     canvas._sam_bbox_start = QPointF(10, 10)
-    canvas._sam_bbox_end   = QPointF(50, 50)
+    canvas._sam_bbox_end = QPointF(50, 50)
     # Switching to polygon should clear SAM state
     canvas.set_tool(POLYGON)
     assert canvas._sam_bbox_start is None
@@ -46,6 +45,7 @@ def test_polygon_tool_does_not_affect_sam_state(canvas):
 # ---------------------------------------------------------------------------
 # Ghost helpers
 # ---------------------------------------------------------------------------
+
 
 def test_set_sam_ghost_stores_display_pts(canvas):
     pts_orig = [(10.0, 10.0), (50.0, 10.0), (50.0, 50.0), (10.0, 50.0)]
@@ -65,7 +65,7 @@ def test_set_sam_ghost_empty_pts_clears_ghost(canvas):
 def test_clear_sam_ghost_clears_all_state(canvas):
     canvas.set_sam_ghost([(0, 0), (10, 0), (10, 10)], 0.9)
     canvas._sam_bbox_start = QPointF(5, 5)
-    canvas._sam_bbox_end   = QPointF(20, 20)
+    canvas._sam_bbox_end = QPointF(20, 20)
     canvas.clear_sam_ghost()
     assert canvas._sam_ghost is None
     assert canvas._sam_bbox_start is None
@@ -75,6 +75,7 @@ def test_clear_sam_ghost_clears_all_state(canvas):
 # ---------------------------------------------------------------------------
 # Accept / reject
 # ---------------------------------------------------------------------------
+
 
 def test_accept_sam_ghost_emits_polygon_finished(canvas, qtbot):
     pts_orig = [(10.0, 20.0), (40.0, 20.0), (40.0, 60.0), (10.0, 60.0)]
@@ -111,6 +112,7 @@ def test_accept_sam_ghost_returns_false_when_no_ghost(canvas):
 # ---------------------------------------------------------------------------
 # Keyboard
 # ---------------------------------------------------------------------------
+
 
 def test_enter_accepts_ghost(canvas, qtbot):
     canvas.set_tool(SAM_BBOX)

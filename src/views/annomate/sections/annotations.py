@@ -1,7 +1,13 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QComboBox,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QToolButton,
+    QComboBox,
 )
 
 # ── Column-width constants ────────────────────────────────────────────────────
@@ -18,10 +24,10 @@ from PySide6.QtWidgets import (
 #                 means it expands to fill remaining space beyond this floor).
 # ─────────────────────────────────────────────────────────────────────────────
 _COLOR_COL_W = 44
-_DOT_W       = 16
-_COUNT_W     = 52
-_TRASH_W     = 28
-_NAME_MIN_W  = 60
+_DOT_W = 16
+_COUNT_W = 52
+_TRASH_W = 28
+_NAME_MIN_W = 60
 
 
 class _AnnotationRow(QWidget):
@@ -31,14 +37,21 @@ class _AnnotationRow(QWidget):
     The combo emits class_changed when the user picks a different class.
     """
 
-    row_clicked      = Signal(int)        # annotation index
-    delete_requested = Signal(int)        # annotation index
-    class_changed    = Signal(int, str)   # (annotation index, new class name)
+    row_clicked = Signal(int)  # annotation index
+    delete_requested = Signal(int)  # annotation index
+    class_changed = Signal(int, str)  # (annotation index, new class name)
 
-    def __init__(self, idx: int, name: str, verts: int,
-                 r: int, g: int, b: int,
-                 class_names: list,
-                 parent: QWidget = None) -> None:
+    def __init__(
+        self,
+        idx: int,
+        name: str,
+        verts: int,
+        r: int,
+        g: int,
+        b: int,
+        class_names: list,
+        parent: QWidget = None,
+    ) -> None:
         super().__init__(parent)
         self._idx = idx
         self._original_palette = QPalette(self.palette())
@@ -65,7 +78,9 @@ class _AnnotationRow(QWidget):
         combo.setCurrentText(name)
         combo.setMinimumWidth(_NAME_MIN_W)
         combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        combo.textActivated.connect(lambda text: self.class_changed.emit(self._idx, text))
+        combo.textActivated.connect(
+            lambda text: self.class_changed.emit(self._idx, text)
+        )
         h.addWidget(combo, stretch=1)
 
         lbl_v = QLabel(str(verts))
@@ -84,7 +99,9 @@ class _AnnotationRow(QWidget):
         if selected:
             p = QPalette(self.palette())
             p.setColor(QPalette.Window, self.palette().color(QPalette.Highlight))
-            p.setColor(QPalette.WindowText, self.palette().color(QPalette.HighlightedText))
+            p.setColor(
+                QPalette.WindowText, self.palette().color(QPalette.HighlightedText)
+            )
             self.setAutoFillBackground(True)
             self.setPalette(p)
         else:
@@ -176,7 +193,11 @@ class AnnotationsSection(QWidget):
                 item.widget().deleteLater()
         self._row_widgets.clear()
 
-        annos = self.dataset_model.get_annotations(self._current_row) if self._current_row >= 0 else []
+        annos = (
+            self.dataset_model.get_annotations(self._current_row)
+            if self._current_row >= 0
+            else []
+        )
         self._empty_lbl.setVisible(not annos)
 
         # Clamp selection in case annotations were deleted

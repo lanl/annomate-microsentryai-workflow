@@ -25,10 +25,11 @@ logger = logging.getLogger(__name__)
 # Workers
 # ------------------------------------------------------------------ #
 
+
 class _ModelLoadWorker(QThread):
     """Loads (and optionally downloads) a SAM checkpoint off the main thread."""
 
-    done   = Signal()
+    done = Signal()
     failed = Signal(str)
 
     def __init__(self, strategy: SAMStrategy, parent: QObject = None) -> None:
@@ -49,8 +50,8 @@ class SAMWorker(QThread):
     """Runs a single bounding-box SAM prediction off the main thread."""
 
     resultReady = Signal(list, float)  # (polygon_pts, confidence)
-    failed      = Signal(str)
-    finished    = Signal()
+    failed = Signal(str)
+    finished = Signal()
 
     def __init__(
         self,
@@ -68,7 +69,9 @@ class SAMWorker(QThread):
 
     def run(self) -> None:
         try:
-            pts, conf = self._strategy.predict_bbox(self._image_bgr, self._bbox, self._epsilon)
+            pts, conf = self._strategy.predict_bbox(
+                self._image_bgr, self._bbox, self._epsilon
+            )
             self.resultReady.emit(pts, conf)
         except Exception as exc:
             logger.warning("SAM inference error: %s", exc)
@@ -81,6 +84,7 @@ class SAMWorker(QThread):
 # Controller
 # ------------------------------------------------------------------ #
 
+
 class SAMController(QObject):
     """Manages SAMStrategy lifecycle and exposes async signals to the view.
 
@@ -91,10 +95,10 @@ class SAMController(QObject):
         loading_failed (str): Error string from a failed model load.
     """
 
-    result_ready    = Signal(list, float)
+    result_ready = Signal(list, float)
     inference_failed = Signal(str)
-    loading_done    = Signal()
-    loading_failed  = Signal(str)
+    loading_done = Signal()
+    loading_failed = Signal(str)
 
     def __init__(self, parent: QObject = None) -> None:
         super().__init__(parent)

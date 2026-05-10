@@ -12,20 +12,27 @@ import numpy as np
 from PySide6.QtCore import Qt, QEvent, QPointF, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QSizePolicy,
-    QToolButton, QFileDialog, QMessageBox, QHBoxLayout, QComboBox,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QSizePolicy,
+    QToolButton,
+    QFileDialog,
+    QMessageBox,
+    QHBoxLayout,
+    QComboBox,
     QApplication,
 )
 
 from views.annomate._splitter import StyledSplitter
-
-logger = logging.getLogger(__name__)
 
 from views.annomate.image_label import ImageLabel, SAM_BBOX
 from views.annomate.right_panel import RightPanel
 from views.annomate.tool_palette import ToolPalette
 from views.annomate.status_bar import AnnoMateStatusBar
 from controllers.sam_controller import SAMController
+
+logger = logging.getLogger(__name__)
 
 
 class _AIAcceptPopup(QFrame):
@@ -111,7 +118,9 @@ class _ReviewBar(QFrame):
         self._btn_accept.setToolTip("Mark this image as accepted")
         self._btn_accept.setCheckable(True)
         self._btn_accept.setFixedHeight(self._BTN_H)
-        self._btn_accept.clicked.connect(lambda checked: self._on_clicked("accept", checked))
+        self._btn_accept.clicked.connect(
+            lambda checked: self._on_clicked("accept", checked)
+        )
         layout.addWidget(self._btn_accept)
 
         self._btn_reject = QToolButton()
@@ -119,7 +128,9 @@ class _ReviewBar(QFrame):
         self._btn_reject.setToolTip("Mark this image as rejected")
         self._btn_reject.setCheckable(True)
         self._btn_reject.setFixedHeight(self._BTN_H)
-        self._btn_reject.clicked.connect(lambda checked: self._on_clicked("reject", checked))
+        self._btn_reject.clicked.connect(
+            lambda checked: self._on_clicked("reject", checked)
+        )
         layout.addWidget(self._btn_reject)
 
         self.adjustSize()
@@ -147,10 +158,14 @@ class _ReviewBar(QFrame):
 
     def _update_styles(self) -> None:
         self._btn_accept.setStyleSheet(
-            "background-color: #4caf50; color: white;" if self._btn_accept.isChecked() else ""
+            "background-color: #4caf50; color: white;"
+            if self._btn_accept.isChecked()
+            else ""
         )
         self._btn_reject.setStyleSheet(
-            "background-color: #f44336; color: white;" if self._btn_reject.isChecked() else ""
+            "background-color: #f44336; color: white;"
+            if self._btn_reject.isChecked()
+            else ""
         )
 
     def reposition(self, canvas_size) -> None:
@@ -176,9 +191,9 @@ class _ZoomToolbar(QFrame):
         layout.setSpacing(2)
 
         for text, tip, slot in (
-            ("+",  "Zoom In",    canvas.zoom_in),
-            ("−",  "Zoom Out",   canvas.zoom_out),
-            ("⊙",  "Reset View", canvas.reset_view),
+            ("+", "Zoom In", canvas.zoom_in),
+            ("−", "Zoom Out", canvas.zoom_out),
+            ("⊙", "Reset View", canvas.reset_view),
         ):
             btn = QToolButton()
             btn.setText(text)
@@ -254,8 +269,12 @@ class AnnoMateWindow(QWidget):
         self.right_panel.next_requested.connect(self._next_image)
         self.right_panel.annotation_selected.connect(self._on_annotation_selected)
         self.right_panel.load_model_requested.connect(self._on_load_model_requested)
-        self.right_panel.load_previous_model_requested.connect(self._on_load_previous_model_requested)
-        self.right_panel.microsentry_settings_changed.connect(self._refresh_canvas_render)
+        self.right_panel.load_previous_model_requested.connect(
+            self._on_load_previous_model_requested
+        )
+        self.right_panel.microsentry_settings_changed.connect(
+            self._refresh_canvas_render
+        )
         self.right_panel.accept_polygons_requested.connect(self._on_accept_ai_polygons)
 
         # Keep canvas in sync when annotations change outside the canvas
@@ -278,7 +297,9 @@ class AnnoMateWindow(QWidget):
 
         # Auto-load SAM silently if the checkpoint is already on disk
         variant = self.tool_palette.current_sam_variant()
-        logger.info("AnnoMateWindow startup: checking for cached SAM weights (%s)", variant)
+        logger.info(
+            "AnnoMateWindow startup: checking for cached SAM weights (%s)", variant
+        )
         if self._sam_controller.try_autoload(variant):
             self._sam_loading = True
             logger.info("AnnoMateWindow startup: SAM autoload initiated")
@@ -388,9 +409,13 @@ class AnnoMateWindow(QWidget):
         self._review_bar.reposition(self.canvas.size())
         self._ai_popup.setVisible(False)
         self._selected_ai_idx = -1
-        self.canvas.set_image(bgr)      # always set the original; resets zoom (expected on new image)
-        self.status_bar.set_zoom(1.0)   # set_image resets zoom without emitting zoom_changed
-        self._refresh_canvas_render()   # apply heatmap / overlay layer without resetting zoom
+        self.canvas.set_image(
+            bgr
+        )  # always set the original; resets zoom (expected on new image)
+        self.status_bar.set_zoom(
+            1.0
+        )  # set_image resets zoom without emitting zoom_changed
+        self._refresh_canvas_render()  # apply heatmap / overlay layer without resetting zoom
         total = self.dataset_model.rowCount()
         self.right_panel.set_counter(row, total)
         self.right_panel.select_row(row)
@@ -439,16 +464,20 @@ class AnnoMateWindow(QWidget):
             self.tool_palette.deselect_all()
             self._active_tool = ""
             self.status_bar.set_tool("")
-            QMessageBox.warning(self, "No Classes Defined",
-                "Add an annotation class before drawing.")
+            QMessageBox.warning(
+                self, "No Classes Defined", "Add an annotation class before drawing."
+            )
             return
         if not self._active_class or self._active_class not in class_names:
             self.canvas.set_tool(None)
             self.tool_palette.deselect_all()
             self._active_tool = ""
             self.status_bar.set_tool("")
-            QMessageBox.warning(self, "No Class Selected",
-                "Select an annotation class in the panel before drawing.")
+            QMessageBox.warning(
+                self,
+                "No Class Selected",
+                "Select an annotation class in the panel before drawing.",
+            )
 
     # ------------------------------------------------------------------ #
     # Annotation slots
@@ -466,8 +495,12 @@ class AnnoMateWindow(QWidget):
         class_names = self.dataset_model.get_class_names()
         if not class_names:
             return
-        target = self._active_class if self._active_class in class_names else class_names[0]
-        self.dataset_model.add_annotation(self._current_row, target, pts, self.canvas.line_thickness)
+        target = (
+            self._active_class if self._active_class in class_names else class_names[0]
+        )
+        self.dataset_model.add_annotation(
+            self._current_row, target, pts, self.canvas.line_thickness
+        )
         self._refresh_canvas_render()
 
     def _on_polygon_edited(self, idx: int, pts: list) -> None:
@@ -487,6 +520,7 @@ class AnnoMateWindow(QWidget):
         """Sync the right panel list and slider when a polygon is clicked on the canvas."""
         self.right_panel.annotations.select_annotation(idx)
         self._on_annotation_selected(idx)
+
     def _on_review_decision(self, decision) -> None:
         if self._current_row >= 0:
             self.dataset_model.set_review_decision(self._current_row, decision)
@@ -495,19 +529,21 @@ class AnnoMateWindow(QWidget):
         """Apply selection to the canvas and sync the UI slider to match the polygon's thickness."""
         self.canvas.selected_polygon_idx = idx
         self.canvas.update()
-        
+
         # Read the polygon's specific thickness and update the slider
         if idx != -1 and self._current_row >= 0:
             annos = self.dataset_model.get_annotations(self._current_row)
             if 0 <= idx < len(annos):
                 thick = annos[idx].get("thickness", 2.0)
-                
+
                 # Block signals so setting the slider doesn't accidentally trigger a drawing update
                 self.tool_palette.slider_thickness.blockSignals(True)
-                self.tool_palette.slider_thickness.setValue(int(thick * 4)) # slider is 1-40
+                self.tool_palette.slider_thickness.setValue(
+                    int(thick * 4)
+                )  # slider is 1-40
                 self.tool_palette.lbl_thickness.setText(f"{thick:.2f} px")
                 self.tool_palette.slider_thickness.blockSignals(False)
-                
+
                 self.canvas.set_line_thickness(thick)
 
     def _refresh_overlays(self) -> None:
@@ -515,7 +551,11 @@ class AnnoMateWindow(QWidget):
         current_sel = self.canvas.selected_polygon_idx
         annos = self.dataset_model.get_annotations(self._current_row)
         overlays = [
-            (a["polygon"], QColor(*self.dataset_model.get_class_color(a["category_name"])), a.get("thickness", 2.0))
+            (
+                a["polygon"],
+                QColor(*self.dataset_model.get_class_color(a["category_name"])),
+                a.get("thickness", 2.0),
+            )
             for a in annos
         ]
         self.canvas.selected_polygon_idx = -1
@@ -535,12 +575,14 @@ class AnnoMateWindow(QWidget):
         """Apply thickness based on current tool mode."""
         # Always update the canvas so future drawing uses this thickness
         self.canvas.set_line_thickness(thickness)
-        
+
         # If we are NOT actively drawing, and a polygon is selected, mutate its data
         if self._active_tool != "polygon":
             idx = self.canvas.selected_polygon_idx
             if idx != -1 and self._current_row >= 0:
-                self.dataset_model.update_annotation_thickness(self._current_row, idx, thickness)
+                self.dataset_model.update_annotation_thickness(
+                    self._current_row, idx, thickness
+                )
 
     # ------------------------------------------------------------------ #
     # Microsentry toggle & rendering
@@ -557,7 +599,10 @@ class AnnoMateWindow(QWidget):
     def _on_microsentry_toggled(self, checked: bool) -> None:
         self._microsentry_enabled = checked
         if checked:
-            if self.inference_controller is not None and self.inference_controller.has_model():
+            if (
+                self.inference_controller is not None
+                and self.inference_controller.has_model()
+            ):
                 self.right_panel.set_model_loaded(
                     self.inference_controller.get_model_name(),
                     self.inference_controller.get_model_path(),
@@ -573,14 +618,16 @@ class AnnoMateWindow(QWidget):
             return
         if not self._saved_model_path:
             QMessageBox.information(
-                self, "Load Previous Model",
+                self,
+                "Load Previous Model",
                 "No model path found in the current project.\n"
                 "Open a project that was saved with a model loaded, or use 'Load New'.",
             )
             return
         if not os.path.isfile(self._saved_model_path):
             QMessageBox.warning(
-                self, "Load Previous Model",
+                self,
+                "Load Previous Model",
                 f"The saved model file no longer exists:\n{self._saved_model_path}\n\nUse 'Load New' to browse for it.",
             )
             return
@@ -590,7 +637,10 @@ class AnnoMateWindow(QWidget):
         if self.inference_controller is None:
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load AI Model", os.getcwd(), "PyTorch Model (*.pt *.pth);;All Files (*)"
+            self,
+            "Load AI Model",
+            os.getcwd(),
+            "PyTorch Model (*.pt *.pth);;All Files (*)",
         )
         if not path:
             return
@@ -614,13 +664,18 @@ class AnnoMateWindow(QWidget):
         self._start_pending_inference()
 
     def _start_pending_inference(self) -> None:
-        if self.inference_controller is None or not self.inference_controller.has_model():
+        if (
+            self.inference_controller is None
+            or not self.inference_controller.has_model()
+        ):
             return
         total = self.dataset_model.rowCount()
         paths = [
             self.dataset_model.get_image_path(i)
             for i in range(total)
-            if not self.inference_model.is_processed(self.dataset_model.get_image_path(i))
+            if not self.inference_model.is_processed(
+                self.dataset_model.get_image_path(i)
+            )
         ]
         if paths:
             self.inference_controller.start_batch_inference(paths)
@@ -670,7 +725,11 @@ class AnnoMateWindow(QWidget):
         # Annotation overlays are always shown
         annos = self.dataset_model.get_annotations(self._current_row)
         anno_overlays = [
-            (a["polygon"], QColor(*self.dataset_model.get_class_color(a["category_name"])), a.get("thickness", 2.0))
+            (
+                a["polygon"],
+                QColor(*self.dataset_model.get_class_color(a["category_name"])),
+                a.get("thickness", 2.0),
+            )
             for a in annos
         ]
 
@@ -730,7 +789,11 @@ class AnnoMateWindow(QWidget):
             target = self._ai_popup.current_class()
             if not target:
                 class_names = self.dataset_model.get_class_names()
-                target = self._active_class if self._active_class in class_names else (class_names[0] if class_names else "")
+                target = (
+                    self._active_class
+                    if self._active_class in class_names
+                    else (class_names[0] if class_names else "")
+                )
             if target:
                 self.dataset_model.add_annotation(self._current_row, target, pts)
         del self._current_ai_contours[idx]
@@ -744,7 +807,11 @@ class AnnoMateWindow(QWidget):
             return
         annos = self.dataset_model.get_annotations(self._current_row)
         anno_overlays = [
-            (a["polygon"], QColor(*self.dataset_model.get_class_color(a["category_name"])), a.get("thickness", 2.0))
+            (
+                a["polygon"],
+                QColor(*self.dataset_model.get_class_color(a["category_name"])),
+                a.get("thickness", 2.0),
+            )
             for a in annos
         ]
         self._update_canvas_overlays(anno_overlays)
@@ -756,7 +823,9 @@ class AnnoMateWindow(QWidget):
         class_names = self.dataset_model.get_class_names()
         if not class_names:
             return
-        target = self._active_class if self._active_class in class_names else class_names[0]
+        target = (
+            self._active_class if self._active_class in class_names else class_names[0]
+        )
         for pts in self._current_ai_contours:
             if len(pts) >= 3:
                 self.dataset_model.add_annotation(self._current_row, target, pts)
@@ -805,13 +874,17 @@ class AnnoMateWindow(QWidget):
         self._sam_controller.set_variant(variant)
         self._sam_loading = False
         self.tool_palette.sam_status_lbl.setText("Model: not loaded")
-        self.tool_palette.sam_status_lbl.setStyleSheet("color: grey; font-style: italic;")
+        self.tool_palette.sam_status_lbl.setStyleSheet(
+            "color: grey; font-style: italic;"
+        )
 
     def _on_sam_loading_done(self) -> None:
         self._sam_loading = False
         display_name = self.tool_palette.sam_variant_combo.currentText()
         self.tool_palette.sam_status_lbl.setText(f"Ready: {display_name}")
-        self.tool_palette.sam_status_lbl.setStyleSheet("color: green; font-style: normal;")
+        self.tool_palette.sam_status_lbl.setStyleSheet(
+            "color: green; font-style: normal;"
+        )
         self.status_bar.set_sam_hint(f"Ready: {display_name}  ·  draw bbox to segment")
 
     def _on_sam_loading_failed(self, msg: str) -> None:
@@ -822,7 +895,9 @@ class AnnoMateWindow(QWidget):
         self.status_bar.set_tool("")
         self.status_bar.set_sam_hint("")
         self.tool_palette.sam_status_lbl.setText("Load failed")
-        self.tool_palette.sam_status_lbl.setStyleSheet("color: red; font-style: normal;")
+        self.tool_palette.sam_status_lbl.setStyleSheet(
+            "color: red; font-style: normal;"
+        )
         QMessageBox.critical(self, "SAM Load Error", f"Could not load model:\n{msg}")
 
     def _on_sam_bbox_drawn(self, x1: float, y1: float, x2: float, y2: float) -> None:

@@ -10,6 +10,7 @@ from core.utils.geometry import polygon_area
 
 logger = logging.getLogger("AnnoMate.DatasetModel")
 
+
 class DatasetTableModel(QAbstractTableModel):
     """Qt model layer for the dataset image list.
 
@@ -62,7 +63,9 @@ class DatasetTableModel(QAbstractTableModel):
         """
         return len(self.headers)
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole) -> object:
+    def headerData(
+        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
+    ) -> object:
         """Return header label for the given section and orientation.
 
         Args:
@@ -137,7 +140,9 @@ class DatasetTableModel(QAbstractTableModel):
         self.state.image_files = files
         self.endResetModel()
 
-    def add_annotation(self, row: int, category: str, polygon: list, thickness: float = 2.0) -> None:
+    def add_annotation(
+        self, row: int, category: str, polygon: list, thickness: float = 2.0
+    ) -> None:
         """Append a polygon annotation to the image at *row*.
 
         Out-of-bounds *row* values are logged as errors and silently ignored.
@@ -155,23 +160,36 @@ class DatasetTableModel(QAbstractTableModel):
             return
 
         filename = self.state.image_files[row]
-        logger.debug("Adding '%s' annotation to '%s' (%d points)", category, filename, len(polygon))
+        logger.debug(
+            "Adding '%s' annotation to '%s' (%d points)",
+            category,
+            filename,
+            len(polygon),
+        )
 
         self.state.add_annotation(filename, category, polygon, thickness)
         self._emit_row(row)
 
-    def update_annotation_thickness(self, row: int, annotation_idx: int, thickness: float) -> None:
+    def update_annotation_thickness(
+        self, row: int, annotation_idx: int, thickness: float
+    ) -> None:
         """Update the line thickness of an existing annotation."""
         if not (0 <= row < self.rowCount()):
             return
-        self.state.update_annotation_thickness(self.state.image_files[row], annotation_idx, thickness)
+        self.state.update_annotation_thickness(
+            self.state.image_files[row], annotation_idx, thickness
+        )
         self._emit_row(row)
 
-    def update_annotation_class(self, row: int, annotation_idx: int, new_class: str) -> None:
+    def update_annotation_class(
+        self, row: int, annotation_idx: int, new_class: str
+    ) -> None:
         """Change the class of an existing annotation."""
         if not (0 <= row < self.rowCount()):
             return
-        self.state.update_annotation_class(self.state.image_files[row], annotation_idx, new_class)
+        self.state.update_annotation_class(
+            self.state.image_files[row], annotation_idx, new_class
+        )
         self._emit_row(row)
 
     def delete_annotation(self, row: int, annotation_idx: int) -> None:
@@ -189,12 +207,16 @@ class DatasetTableModel(QAbstractTableModel):
             return
 
         filename = self.state.image_files[row]
-        logger.debug("Deleted annotation at index %d from '%s'", annotation_idx, filename)
+        logger.debug(
+            "Deleted annotation at index %d from '%s'", annotation_idx, filename
+        )
 
         self.state.delete_annotation(self.state.image_files[row], annotation_idx)
         self._emit_row(row)
 
-    def update_annotation_points(self, row: int, annotation_idx: int, points: list) -> None:
+    def update_annotation_points(
+        self, row: int, annotation_idx: int, points: list
+    ) -> None:
         """Replace the polygon vertices of an existing annotation.
 
         Out-of-bounds *row* values are silently ignored. Emits
@@ -208,7 +230,9 @@ class DatasetTableModel(QAbstractTableModel):
         """
         if not (0 <= row < self.rowCount()):
             return
-        self.state.update_annotation_points(self.state.image_files[row], annotation_idx, points)
+        self.state.update_annotation_points(
+            self.state.image_files[row], annotation_idx, points
+        )
         self._emit_row(row)
 
     def set_inspector(self, row: int, value: str) -> None:

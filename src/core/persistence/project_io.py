@@ -112,8 +112,7 @@ class ProjectIO:
                 ),
                 "class_names": list(dataset_state.class_names),
                 "class_colors": {
-                    name: list(rgb)
-                    for name, rgb in dataset_state.class_colors.items()
+                    name: list(rgb) for name, rgb in dataset_state.class_colors.items()
                 },
             },
             "annotations_file": _COCO_FILENAME,
@@ -175,7 +174,9 @@ class ProjectIO:
             ds_data["image_dir"] = self._resolve_path(ds_data["image_dir"], proj_dir)
         inf_data = data.get("inference", {})
         if "model_path" in inf_data:
-            inf_data["model_path"] = self._resolve_path(inf_data["model_path"], proj_dir)
+            inf_data["model_path"] = self._resolve_path(
+                inf_data["model_path"], proj_dir
+            )
 
         data["resolved_coco_path"] = self._resolve_coco_path(annoproj_path, data)
 
@@ -222,7 +223,9 @@ class ProjectIO:
                 raw = raw_colors.get(name)
                 if isinstance(raw, (list, tuple)) and len(raw) == 3:
                     dataset_state.class_colors[name] = (
-                        int(raw[0]), int(raw[1]), int(raw[2])
+                        int(raw[0]),
+                        int(raw[1]),
+                        int(raw[2]),
                     )
                 else:
                     dataset_state.class_colors[name] = DEFAULT_CLASS_COLORS[
@@ -391,7 +394,9 @@ class ProjectIO:
         """Convert COCO segmentation [[x0,y0,...]] to [(x,y), ...]."""
         if not isinstance(segmentation, list) or not segmentation:
             return []
-        pts_list = segmentation[0] if isinstance(segmentation[0], list) else segmentation
+        pts_list = (
+            segmentation[0] if isinstance(segmentation[0], list) else segmentation
+        )
         poly = []
         for i in range(0, len(pts_list) - 1, 2):
             poly.append((float(pts_list[i]), float(pts_list[i + 1])))
@@ -433,8 +438,7 @@ class ProjectIO:
     def _filename_to_npz_key(self, fname: str) -> str:
         """Sanitize a filename to a valid NPZ array key."""
         return (
-            fname
-            .replace(".", "__dot__")
+            fname.replace(".", "__dot__")
             .replace("/", "__slash__")
             .replace("\\", "__bslash__")
         )
@@ -442,8 +446,7 @@ class ProjectIO:
     def _npz_key_to_filename(self, key: str) -> str:
         """Reverse _filename_to_npz_key."""
         return (
-            key
-            .replace("__bslash__", "\\")
+            key.replace("__bslash__", "\\")
             .replace("__slash__", "/")
             .replace("__dot__", ".")
         )

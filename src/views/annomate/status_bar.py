@@ -6,7 +6,13 @@ task/ready indicator. No custom colors — system palette only.
 """
 
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar, QSizePolicy,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QSizePolicy,
 )
 
 
@@ -71,7 +77,6 @@ class AnnoMateStatusBar(QWidget):
         h.addWidget(self._progress_ai)
         h.addSpacing(6)
 
-
         root.addWidget(bar)
 
     @staticmethod
@@ -91,12 +96,12 @@ class AnnoMateStatusBar(QWidget):
         self._lbl_dims.setText(f"{w} × {h} px")
 
     _TOOL_HINTS = {
-        "polygon":  "double-click to close · Backspace to undo point · Esc to cancel",
+        "polygon": "double-click to close · Backspace to undo point · Esc to cancel",
         "sam_bbox": "draw bbox over object · Enter=accept · Esc=cancel",
     }
 
     _TOOL_DISPLAY = {
-        "polygon":  "Polygon",
+        "polygon": "Polygon",
         "sam_bbox": "SAM BBox",
     }
 

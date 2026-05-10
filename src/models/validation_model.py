@@ -151,9 +151,7 @@ class ValidationModel:
                 ``mask_out_path`` are all non-empty; ``False`` otherwise.
         """
         return bool(
-            self.state.poly_path
-            and self.state.json_path
-            and self.state.mask_out_path
+            self.state.poly_path and self.state.json_path and self.state.mask_out_path
         )
 
     def can_evaluate(self) -> bool:

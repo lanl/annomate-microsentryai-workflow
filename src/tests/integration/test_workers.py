@@ -81,9 +81,9 @@ class TestMaskGenWorker:
         worker.wait()  # CRITICAL: Prevent QThread teardown exception
 
         # Verify it logged an error rather than raising an unhandled exception
-        assert any(
-            "Critical Error loading JSON" in msg for msg in emitted_logs
-        ), "Should log JSON failure."
+        assert any("Critical Error loading JSON" in msg for msg in emitted_logs), (
+            "Should log JSON failure."
+        )
 
 
 class TestEvaluationWorker:

@@ -53,7 +53,7 @@ def log_results(f: TextIO, relative_path: str, metrics: Dict[str, Any]) -> None:
     f.write(f"  Ground Truth Area:      {metrics['gt_area']} px\n")
     f.write(f"  Prediction Area:        {metrics['pred_area']} px\n")
     f.write(f"  Overlap (Intersection): {metrics['overlap_area']} px\n")
-    f.write(f"  --- METRICS ---\n")
+    f.write("  --- METRICS ---\n")
     f.write(f"  IoU:       {metrics['iou']:.2f}%\n")
     f.write(f"  Precision: {metrics['precision']:.2f}%\n")
     f.write(f"  Recall:    {metrics['recall']:.2f}%\n")

@@ -3,8 +3,14 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QScrollArea, QSizePolicy, QToolButton,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QSizePolicy,
+    QToolButton,
 )
 
 from ._shared import _dot, _COLOR_REVIEWED, _COLOR_IN_REVIEW
@@ -19,10 +25,10 @@ from ._shared import _dot, _COLOR_REVIEWED, _COLOR_IN_REVIEW
 # _IMG_MIN_W    — minimum width of the image-id text column (stretch=1).
 # ─────────────────────────────────────────────────────────────────────────────
 _STATUS_COL_W = 28
-_DOT_W        = 10
-_ANNOTS_W     = 46
-_DECISION_W   = 58
-_IMG_MIN_W    = 50
+_DOT_W = 10
+_ANNOTS_W = 46
+_DECISION_W = 58
+_IMG_MIN_W = 50
 
 
 def _set_decision_label(lbl: QLabel, decision) -> None:
@@ -108,7 +114,9 @@ class _NavigatorRow(QWidget):
         if selected:
             p = QPalette(self.palette())
             p.setColor(QPalette.Window, self.palette().color(QPalette.Highlight))
-            p.setColor(QPalette.WindowText, self.palette().color(QPalette.HighlightedText))
+            p.setColor(
+                QPalette.WindowText, self.palette().color(QPalette.HighlightedText)
+            )
             self.setAutoFillBackground(True)
             self.setPalette(p)
         else:
@@ -136,7 +144,9 @@ class DataNavigatorSection(QWidget):
     prev_requested = Signal()
     next_requested = Signal()
 
-    def __init__(self, dataset_model, inference_model=None, parent: QWidget = None) -> None:
+    def __init__(
+        self, dataset_model, inference_model=None, parent: QWidget = None
+    ) -> None:
         super().__init__(parent)
         self.dataset_model = dataset_model
         self.inference_model = inference_model
@@ -243,7 +253,7 @@ class DataNavigatorSection(QWidget):
 
     def _rebuild_list(self) -> None:
         # Clear existing rows
-        while self._rows_layout.count() > 1:   # keep the trailing stretch
+        while self._rows_layout.count() > 1:  # keep the trailing stretch
             item = self._rows_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
@@ -266,7 +276,11 @@ class DataNavigatorSection(QWidget):
 
         for row in range(total):
             filename = self.dataset_model.get_image_filename(row)
-            dot_color = _COLOR_REVIEWED if self.dataset_model.is_reviewed(row) else _COLOR_IN_REVIEW
+            dot_color = (
+                _COLOR_REVIEWED
+                if self.dataset_model.is_reviewed(row)
+                else _COLOR_IN_REVIEW
+            )
             annot_count = self.dataset_model.get_annotation_count(row)
             decision = self.dataset_model.get_review_decision(row)
 
@@ -286,7 +300,11 @@ class DataNavigatorSection(QWidget):
         for row in range(top_left.row(), bottom_right.row() + 1):
             if row < len(self._row_widgets):
                 rw = self._row_widgets[row]
-                color = _COLOR_REVIEWED if self.dataset_model.is_reviewed(row) else _COLOR_IN_REVIEW
+                color = (
+                    _COLOR_REVIEWED
+                    if self.dataset_model.is_reviewed(row)
+                    else _COLOR_IN_REVIEW
+                )
                 rw.update_dot(color)
                 rw.update_annot(self.dataset_model.get_annotation_count(row))
                 rw.update_decision(self.dataset_model.get_review_decision(row))

@@ -30,6 +30,7 @@ logger = logging.getLogger("Validation.Controller")
 # Filename ID extractor (pure Python — shared by both workers)
 # ---------------------------------------------------------------------------
 
+
 def get_robust_id(filename: str) -> str:
     """Extract a stable identifier used to match JSON keys to GT/prediction masks.
 
@@ -78,6 +79,7 @@ def get_robust_id(filename: str) -> str:
 # Workers
 # ---------------------------------------------------------------------------
 
+
 class MaskGenWorker(QThread):
     """Background thread that parses JSON annotations and writes binary mask PNGs.
 
@@ -97,9 +99,9 @@ class MaskGenWorker(QThread):
         finished (): Emitted once the worker exits, regardless of outcome.
     """
 
-    progress    = Signal(int)   # 0–100
+    progress = Signal(int)  # 0–100
     log_message = Signal(str)
-    finished    = Signal()
+    finished = Signal()
 
     def __init__(self, input_dir: str, json_path: str, output_dir: str) -> None:
         """Initialize MaskGenWorker with paths needed for mask generation.
@@ -110,8 +112,8 @@ class MaskGenWorker(QThread):
             output_dir (str): Directory where binary mask PNGs will be written.
         """
         super().__init__()
-        self.input_dir  = input_dir
-        self.json_path  = json_path
+        self.input_dir = input_dir
+        self.json_path = json_path
         self.output_dir = output_dir
 
     def run(self) -> None:
@@ -150,8 +152,11 @@ class MaskGenWorker(QThread):
                     image_id = get_robust_id(filename)
 
                     json_key = next(
-                        (k for k in image_data_map
-                         if k == f"{image_id}.png" or k == f"{image_id}.jpg"),
+                        (
+                            k
+                            for k in image_data_map
+                            if k == f"{image_id}.png" or k == f"{image_id}.jpg"
+                        ),
                         None,
                     )
                     if not json_key:
@@ -172,7 +177,7 @@ class MaskGenWorker(QThread):
                         h, w = img.shape[:2]
                         final_mask = np.zeros((h, w), dtype=np.uint8)
 
-                        entry       = image_data_map[json_key]
+                        entry = image_data_map[json_key]
                         annotations = entry.get("annotations", [])
                         if isinstance(annotations, dict):
                             annotations = annotations.values()
@@ -190,17 +195,23 @@ class MaskGenWorker(QThread):
                                         )
                                     )
                             if poly_points:
-                                pts = np.array(poly_points, dtype=np.int32).reshape((-1, 1, 2))
+                                pts = np.array(poly_points, dtype=np.int32).reshape(
+                                    (-1, 1, 2)
+                                )
                                 cv2.fillPoly(final_mask, [pts], 255)
                                 drawn += 1
 
                         if drawn > 0:
                             out_name = f"{image_id}_binary_mask.png"
-                            cv2.imwrite(os.path.join(self.output_dir, out_name), final_mask)
+                            cv2.imwrite(
+                                os.path.join(self.output_dir, out_name), final_mask
+                            )
                             self.log_message.emit(f"✓ Matched {filename} → mask saved")
                             processed += 1
                     else:
-                        self.log_message.emit(f"Warning: ID {image_id} not found in JSON.")
+                        self.log_message.emit(
+                            f"Warning: ID {image_id} not found in JSON."
+                        )
 
                 except Exception as e:
                     self.log_message.emit(f"Error processing {filename}: {e}")
@@ -236,10 +247,10 @@ class EvaluationWorker(QThread):
         finished (): Emitted once the worker exits, regardless of outcome.
     """
 
-    progress    = Signal(int)           # 0–100
+    progress = Signal(int)  # 0–100
     log_message = Signal(str)
     match_found = Signal(str, str, float)  # (overlay_image_path, display_text, iou)
-    finished    = Signal()
+    finished = Signal()
 
     def __init__(self, gt_dir: str, pred_dir: str, out_dir: str) -> None:
         """Initialize EvaluationWorker with paths needed for mask evaluation.
@@ -250,9 +261,9 @@ class EvaluationWorker(QThread):
             out_dir (str): Directory where overlay PNGs and the log are written.
         """
         super().__init__()
-        self.gt_dir   = gt_dir
+        self.gt_dir = gt_dir
         self.pred_dir = pred_dir
-        self.out_dir  = out_dir
+        self.out_dir = out_dir
 
     def run(self) -> None:
         """Execute evaluation for all ground-truth masks found in *gt_dir*.
@@ -266,8 +277,8 @@ class EvaluationWorker(QThread):
         """
         try:
             outline_color = (0, 0, 255)
-            thickness     = 2
-            comparator    = MaskComparator(
+            thickness = 2
+            comparator = MaskComparator(
                 gt_outline_color=outline_color,
                 gt_outline_thickness=thickness,
             )
@@ -277,12 +288,15 @@ class EvaluationWorker(QThread):
             with open(log_path, "w", encoding="utf-8") as log_file:
                 write_log_header(
                     log_file,
-                    self.gt_dir, self.pred_dir, self.out_dir,
-                    outline_color, thickness,
+                    self.gt_dir,
+                    self.pred_dir,
+                    self.out_dir,
+                    outline_color,
+                    thickness,
                 )
 
                 valid_exts = ("*.png", "*.jpg", "*.jpeg", "*.bmp")
-                gt_files       = []
+                gt_files = []
                 pred_files_raw = []
                 for ext in valid_exts:
                     gt_files.extend(glob.glob(os.path.join(self.gt_dir, ext)))
@@ -290,7 +304,9 @@ class EvaluationWorker(QThread):
 
                 total = len(gt_files)
                 if total == 0:
-                    self.log_message.emit("Error: No images found in Ground Truth folder.")
+                    self.log_message.emit(
+                        "Error: No images found in Ground Truth folder."
+                    )
                     log_file.write("ERROR: No Ground Truth images found.\n")
                     return
 
@@ -300,22 +316,23 @@ class EvaluationWorker(QThread):
 
                 for i, gt_path in enumerate(sorted(gt_files)):
                     gt_filename = os.path.basename(gt_path)
-                    gt_id       = get_robust_id(gt_filename)
+                    gt_id = get_robust_id(gt_filename)
 
                     if gt_id in pred_map:
                         pred_path = pred_map[gt_id]
                         try:
-                            gt   = cv2.imread(gt_path,   cv2.IMREAD_GRAYSCALE)
+                            gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
                             pred = cv2.imread(pred_path, cv2.IMREAD_GRAYSCALE)
                             if gt is None or pred is None:
                                 continue
 
-                            _, gt   = cv2.threshold(gt,   1, 255, cv2.THRESH_BINARY)
+                            _, gt = cv2.threshold(gt, 1, 255, cv2.THRESH_BINARY)
                             _, pred = cv2.threshold(pred, 1, 255, cv2.THRESH_BINARY)
 
                             if gt.shape != pred.shape:
                                 pred = cv2.resize(
-                                    pred, (gt.shape[1], gt.shape[0]),
+                                    pred,
+                                    (gt.shape[1], gt.shape[0]),
                                     interpolation=cv2.INTER_NEAREST,
                                 )
 
@@ -325,9 +342,7 @@ class EvaluationWorker(QThread):
                             cv2.imwrite(out_path, overlay)
 
                             iou = metrics["iou"]
-                            self.log_message.emit(
-                                f"✓ Match: {gt_id} | IoU: {iou:.1f}%"
-                            )
+                            self.log_message.emit(f"✓ Match: {gt_id} | IoU: {iou:.1f}%")
                             self.match_found.emit(
                                 out_path, f"Tray_Image: {gt_id} | IoU: {iou:.1f}%", iou
                             )
@@ -353,6 +368,7 @@ class EvaluationWorker(QThread):
 # Controller
 # ---------------------------------------------------------------------------
 
+
 class ValidationController:
     """Headless orchestration for the two-step validation workflow.
 
@@ -372,7 +388,7 @@ class ValidationController:
                 mask generation and evaluation workflows.
         """
         self.model = model
-        self._gen_worker:  Optional[MaskGenWorker]   = None
+        self._gen_worker: Optional[MaskGenWorker] = None
         self._eval_worker: Optional[EvaluationWorker] = None
 
     def start_generation(self) -> MaskGenWorker:

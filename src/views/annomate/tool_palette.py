@@ -11,14 +11,24 @@ Layout (top to bottom):
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QToolButton, QButtonGroup, QSizePolicy,
-    QMenu, QWidgetAction, QSlider, QLabel, QHBoxLayout, QWidget, QComboBox,
+    QFrame,
+    QVBoxLayout,
+    QToolButton,
+    QButtonGroup,
+    QSizePolicy,
+    QMenu,
+    QWidgetAction,
+    QSlider,
+    QLabel,
+    QHBoxLayout,
+    QWidget,
+    QComboBox,
 )
 from PySide6.QtGui import QFont
 
 # Maps human-readable combo label → internal variant key used by SAMStrategy
 _SAM_VARIANT_MAP = {
-    "SAM2.1 Tiny":  "sam2_t.pt",
+    "SAM2.1 Tiny": "sam2_t.pt",
     "SAM2.1 Small": "sam2_s.pt",
     "SAM2.1 Base+": "sam2_b.pt",
     "SAM2.1 Large": "sam2_l.pt",
@@ -37,8 +47,8 @@ class ToolPalette(QFrame):
         sam_variant_changed (str): Emitted when the SAM model variant combo changes.
     """
 
-    tool_selected       = Signal(str)
-    thickness_changed   = Signal(float)
+    tool_selected = Signal(str)
+    thickness_changed = Signal(float)
     sam_variant_changed = Signal(str)
 
     def __init__(self, parent=None) -> None:
@@ -91,7 +101,7 @@ class ToolPalette(QFrame):
 
         self.slider_thickness = QSlider(Qt.Horizontal)
         self.slider_thickness.setRange(1, 40)
-        self.slider_thickness.setValue(8)       # 8 × 0.25 = 2.00 px default
+        self.slider_thickness.setValue(8)  # 8 × 0.25 = 2.00 px default
         self.slider_thickness.setTickPosition(QSlider.TickPosition.TicksBelow)
         self.slider_thickness.setTickInterval(4)
         self.slider_thickness.setMinimumWidth(150)

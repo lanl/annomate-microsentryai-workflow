@@ -6,7 +6,10 @@ See MVC.md § Architecture Rules for the full layer contract.
 import os
 
 from PySide6.QtWidgets import (
-    QMainWindow, QInputDialog, QFileDialog, QMessageBox,
+    QMainWindow,
+    QInputDialog,
+    QFileDialog,
+    QMessageBox,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
@@ -47,19 +50,21 @@ class AppWindow(QMainWindow):
         self.setWindowTitle(_APP_TITLE)
         self.resize(1400, 900)
 
-        self.dataset_model        = dataset_model
-        self.inference_model      = inference_model
-        self.validation_model     = validation_model
-        self.io_controller        = io_controller
+        self.dataset_model = dataset_model
+        self.inference_model = inference_model
+        self.validation_model = validation_model
+        self.io_controller = io_controller
         self.inference_controller = inference_controller
         self.validation_controller = validation_controller
-        self.project_controller   = project_controller
+        self.project_controller = project_controller
 
         # Sub-views
         self.validation_view = ValidationWindow(validation_model, validation_controller)
         self.validation_view.setWindowTitle("Validation")
         self.validation_view.resize(900, 650)
-        self.annomate_view = AnnoMateWindow(dataset_model, io_controller, inference_model, inference_controller)
+        self.annomate_view = AnnoMateWindow(
+            dataset_model, io_controller, inference_model, inference_controller
+        )
 
         self.setCentralWidget(self.annomate_view)
 
@@ -90,24 +95,24 @@ class AppWindow(QMainWindow):
             menu.addAction(act)
 
         file_menu = self.menuBar().addMenu("&File")
-        add(file_menu, "New Project",        "Ctrl+N",       self._new_project)
-        add(file_menu, "Open Project…",      "Ctrl+O",       self._open_project)
-        add(file_menu, "Save Project",       "Ctrl+S",       self._save_project)
-        add(file_menu, "Save Project As…",   "Ctrl+Shift+S", self._save_project_as)
+        add(file_menu, "New Project", "Ctrl+N", self._new_project)
+        add(file_menu, "Open Project…", "Ctrl+O", self._open_project)
+        add(file_menu, "Save Project", "Ctrl+S", self._save_project)
+        add(file_menu, "Save Project As…", "Ctrl+Shift+S", self._save_project_as)
         file_menu.addSeparator()
-        add(file_menu, "Open Image Folder…", "",             self._open_image_folder)
-        add(file_menu, "Relocate Images…",   "",             self._relocate_images)
+        add(file_menu, "Open Image Folder…", "", self._open_image_folder)
+        add(file_menu, "Relocate Images…", "", self._relocate_images)
         file_menu.addSeparator()
-        add(file_menu, "Preferences…",       "",             self._open_preferences)
+        add(file_menu, "Preferences…", "", self._open_preferences)
         file_menu.addSeparator()
-        add(file_menu, "Exit",               "Ctrl+Q",       self.close)
+        add(file_menu, "Exit", "Ctrl+Q", self.close)
 
         data_menu = self.menuBar().addMenu("&Data")
-        add(data_menu, "Import JSON Data…",      "", self._import_coco)
+        add(data_menu, "Import JSON Data…", "", self._import_coco)
         data_menu.addSeparator()
         add(data_menu, "Export Polygons + Data…", "", self._export_polygons)
-        add(data_menu, "Export Binary Masks…",    "", self._export_binary_masks)
-        add(data_menu, "Export CSV…",             "", self._export_csv)
+        add(data_menu, "Export Binary Masks…", "", self._export_binary_masks)
+        add(data_menu, "Export CSV…", "", self._export_csv)
 
         validation_menu = self.menuBar().addMenu("&Validation")
         add(validation_menu, "Open Validation…", "", self._open_validation)
@@ -141,7 +146,9 @@ class AppWindow(QMainWindow):
         try:
             project_data, warnings = self.project_controller.open_project(path)
         except Exception as exc:
-            QMessageBox.critical(self, "Open Project", f"Could not read project:\n{exc}")
+            QMessageBox.critical(
+                self, "Open Project", f"Could not read project:\n{exc}"
+            )
             return
 
         if warnings:
@@ -170,6 +177,7 @@ class AppWindow(QMainWindow):
 
         image_dir = self.dataset_model.get_image_dir()
         from pathlib import Path
+
         default_name = Path(image_dir).name if image_dir else "project"
 
         name, ok = QInputDialog.getText(
@@ -189,7 +197,9 @@ class AppWindow(QMainWindow):
         warning = self.project_controller.orphaned_annotations_warning()
         if warning:
             reply = QMessageBox.warning(
-                self, "Orphaned Annotations", warning,
+                self,
+                "Orphaned Annotations",
+                warning,
                 QMessageBox.Ok | QMessageBox.Cancel,
                 QMessageBox.Cancel,
             )
@@ -219,14 +229,19 @@ class AppWindow(QMainWindow):
         try:
             self.project_controller.relocate_images(new_dir)
         except Exception as exc:
-            QMessageBox.critical(self, "Relocate Images", f"Could not scan folder:\n{exc}")
+            QMessageBox.critical(
+                self, "Relocate Images", f"Could not scan folder:\n{exc}"
+            )
             return
 
         orphan_msg = self.project_controller.orphaned_annotations_warning()
         if orphan_msg:
             QMessageBox.information(
-                self, "Annotations After Relocation",
-                orphan_msg.replace("Continue?", "They will be dropped on the next save.")
+                self,
+                "Annotations After Relocation",
+                orphan_msg.replace(
+                    "Continue?", "They will be dropped on the next save."
+                ),
             )
 
     def _open_preferences(self) -> None:
@@ -299,7 +314,8 @@ class AppWindow(QMainWindow):
     def _confirm_discard(self) -> bool:
         """Prompt save/discard for unsaved changes. Returns True to proceed."""
         reply = QMessageBox.question(
-            self, "Unsaved Changes",
+            self,
+            "Unsaved Changes",
             "You have unsaved changes. Save before continuing?",
             QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
             QMessageBox.Save,
@@ -312,7 +328,8 @@ class AppWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         if self.project_controller.is_dirty:
             reply = QMessageBox.question(
-                self, "Unsaved Changes",
+                self,
+                "Unsaved Changes",
                 "You have unsaved changes. Save before closing?",
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
                 QMessageBox.Save,
@@ -332,4 +349,3 @@ class AppWindow(QMainWindow):
         self.validation_view.show()
         self.validation_view.raise_()
         self.validation_view.activateWindow()
-

@@ -28,14 +28,14 @@ class DatasetState:
         self.image_files = []
 
         # Annotations & Metadata
-        self.annotations = {}       # { "img.jpg": [ { "category_name": str, "polygon": [...] } ] }
-        self.inspectors = {}        # { "img.jpg": "John Doe" }
-        self.notes = {}             # { "img.jpg": "Needs review" }
+        self.annotations = {}  # { "img.jpg": [ { "category_name": str, "polygon": [...] } ] }
+        self.inspectors = {}  # { "img.jpg": "John Doe" }
+        self.notes = {}  # { "img.jpg": "Needs review" }
         self.review_decisions = {}  # { "img.jpg": "accept" | "reject" }
 
         # Class registry — initialized from defaults, NOT cleared on folder load
         self.class_names = list(DEFAULT_CLASSES.keys())
-        self.class_colors = dict(DEFAULT_CLASSES)   # { name: (r, g, b) }
+        self.class_colors = dict(DEFAULT_CLASSES)  # { name: (r, g, b) }
 
     def clear(self) -> None:
         """Reset per-folder data. Class registry is intentionally preserved."""
@@ -68,7 +68,9 @@ class DatasetState:
 
     # --- Annotation CRUD ---
 
-    def add_annotation(self, image_name: str, category: str, polygon: list, thickness: float = 2.0) -> None:
+    def add_annotation(
+        self, image_name: str, category: str, polygon: list, thickness: float = 2.0
+    ) -> None:
         """Append a new polygon annotation to an image.
 
         Args:
@@ -82,13 +84,17 @@ class DatasetState:
             {"category_name": category, "polygon": polygon, "thickness": thickness}
         )
 
-    def update_annotation_thickness(self, image_name: str, index: int, thickness: float) -> None:
+    def update_annotation_thickness(
+        self, image_name: str, index: int, thickness: float
+    ) -> None:
         """Update the thickness of a specific polygon."""
         annos = self.annotations.get(image_name, [])
         if 0 <= index < len(annos):
             annos[index]["thickness"] = thickness
 
-    def update_annotation_class(self, image_name: str, index: int, new_class: str) -> None:
+    def update_annotation_class(
+        self, image_name: str, index: int, new_class: str
+    ) -> None:
         """Change the category_name of a specific annotation."""
         annos = self.annotations.get(image_name, [])
         if 0 <= index < len(annos):
@@ -106,7 +112,9 @@ class DatasetState:
         if 0 <= index < len(annos):
             annos.pop(index)
 
-    def update_annotation_points(self, image_name: str, index: int, points: list) -> None:
+    def update_annotation_points(
+        self, image_name: str, index: int, points: list
+    ) -> None:
         """Replace the polygon points of an existing annotation.
 
         Args:
@@ -144,8 +152,7 @@ class DatasetState:
             self.class_colors.pop(name, None)
             for img in self.annotations:
                 self.annotations[img] = [
-                    a for a in self.annotations[img]
-                    if a.get("category_name") != name
+                    a for a in self.annotations[img] if a.get("category_name") != name
                 ]
 
     # --- Per-image Metadata ---

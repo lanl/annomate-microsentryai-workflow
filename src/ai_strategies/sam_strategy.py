@@ -46,6 +46,7 @@ def weights_cached(variant: str) -> bool:
     """
     try:
         from sam2.build_sam import HF_MODEL_ID_TO_FILENAMES
+
         hf_id = _HF_IDS.get(variant, "facebook/sam2.1-hiera-tiny")
         _, ckpt_filename = HF_MODEL_ID_TO_FILENAMES[hf_id]
         return (_SAM_WEIGHTS_DIR / ckpt_filename).exists()
@@ -166,7 +167,9 @@ class SAMStrategy:
     ) -> Tuple[List[Tuple[float, float]], float]:
         """Convert a binary mask to the largest external polygon."""
         binary = (mask > 0).astype(np.uint8)
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(
+            binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
 
         if not contours:
             return [], 0.0
@@ -176,9 +179,7 @@ class SAMStrategy:
         if area < 10:
             return [], 0.0
 
-        pts: List[Tuple[float, float]] = [
-            (float(p[0][0]), float(p[0][1])) for p in cnt
-        ]
+        pts: List[Tuple[float, float]] = [(float(p[0][0]), float(p[0][1])) for p in cnt]
         pts = simplify_polygon(pts, epsilon)
 
         total_pixels = float(mask.shape[0] * mask.shape[1])

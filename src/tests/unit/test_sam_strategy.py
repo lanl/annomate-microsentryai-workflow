@@ -10,7 +10,10 @@ from ai_strategies.sam_strategy import SAMStrategy
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _filled_rect_mask(h: int = 100, w: int = 100, x1=20, y1=20, x2=80, y2=80) -> np.ndarray:
+
+def _filled_rect_mask(
+    h: int = 100, w: int = 100, x1=20, y1=20, x2=80, y2=80
+) -> np.ndarray:
     mask = np.zeros((h, w), dtype=np.float32)
     mask[y1:y2, x1:x2] = 1.0
     return mask
@@ -20,13 +23,14 @@ def _circle_mask(h: int = 200, w: int = 200, r: int = 80) -> np.ndarray:
     mask = np.zeros((h, w), dtype=np.float32)
     cy, cx = h // 2, w // 2
     Y, X = np.ogrid[:h, :w]
-    mask[(X - cx) ** 2 + (Y - cy) ** 2 <= r ** 2] = 1.0
+    mask[(X - cx) ** 2 + (Y - cy) ** 2 <= r**2] = 1.0
     return mask
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_mask_to_polygon_round_trip():
     """Polygon from a filled rect should have pts within the rect bounds."""

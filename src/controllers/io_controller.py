@@ -58,12 +58,12 @@ class IOController:
             directory (str): Absolute path to the folder to scan.
         """
         logger.debug("Scanning directory for images: %s", directory)
-        
+
         exts = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
         files = sorted(
             f for f in os.listdir(directory) if Path(f).suffix.lower() in exts
         )
-        
+
         logger.debug("Found %d valid images in folder.", len(files))
         self.model.load_folder(directory, files)
 
@@ -108,7 +108,7 @@ class IOController:
             raise RuntimeError("No images loaded.")
 
         logger.debug("Starting polygon export to: %s", out_dir)
-        
+
         out_path = Path(out_dir)
         tray_name = Path(state.image_dir).name if state.image_dir else "tray"
         timestamp = datetime.now().strftime("%m-%d-%y-%H-%M-%S")
@@ -172,7 +172,9 @@ class IOController:
         with open(data_path, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
 
-        logger.debug("Successfully exported %d overlay images and data JSON.", saved_count)
+        logger.debug(
+            "Successfully exported %d overlay images and data JSON.", saved_count
+        )
         return f"Saved {saved_count} image(s) + data JSON:\n{data_path}"
 
     def export_csv(self, out_path: str) -> str:
@@ -207,9 +209,9 @@ class IOController:
                     "image_name": name,
                     "inspector": state.inspectors.get(name, "") if reviewed else "",
                     "note": state.notes.get(name, "") if reviewed else "",
-                    "classes": (
-                        ", ".join(unique_classes) if unique_classes else "good"
-                    ) if reviewed else "",
+                    "classes": (", ".join(unique_classes) if unique_classes else "good")
+                    if reviewed
+                    else "",
                 }
             )
 
@@ -338,13 +340,19 @@ class IOController:
                 if isinstance(raw, (list, tuple)) and len(raw) == 3:
                     state.class_colors[name] = (int(raw[0]), int(raw[1]), int(raw[2]))
                 else:
-                    state.class_colors[name] = DEFAULT_CLASS_COLORS[i % len(DEFAULT_CLASS_COLORS)]
+                    state.class_colors[name] = DEFAULT_CLASS_COLORS[
+                        i % len(DEFAULT_CLASS_COLORS)
+                    ]
 
         for name, info in images_node.items():
             state.inspectors[name] = info.get("inspector", "")
             state.notes[name] = info.get("note", "")
             recs = [
-                {"category_name": a.get("class", ""), "polygon": a.get("polygon", []), "thickness": a.get("thickness", 2.0)}
+                {
+                    "category_name": a.get("class", ""),
+                    "polygon": a.get("polygon", []),
+                    "thickness": a.get("thickness", 2.0),
+                }
                 for a in info.get("annotations", [])
             ]
             if recs:
@@ -373,7 +381,9 @@ class IOController:
                 if name not in state.class_names:
                     idx = len(state.class_names)
                     state.class_names.append(name)
-                    state.class_colors[name] = DEFAULT_CLASS_COLORS[idx % len(DEFAULT_CLASS_COLORS)]
+                    state.class_colors[name] = DEFAULT_CLASS_COLORS[
+                        idx % len(DEFAULT_CLASS_COLORS)
+                    ]
 
         img_id_map = {img["id"]: img["file_name"] for img in images_node}
 

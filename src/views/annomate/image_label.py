@@ -12,9 +12,8 @@ import logging
 import cv2
 import numpy as np
 
-logger = logging.getLogger("AnnoMate.ImageLabel")
 
-from PySide6.QtCore import Qt, QPointF, QRect, QSize, Signal
+from PySide6.QtCore import Qt, QPointF, QRect, Signal
 from PySide6.QtGui import (
     QPainter,
     QPen,
@@ -30,9 +29,11 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
+logger = logging.getLogger("AnnoMate.ImageLabel")
+
 # Tool Constants
-POLYGON   = "polygon"
-SAM_BBOX  = "sam_bbox"
+POLYGON = "polygon"
+SAM_BBOX = "sam_bbox"
 
 
 class ImageLabel(QLabel):
@@ -60,15 +61,17 @@ class ImageLabel(QLabel):
         toolCanceled (): Emitted when ``Escape`` is pressed while a tool is active.
     """
 
-    polygonFinished    = Signal(list)        # pts: List[Tuple[float, float]] in original coords
-    polygonEdited      = Signal(int, list)   # (polygon_idx, pts in original coords)
-    polygonSelected    = Signal(int)         # polygon index (-1 for deselect)
-    toolCanceled       = Signal()            # Escape pressed while a tool is active
-    draw_attempted     = Signal()            # left-click while a drawing tool is active
-    zoom_changed       = Signal(float)       # emitted whenever _zoom changes
-    image_loaded       = Signal(int, int)    # (orig_w, orig_h) emitted when a new image is set
+    polygonFinished = Signal(list)  # pts: List[Tuple[float, float]] in original coords
+    polygonEdited = Signal(int, list)  # (polygon_idx, pts in original coords)
+    polygonSelected = Signal(int)  # polygon index (-1 for deselect)
+    toolCanceled = Signal()  # Escape pressed while a tool is active
+    draw_attempted = Signal()  # left-click while a drawing tool is active
+    zoom_changed = Signal(float)  # emitted whenever _zoom changes
+    image_loaded = Signal(int, int)  # (orig_w, orig_h) emitted when a new image is set
     ai_polygon_clicked = Signal(int, QPointF)  # (ai_idx, view_pos); -1 = deselect
-    samBboxDrawn       = Signal(float, float, float, float)  # x1,y1,x2,y2 in original image coords
+    samBboxDrawn = Signal(
+        float, float, float, float
+    )  # x1,y1,x2,y2 in original image coords
 
     def __init__(self, parent: object = None) -> None:
         """Initialize ImageLabel with default zoom, pan, and annotation state.
@@ -112,8 +115,10 @@ class ImageLabel(QLabel):
 
         # --- SAM tool state (display coords) ---
         self._sam_bbox_start: Optional[QPointF] = None
-        self._sam_bbox_end:   Optional[QPointF] = None
-        self._sam_ghost: Optional[Tuple[List[QPointF], float]] = None  # (display_pts, confidence)
+        self._sam_bbox_end: Optional[QPointF] = None
+        self._sam_ghost: Optional[Tuple[List[QPointF], float]] = (
+            None  # (display_pts, confidence)
+        )
 
     def set_image(self, bgr: np.ndarray, max_display_dim: int = 1200) -> None:
         """Load a BGR ndarray and prepare it for display.
@@ -136,8 +141,7 @@ class ImageLabel(QLabel):
         h, w = bgr.shape[:2]
 
         self._base_scale = (
-            1.0 if max(h, w) <= max_display_dim
-            else max_display_dim / float(max(h, w))
+            1.0 if max(h, w) <= max_display_dim else max_display_dim / float(max(h, w))
         )
 
         self._zoom = 1.0
@@ -146,18 +150,12 @@ class ImageLabel(QLabel):
         new_w = int(w * self._base_scale)
         new_h = int(h * self._base_scale)
 
-        resized_bgr = cv2.resize(
-            bgr, (new_w, new_h), interpolation=cv2.INTER_AREA
-        )
+        resized_bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         rgb = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
 
         qimg = QImage(
-            rgb.data,
-            rgb.shape[1],
-            rgb.shape[0],
-            rgb.strides[0],
-            QImage.Format_RGB888
+            rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format_RGB888
         )
         self._display_qpix = QPixmap.fromImage(qimg)
         self.image_loaded.emit(w, h)
@@ -179,7 +177,9 @@ class ImageLabel(QLabel):
 
         self.update()
 
-    def set_heatmap_layer(self, score_map: np.ndarray, alpha: float, heat_min_pct: int = 0) -> None:
+    def set_heatmap_layer(
+        self, score_map: np.ndarray, alpha: float, heat_min_pct: int = 0
+    ) -> None:
         """Overlay a heatmap on the canvas without resetting zoom or pan.
 
         Resizes *score_map* to match the stored display pixmap, applies the
@@ -207,10 +207,17 @@ class ImageLabel(QLabel):
         colored_bgr = cv2.applyColorMap(s_norm, cv2.COLORMAP_JET)
         colored_rgb = cv2.cvtColor(colored_bgr, cv2.COLOR_BGR2RGB)
         pix_w, pix_h = self._display_qpix.width(), self._display_qpix.height()
-        resized = cv2.resize(colored_rgb, (pix_w, pix_h), interpolation=cv2.INTER_LINEAR)
+        resized = cv2.resize(
+            colored_rgb, (pix_w, pix_h), interpolation=cv2.INTER_LINEAR
+        )
         resized = np.ascontiguousarray(resized)
-        qimg = QImage(resized.data, resized.shape[1], resized.shape[0],
-                      resized.strides[0], QImage.Format_RGB888)
+        qimg = QImage(
+            resized.data,
+            resized.shape[1],
+            resized.shape[0],
+            resized.strides[0],
+            QImage.Format_RGB888,
+        )
         self._heatmap_pix = QPixmap.fromImage(qimg.copy())
         self.update()
 
@@ -281,7 +288,9 @@ class ImageLabel(QLabel):
         self._line_thickness = thickness
         self.update()
 
-    def set_overlays(self, poly_list: List[Tuple[List[Tuple[float, float]], QColor]]) -> None:
+    def set_overlays(
+        self, poly_list: List[Tuple[List[Tuple[float, float]], QColor]]
+    ) -> None:
         """Replace all rendered overlay polygons.
 
         Converts each polygon from original image coordinates to display
@@ -304,7 +313,8 @@ class ImageLabel(QLabel):
         if self.selected_polygon_idx >= n:
             logger.debug(
                 "selected_polygon_idx %d out of range after overlay update (new size %d) — resetting",
-                self.selected_polygon_idx, n,
+                self.selected_polygon_idx,
+                n,
             )
             self.selected_polygon_idx = -1
 
@@ -351,7 +361,9 @@ class ImageLabel(QLabel):
     # SAM ghost helpers
     # ------------------------------------------------------------------ #
 
-    def set_sam_ghost(self, pts_orig: List[Tuple[float, float]], confidence: float) -> None:
+    def set_sam_ghost(
+        self, pts_orig: List[Tuple[float, float]], confidence: float
+    ) -> None:
         """Store a SAM ghost polygon for preview rendering.
 
         Args:
@@ -418,7 +430,7 @@ class ImageLabel(QLabel):
         """
         return QPointF(
             (p_view.x() - self._pan.x()) / self._zoom,
-            (p_view.y() - self._pan.y()) / self._zoom
+            (p_view.y() - self._pan.y()) / self._zoom,
         )
 
     def display_to_original(self, p_disp: QPointF) -> Tuple[float, float]:
@@ -549,7 +561,9 @@ class ImageLabel(QLabel):
         if event.button() == Qt.LeftButton:
             if self.current_tool in (SAM_BBOX, POLYGON):
                 self.draw_attempted.emit()
-                if self.current_tool is None:   # handler cleared the tool (e.g. no class)
+                if (
+                    self.current_tool is None
+                ):  # handler cleared the tool (e.g. no class)
                     return
 
             pos_view = QPointF(event.pos())
@@ -575,7 +589,9 @@ class ImageLabel(QLabel):
             if self.current_tool != POLYGON and self._ai_overlays:
                 ai_hit = -1
                 for i, pts in enumerate(reversed(self._ai_overlays)):
-                    if len(pts) >= 3 and QPolygonF(pts).containsPoint(pos_disp, Qt.OddEvenFill):
+                    if len(pts) >= 3 and QPolygonF(pts).containsPoint(
+                        pos_disp, Qt.OddEvenFill
+                    ):
                         ai_hit = len(self._ai_overlays) - 1 - i
                         break
                 if ai_hit != -1:
@@ -600,7 +616,9 @@ class ImageLabel(QLabel):
                     self.finish_current_polygon()
                     return
 
-                self.current_polygon_points.append(self.view_to_display(QPointF(event.pos())))
+                self.current_polygon_points.append(
+                    self.view_to_display(QPointF(event.pos()))
+                )
                 self.update()
                 return
 
@@ -649,13 +667,21 @@ class ImageLabel(QLabel):
             return
 
         # --- Drag entire polygon ---
-        if self._dragging_polygon and self.selected_polygon_idx != -1 and self._last_mouse_pos is not None:
+        if (
+            self._dragging_polygon
+            and self.selected_polygon_idx != -1
+            and self._last_mouse_pos is not None
+        ):
             delta_view = self._mouse_pos - self._last_mouse_pos
-            delta_disp = QPointF(delta_view.x() / self._zoom, delta_view.y() / self._zoom)
+            delta_disp = QPointF(
+                delta_view.x() / self._zoom, delta_view.y() / self._zoom
+            )
 
             pts, _, _ = self._overlays[self.selected_polygon_idx]
             for i in range(len(pts)):
-                pts[i] = QPointF(pts[i].x() + delta_disp.x(), pts[i].y() + delta_disp.y())
+                pts[i] = QPointF(
+                    pts[i].x() + delta_disp.x(), pts[i].y() + delta_disp.y()
+                )
 
             self._last_mouse_pos = self._mouse_pos
             self.update()
@@ -748,8 +774,8 @@ class ImageLabel(QLabel):
             return
 
         steps = delta / 120.0
-        steps = max(-5.0, min(5.0, steps)) # Clamp extreme inputs
-        factor = 1.15 ** steps
+        steps = max(-5.0, min(5.0, steps))  # Clamp extreme inputs
+        factor = 1.15**steps
 
         cursor_pos = event.position()
         point_in_disp = self.view_to_display(cursor_pos)
@@ -800,7 +826,7 @@ class ImageLabel(QLabel):
 
         self._pan = QPointF(
             center.x() - point_in_disp.x() * self._zoom,
-            center.y() - point_in_disp.y() * self._zoom
+            center.y() - point_in_disp.y() * self._zoom,
         )
         self.update()
 
@@ -828,10 +854,13 @@ class ImageLabel(QLabel):
             painter.setOpacity(1.0)
 
         # Draw SAM bounding-box rubber-band while the user is dragging
-        if (self.current_tool == SAM_BBOX
-                and self._sam_bbox_start is not None
-                and self._sam_bbox_end is not None):
+        if (
+            self.current_tool == SAM_BBOX
+            and self._sam_bbox_start is not None
+            and self._sam_bbox_end is not None
+        ):
             from PySide6.QtCore import QRectF
+
             x1 = min(self._sam_bbox_start.x(), self._sam_bbox_end.x())
             y1 = min(self._sam_bbox_start.y(), self._sam_bbox_end.y())
             x2 = max(self._sam_bbox_start.x(), self._sam_bbox_end.x())
@@ -846,13 +875,15 @@ class ImageLabel(QLabel):
         # Draw Overlays with Selection Highlighting
         for i, (pts, color, thick) in enumerate(self._overlays):
             if len(pts) >= 2:
-                is_selected = (i == self.selected_polygon_idx)
+                is_selected = i == self.selected_polygon_idx
                 screen_thick = ((thick * 2.0) if is_selected else thick) / self._zoom
                 pen = QPen(color, screen_thick)
-                alpha = 150 if is_selected else 60         # Darker fill if selected
+                alpha = 150 if is_selected else 60  # Darker fill if selected
 
                 painter.setPen(pen)
-                painter.setBrush(QBrush(QColor(color.red(), color.green(), color.blue(), alpha)))
+                painter.setBrush(
+                    QBrush(QColor(color.red(), color.green(), color.blue(), alpha))
+                )
                 painter.drawPolygon(QPolygonF(pts + [pts[0]]))
 
                 r = 4.0 / self._zoom
@@ -865,8 +896,12 @@ class ImageLabel(QLabel):
         for i, pts in enumerate(self._ai_overlays):
             if len(pts) < 3:
                 continue
-            is_selected = (i == self._selected_ai_idx)
-            pen = QPen(QColor(255, 80, 80), (2.5 if is_selected else 1.5) / self._zoom, Qt.DashLine)
+            is_selected = i == self._selected_ai_idx
+            pen = QPen(
+                QColor(255, 80, 80),
+                (2.5 if is_selected else 1.5) / self._zoom,
+                Qt.DashLine,
+            )
             pen.setDashPattern([6, 4])
             painter.setPen(pen)
             fill_alpha = 60 if is_selected else 20
@@ -884,9 +919,8 @@ class ImageLabel(QLabel):
                 ghost_color.setAlpha(45)
                 painter.setBrush(QBrush(ghost_color))
                 painter.drawPolygon(QPolygonF(ghost_pts + [ghost_pts[0]]))
-                xs = [p.x() for p in ghost_pts]
-                ys = [p.y() for p in ghost_pts]
-                label_pos = QPointF(min(xs), min(ys) - 6.0 / self._zoom)
+                # xs = [p.x() for p in ghost_pts]
+                # ys = [p.y() for p in ghost_pts]
                 painter.setPen(QPen(self._active_color))
                 f = painter.font()
                 f.setPointSizeF(max(8.0, 9.0 / self._zoom))

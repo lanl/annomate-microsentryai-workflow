@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QLabel
 
-_COLOR_REVIEWED  = "#4caf50"
+_COLOR_REVIEWED = "#4caf50"
 _COLOR_IN_REVIEW = "#ff9800"
 
 

@@ -9,11 +9,20 @@ and transparency.
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QToolButton, QWidget, QPushButton,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QSlider,
+    QToolButton,
+    QWidget,
+    QPushButton,
 )
 
 
-def _slider_row(parent_layout: QVBoxLayout, label: str, lo: int, hi: int, default: int) -> tuple:
+def _slider_row(
+    parent_layout: QVBoxLayout, label: str, lo: int, hi: int, default: int
+) -> tuple:
     """Add a label+slider pair to parent_layout. Returns (value_label, slider)."""
     row_w = QWidget()
     row_h = QHBoxLayout(row_w)
@@ -102,7 +111,9 @@ class MicrosentryOverlay(QFrame):
         layout.addWidget(btn_row)
 
         self._btn_accept = QPushButton("Accept AI Polygons")
-        self._btn_accept.setToolTip("Add AI segmentation polygons as annotations on the active class")
+        self._btn_accept.setToolTip(
+            "Add AI segmentation polygons as annotations on the active class"
+        )
         self._btn_accept.setEnabled(False)
         self._btn_accept.clicked.connect(self.accept_polygons_requested)
         layout.addWidget(self._btn_accept)

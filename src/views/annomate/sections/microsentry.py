@@ -17,7 +17,13 @@ import os
 
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QToolButton,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QToolButton,
 )
 
 
@@ -47,10 +53,10 @@ class MicrosentrySection(QWidget):
         accept_polygons_requested (): Accept AI Polygons button clicked.
     """
 
-    load_model_requested          = Signal()
+    load_model_requested = Signal()
     load_previous_model_requested = Signal()
-    settings_changed              = Signal()
-    accept_polygons_requested     = Signal()
+    settings_changed = Signal()
+    accept_polygons_requested = Signal()
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -81,7 +87,9 @@ class MicrosentrySection(QWidget):
 
         # No-model label
         self._lbl_no_model = QLabel("No model loaded")
-        self._lbl_no_model.setStyleSheet("color: grey; font-style: italic; font-size: 11px;")
+        self._lbl_no_model.setStyleSheet(
+            "color: grey; font-style: italic; font-size: 11px;"
+        )
         self._lbl_no_model.setAlignment(Qt.AlignCenter)
         layout.addWidget(self._lbl_no_model)
 
@@ -153,7 +161,9 @@ class MicrosentrySection(QWidget):
 
         # Accept AI Polygons button
         self._btn_accept = QPushButton("Accept AI Polygons")
-        self._btn_accept.setToolTip("Add AI segmentation polygons as annotations on the active class")
+        self._btn_accept.setToolTip(
+            "Add AI segmentation polygons as annotations on the active class"
+        )
         self._btn_accept.setEnabled(False)
         self._btn_accept.clicked.connect(self.accept_polygons_requested)
         lw.addWidget(self._btn_accept)
@@ -163,7 +173,9 @@ class MicrosentrySection(QWidget):
         self._btn_advanced.setText("▸  Advanced Settings")
         self._btn_advanced.setCheckable(True)
         self._btn_advanced.setChecked(False)
-        self._btn_advanced.setStyleSheet("text-align: left; font-size: 11px; border: none;")
+        self._btn_advanced.setStyleSheet(
+            "text-align: left; font-size: 11px; border: none;"
+        )
         self._btn_advanced.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self._btn_advanced.setSizePolicy(
             self._btn_advanced.sizePolicy().horizontalPolicy(),
@@ -197,7 +209,9 @@ class MicrosentrySection(QWidget):
         self._epsilon.valueChanged.connect(
             lambda v: (self._epsilon_val.setText(str(v)), self._debounce.start())
         )
-        aw.addWidget(_slider_row("Simplify Tolerance", self._epsilon_val, self._epsilon))
+        aw.addWidget(
+            _slider_row("Simplify Tolerance", self._epsilon_val, self._epsilon)
+        )
 
         self._heat_min_val = QLabel("0%")
         self._heat_min_val.setStyleSheet("font-size: 11px;")
@@ -248,10 +262,10 @@ class MicrosentrySection(QWidget):
     def get_settings(self) -> dict:
         return {
             "heatmap_enabled": self._btn_heatmap.isChecked(),
-            "seg_enabled":     self._btn_seg.isChecked(),
-            "seg_pct":         self._thresh.value(),
-            "alpha":           self._alpha.value() / 100.0,
-            "sigma":           self._sigma.value(),
-            "epsilon":         self._epsilon.value(),
-            "heat_min":        self._heat_min.value(),
+            "seg_enabled": self._btn_seg.isChecked(),
+            "seg_pct": self._thresh.value(),
+            "alpha": self._alpha.value() / 100.0,
+            "sigma": self._sigma.value(),
+            "epsilon": self._epsilon.value(),
+            "heat_min": self._heat_min.value(),
         }

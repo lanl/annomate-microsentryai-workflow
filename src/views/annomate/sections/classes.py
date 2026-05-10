@@ -1,8 +1,15 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
-    QWidget, QFrame, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QLineEdit, QToolButton, QColorDialog,
+    QWidget,
+    QFrame,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QLineEdit,
+    QToolButton,
+    QColorDialog,
 )
 
 
@@ -19,9 +26,9 @@ class _ClassRow(QWidget):
         color_changed (str, int, int, int): name + new (r, g, b) after swatch dialog.
     """
 
-    row_clicked      = Signal(str)
+    row_clicked = Signal(str)
     delete_requested = Signal(str)
-    color_changed    = Signal(str, int, int, int)
+    color_changed = Signal(str, int, int, int)
 
     # ── Column-width constants ────────────────────────────────────────────────
     # Layout order:  [color col] [class name …stretch…] [image] [total] [trash]
@@ -36,13 +43,20 @@ class _ClassRow(QWidget):
     #                 means it expands to fill remaining space beyond this floor).
     # ─────────────────────────────────────────────────────────────────────────
     _COLOR_COL_W = 44
-    _SWATCH_W    = 24
-    _COUNT_W     = 40
-    _NAME_MIN_W  = 60
+    _SWATCH_W = 24
+    _COUNT_W = 40
+    _NAME_MIN_W = 60
 
-    def __init__(self, name: str, r: int, g: int, b: int,
-                 per_image_count: int, total_count: int,
-                 parent: QWidget = None) -> None:
+    def __init__(
+        self,
+        name: str,
+        r: int,
+        g: int,
+        b: int,
+        per_image_count: int,
+        total_count: int,
+        parent: QWidget = None,
+    ) -> None:
         super().__init__(parent)
         self._name = name
         self._color = (r, g, b)
@@ -96,7 +110,9 @@ class _ClassRow(QWidget):
         if selected:
             p = QPalette(self.palette())
             p.setColor(QPalette.Window, self.palette().color(QPalette.Highlight))
-            p.setColor(QPalette.WindowText, self.palette().color(QPalette.HighlightedText))
+            p.setColor(
+                QPalette.WindowText, self.palette().color(QPalette.HighlightedText)
+            )
             self.setAutoFillBackground(True)
             self.setPalette(p)
         else:
@@ -238,7 +254,8 @@ class ClassesSection(QWidget):
         if image_row < 0:
             return 0
         return sum(
-            1 for a in self.dataset_model.get_annotations(image_row)
+            1
+            for a in self.dataset_model.get_annotations(image_row)
             if a["category_name"] == class_name
         )
 
@@ -275,6 +292,7 @@ class ClassesSection(QWidget):
 
     def _pick_next_unique_color(self) -> tuple:
         from core.utils.constants import DEFAULT_CLASS_COLORS
+
         used = set(map(tuple, self.dataset_model.get_used_class_colors()))
         for cand in DEFAULT_CLASS_COLORS:
             if cand not in used:

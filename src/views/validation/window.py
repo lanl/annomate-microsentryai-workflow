@@ -8,9 +8,17 @@ import logging
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QFileDialog, QMessageBox,
-    QProgressBar, QGroupBox, QScrollArea, QFrame,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLabel,
+    QFileDialog,
+    QMessageBox,
+    QProgressBar,
+    QGroupBox,
+    QScrollArea,
+    QFrame,
 )
 
 from models.validation_model import ValidationModel
@@ -47,8 +55,8 @@ class ValidationWindow(QWidget):
             parent: Optional Qt parent widget. Defaults to ``None``.
         """
         super().__init__(parent)
-        self.model        = model
-        self.controller   = controller
+        self.model = model
+        self.controller = controller
         self._eval_worker = None
 
         self._init_ui()
@@ -65,7 +73,7 @@ class ValidationWindow(QWidget):
         grp_eval = QGroupBox("Run Evaluation")
         eval_layout = QVBoxLayout(grp_eval)
 
-        self.lbl_gt,   r4 = self._make_row("Select GT Masks:",    self._select_gt)
+        self.lbl_gt, r4 = self._make_row("Select GT Masks:", self._select_gt)
         self.lbl_pred, r5 = self._make_row("Select Predictions:", self._select_pred)
         eval_layout.addLayout(r4)
         eval_layout.addLayout(r5)
@@ -84,10 +92,10 @@ class ValidationWindow(QWidget):
 
         # ---- Results feed ----
         root.addWidget(QLabel("Evaluation Feed:"))
-        self.scroll_area      = QScrollArea()
+        self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.results_container = QWidget()
-        self.results_layout    = QVBoxLayout(self.results_container)
+        self.results_layout = QVBoxLayout(self.results_container)
         self.results_layout.setAlignment(Qt.AlignTop)
         self.scroll_area.setWidget(self.results_container)
         root.addWidget(self.scroll_area, stretch=1)

@@ -51,11 +51,11 @@ class ProjectController(QObject):
         autosave_failed (str): Emitted with an error message on autosave failure.
     """
 
-    dirty_changed    = Signal(bool)
-    project_opened   = Signal(str)   # project_name
-    project_saved    = Signal(str)   # annoproj_path
-    autosave_written = Signal(str)   # autosave annoproj path
-    autosave_failed  = Signal(str)   # error message
+    dirty_changed = Signal(bool)
+    project_opened = Signal(str)  # project_name
+    project_saved = Signal(str)  # annoproj_path
+    autosave_written = Signal(str)  # autosave annoproj path
+    autosave_failed = Signal(str)  # error message
 
     def __init__(
         self,
@@ -195,7 +195,8 @@ class ProjectController(QObject):
 
             if image_dir and os.path.isdir(image_dir):
                 files = sorted(
-                    f for f in os.listdir(image_dir)
+                    f
+                    for f in os.listdir(image_dir)
                     if Path(f).suffix.lower() in _IMAGE_EXTENSIONS
                 )
                 ds.image_dir = image_dir
@@ -232,7 +233,9 @@ class ProjectController(QObject):
         self._project_dir = str(Path(annoproj_path).parent)
         self._project_name = project_data.get("project_name", Path(annoproj_path).stem)
         self._created_at = project_data.get("created_at")
-        self._last_project_model_path = project_data.get("inference", {}).get("model_path", "")
+        self._last_project_model_path = project_data.get("inference", {}).get(
+            "model_path", ""
+        )
         self._autosave_manager.set_project_dir(self._project_dir)
         self.clear_dirty()
         self.project_opened.emit(self._project_name)
@@ -268,7 +271,11 @@ class ProjectController(QObject):
         that saving without loading a model doesn't erase a previously-persisted
         path.
         """
-        live = self._inference_controller.get_model_path() if self._inference_controller else ""
+        live = (
+            self._inference_controller.get_model_path()
+            if self._inference_controller
+            else ""
+        )
         return live or self._last_project_model_path
 
     def _write_project(self, project_dir: str, project_name: str) -> str:
@@ -276,7 +283,8 @@ class ProjectController(QObject):
         if orphaned:
             logger.warning(
                 "Saving with %d orphaned annotation(s) — they will be dropped: %s",
-                len(orphaned), sorted(orphaned),
+                len(orphaned),
+                sorted(orphaned),
             )
 
         path = self._project_io.save_project(
@@ -339,7 +347,8 @@ class ProjectController(QObject):
             OSError: If new_dir cannot be listed.
         """
         files = sorted(
-            f for f in os.listdir(new_dir)
+            f
+            for f in os.listdir(new_dir)
             if Path(f).suffix.lower() in _IMAGE_EXTENSIONS
         )
         state = self._dataset_model.state
