@@ -64,7 +64,6 @@ class TestQueryAPI:
         assert model.get_class_color("Unknown") == (255, 255, 255)
 
     def test_get_class_color_known(self, model):
-        model.add_class("Defect", (255, 0, 0))
         assert model.get_class_color("Defect") == (255, 0, 0)
 
     def test_get_inspector_empty_initially(self, model):
@@ -78,8 +77,10 @@ class TestQueryAPI:
 
     def test_sort_annotations_by_area(self, model):
         model.load_folder("/fake", ["img.jpg"])
-        model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])           # area ≈ 0.5
-        model.add_annotation(0, "Defect", [(0, 0), (10, 0), (10, 10), (0, 10)])  # area = 100
+        model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])  # area ≈ 0.5
+        model.add_annotation(
+            0, "Defect", [(0, 0), (10, 0), (10, 10), (0, 10)]
+        )  # area = 100
         model.sort_annotations(0)
         annos = model.get_annotations(0)
         # Large polygon should be first after sort

@@ -17,7 +17,7 @@ class TestPolygonArea:
         assert polygon_area([(0, 0), (1, 0)]) == 0.0
 
     def test_order_independent(self):
-        cw  = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        cw = [(0, 0), (1, 0), (1, 1), (0, 1)]
         ccw = list(reversed(cw))
         assert polygon_area(cw) == pytest.approx(polygon_area(ccw))
 

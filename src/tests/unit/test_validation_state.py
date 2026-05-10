@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from core.states.validation_state import ValidationState
@@ -37,17 +35,17 @@ class TestValidationStateAssignment:
         assert state.poly_path == "/some/images"
 
     def test_all_paths_settable(self, state):
-        state.poly_path     = "/images"
-        state.json_path     = "/data.json"
+        state.poly_path = "/images"
+        state.json_path = "/data.json"
         state.mask_out_path = "/masks"
-        state.gt_path       = "/gt"
-        state.pred_path     = "/pred"
+        state.gt_path = "/gt"
+        state.pred_path = "/pred"
         state.eval_out_path = "/eval"
-        assert state.poly_path     == "/images"
-        assert state.json_path     == "/data.json"
+        assert state.poly_path == "/images"
+        assert state.json_path == "/data.json"
         assert state.mask_out_path == "/masks"
-        assert state.gt_path       == "/gt"
-        assert state.pred_path     == "/pred"
+        assert state.gt_path == "/gt"
+        assert state.pred_path == "/pred"
         assert state.eval_out_path == "/eval"
 
 

@@ -52,7 +52,7 @@ class TestValidationModelMaskOutSeedsGtPath:
         model.set_mask_out_path("/masks")
         model.set_gt_path("/different_gt")
         assert model.get_mask_out_path() == "/masks"
-        assert model.get_gt_path()       == "/different_gt"
+        assert model.get_gt_path() == "/different_gt"
 
 
 class TestCanGenerate:
@@ -101,6 +101,6 @@ class TestCanEvaluate:
         assert model.can_evaluate() is True
 
     def test_true_via_mask_out_seeding(self, model):
-        model.set_mask_out_path("/masks")   # seeds gt_path
+        model.set_mask_out_path("/masks")  # seeds gt_path
         model.set_pred_path("/pred")
         assert model.can_evaluate() is True

@@ -9,10 +9,10 @@ from views.validation.window import ValidationWindow
 
 @pytest.fixture
 def validation_window(qtbot):
-    state      = ValidationState()
-    model      = ValidationModel(state)
+    state = ValidationState()
+    model = ValidationModel(state)
     controller = ValidationController(model)
-    window     = ValidationWindow(model, controller)
+    window = ValidationWindow(model, controller)
     qtbot.addWidget(window)
     return window, model, controller
 
@@ -33,11 +33,11 @@ class TestValidationWindowInit:
 
     def test_path_labels_show_not_selected(self, validation_window):
         window, _, _ = validation_window
-        assert window.lbl_poly.text()     == "Not selected"
-        assert window.lbl_json.text()     == "Not selected"
+        assert window.lbl_poly.text() == "Not selected"
+        assert window.lbl_json.text() == "Not selected"
         assert window.lbl_mask_out.text() == "Not selected"
-        assert window.lbl_gt.text()       == "Not selected"
-        assert window.lbl_pred.text()     == "Not selected"
+        assert window.lbl_gt.text() == "Not selected"
+        assert window.lbl_pred.text() == "Not selected"
 
     def test_progress_bar_exists(self, validation_window):
         window, _, _ = validation_window
@@ -85,7 +85,9 @@ class TestValidationWindowResultsFeed:
 
     def test_add_result_card_appends_widget(self, validation_window, tmp_path):
         window, _, _ = validation_window
-        import cv2, numpy as np
+        import cv2
+        import numpy as np
+
         img_path = str(tmp_path / "overlay.png")
         cv2.imwrite(img_path, np.ones((10, 10, 3), dtype=np.uint8) * 200)
         window._add_result_card(img_path, "Tray 001 | IoU: 75.0%", 75.0)
