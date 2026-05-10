@@ -64,6 +64,7 @@ class TestQueryAPI:
         assert model.get_class_color("Unknown") == (255, 255, 255)
 
     def test_get_class_color_known(self, model):
+        model.add_class("Defect", (255, 0, 0))
         assert model.get_class_color("Defect") == (255, 0, 0)
 
     def test_get_inspector_empty_initially(self, model):
