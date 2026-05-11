@@ -5,43 +5,25 @@
   <img src="./logos/MicroSentryAI.png" width="200" />
 </p>
 
-AnnoMate with MicroSentryAI is a desktop image-annotation and defect-detection tool designed to streamline quality assurance for manufactured parts. With features such as polygon mask creation, label export to standard annotation formats, and real-time image previews with overlaid masks, AnnoMate simplifies and accelerates the assessment process during production. Its integrated AI/ML capabilities support inspectors by highlighting potential defects and identifying components that may appear incorrect or out of specification. This assistance enhances decision-making and improves consistency in part evaluations.
+AnnoMate with MicroSentryAI is a desktop image-annotation and defect-detection tool designed to streamline quality assurance for manufactured parts. 
 
-## Installation
+With features such as interactive SAM 2 masking, polygon creation, and standard annotation format exporting, AnnoMate simplifies the assessment process. Its integrated MicroSentryAI engine supports inspectors by highlighting potential defects using custom PyTorch models, enhancing decision-making and improving consistency in part evaluations.
 
-You can install AnnoMate with MicroSentryAI using either pip or conda. Installing AnnoMate with MicroSentryAI in a clean environment with Python 3.12 may be necessary. (Some AnnoMate with MicroSentryAI dependencies currently do not support Python>=3.13)
+## Documentation
 
-### pip
-```
-pip install -r requirements.txt
-```
+Please refer to the following guides to get started and master the suite:
 
-### conda
-```
-conda env create -f environment.yml
-```
+1. **[Getting Started](./docs/GettingStarted.md):** Installation, environment setup, and basic project management.
+2. **[AnnoMate Guide](./docs/AnnoMate.md):** Manual annotation, SAM 2 interactive masking, dataset navigation, and exporting data.
+3. **[MicroSentryAI Guide](./docs/MicroSentryAI.md):** Loading custom AI models, batch inference, and utilizing defect heatmaps.
+4. **[Validation Guide](./docs/Validation.md):** Scientifically evaluating your AI model's accuracy against human ground-truth data.
 
-### pre-commit
-The automated testing will fail your PR if you do not pass the linter. We use ruff for linting, and have a pre-commit setup on the repo ensure you enable it or run Ruff.  
-
-```
-pre-commit install
-```
-
-## Usage
-
-To help users begin working with AnnoMate and MicroSentryAI, we have developed a comprehensive Getting Started guide that walks through an example workflow illustrating how an inspector would use the tool in practice. For a deeper exploration of the platform, the AnnoMate Guide provides an in-depth look at its full set of features and capabilities. Likewise, the MicroSentryAI Guide explains how the AI engine functions and outlines how users can integrate their own custom AI/ML models into the tool.
-
-Users may replace the provided sample datasets with their own; however, the included examples are available to demonstrate expected behavior and to help verify that the tool is operating correctly.
-
-Documentation for using AnnoMate with MicroSentryAI is provided below:
-
-[Getting Started](./docs/GettingStarted.md)
-
-[AnnoMate Guide](./docs/AnnoMate.md)
-
-[MicroSentryAI Guide](./docs/MicroSentryAI.md)
-
+## Key Features
+* **Interactive AI Masking:** Use Meta's *Segment Anything 2 (SAM 2)* to instantly generate precise defect polygons using simple bounding boxes.
+* **MicroSentryAI Inference Engine:** Load your own custom PyTorch models (via Anomalib) to project defect heatmaps and AI-generated outlines directly onto your dataset.
+* **Robust Project System:** Save your progress, classes, and loaded models into a single `.annoproj` file with automatic backups.
+* **Scientific Validation:** A built-in module to compare AI predictions against human Ground Truth masks to calculate IoU, Precision, and Recall.
+* **Standardized Exporting:** Export datasets as COCO JSON, binary masks for AI training, or CSV reports for QA tracking.
 
 ## Initial Development Team
 

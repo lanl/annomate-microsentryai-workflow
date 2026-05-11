@@ -1,61 +1,75 @@
 # Getting Started
 
-This guide covers the installation and setup required to run the AnnoMate & MicroSentryAI suite.
+This guide covers the technical installation, environment setup, and the basic workflow to get your first project up and running.
 
-## Prerequisites
+## 1. Prerequisites
+Because this suite relies on heavy machine learning libraries (PyTorch, Anomalib, SAM 2), we highly recommend running it inside an isolated environment.
 * **OS:** macOS, Linux, or Windows.
-* **Python:** Version 3.10+ is recommended.
-* **Conda:** Anaconda or Miniconda is highly recommended for managing ML dependencies.
+* **Python:** Version **3.10** is highly recommended.
+* **Environment Manager:** Anaconda or Miniconda.
 
-## Installation
+## 2. Installation
 
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/cjgeo22/AnnoMate-and-MicroSentryAI.git
-    cd AnnoMate-and-MicroSentryAI
-    ```
+First, clone the repository and navigate into it:
 
-2.  **Create a Virtual Environment**
-    It is best to isolate these heavy dependencies.
-    ```bash
-    conda create -n annomate python=3.10
-    conda activate annomate
-    ```
+```bash
+git clone https://github.com/annomate-mircrosentryai-workflow
+cd annomate-microsentryai-workflow
+```
+Create and activate a clean Conda environment:
 
-3.  **Install Dependencies**
-    Install the required libraries. Note that `anomalib` handles the heavy lifting for the AI backend.
-    ```bash
-    pip install -r requirements.txt
-    ```
-    or
-    ```bash
-    conda env update --file environment.yml --prune
-    ```
-    *Note: If you are on Apple Silicon (M1/M2/M3), ensure you have the MPS-enabled version of PyTorch installed.*
+```bash
+conda create -n annomate python=3.10
+conda activate annomate
+```
+
+Install the required dependencies. We have provided specific environment files based on your system's hardware capabilities. Run **one** of the following commands:
+
+**For Windows/Linux with NVIDIA GPUs (CUDA):**
+```bash
+conda env update --file environment-cuda.yml --prune
+```
+
+**For macOS (Apple Silicon):**
+```bash
+conda env update --file environment-mac.yml --prune
+```
+
+**For CPU Only (No hardware acceleration):**
+```bash
+conda env update --file environment-cpu.yml --prune
+```
+
+*Note for developers: If you plan on contributing, please run pre-commit install to enable automated linting.*
+
 
 ## Running the Application
 
-To launch the main dashboard, run the `main.py` entry point from the source directory:
+Ensure your conda environment is activated, then run the main Python script from the root directory:
 
 ```bash
 python src/main.py
 ```
 
-## Building a Standalone Executable (Nuitka)
+## Building a Standalone Executable (PyInstaller)
 
-Alternatively, you can compile the application into a standalone `.exe` (Windows) or binary (macOS/Linux) using Nuitka. This bundles Python and all libraries into a single folder.
+If you want to distribute the application to users who do not have Python or Conda installed, you can compile AnnoMate & MicroSentryAI into a standalone executable using PyInstaller. *(Note: PyInstaller is already included in your environment.yml dependencies).*
 
-### Why Nuitka?
-We use Nuitka because it compiles Python code into C++ for better performance and handles complex dependencies (like PyTorch and Qt plugins) more reliably than PyInstaller.
-
-### Build Command
-Run the following command from the project root.
+From the root directory of the project, run the following command.
 
 **For Windows:**
-```bash
-python -m nuitka --standalone --enable-plugin=pyqt5 --enable-plugin=numpy --include-data-dir=src/logos=logos --include-package=anomalib --include-package=lightning --output-dir=build src/main.py
+```bash 
+pyinstaller --name "AnnoMate" --windowed --add-data "logos;logos" src/main.py
 ```
-**For Mac/Linux:**
-```bash
-python -m nuitka --standalone --macos-create-app-bundle --enable-plugin=pyqt5 --include-data-dir=src/logos=logos --include-package=anomalib --include-package=lightning --output-dir=build src/main.py
+
+**For MacOS/Linux:**
+```bash 
+pyinstaller --name "AnnoMate" --windowed --add-data "logos:logos" src/main.py
 ```
+
+**Important Build Notes:**
+* **File Size**: Because the application bundles PySide6, PyTorch, and Anomalib, the resulting build folder (dist/AnnoMate/) will be quite large (often several gigabytes).
+
+* **Console Flag**: The --windowed (or --noconsole) flag hides the terminal window in the final build. If your compiled app crashes on startup, try removing the --windowed flag and rebuilding; this will allow you to see the terminal output and identify any missing hidden imports required by PyTorch or Anomalib.
+
+* **SAM 2 Weights**: The SAM 2 model downloads its checkpoint weights to a local sam_weights/ folder upon first use. You may need to manually copy this folder into the final dist/AnnoMate/ directory if you want it pre-packaged for offline users.

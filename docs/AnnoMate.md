@@ -1,42 +1,65 @@
 # AnnoMate User Guide
 
-AnnoMate is the manual annotation and exportation component of the suite. It allows users to create ground-truth segmentations for datasets, keep note of key information, and export ground truth masks as images and key information as CSV/XLSX.
+AnnoMate is the core manual annotation and review component of the suite. It allows users to create ground-truth segmentations, review part quality, manage project files, and export data.
 
-## Interface Overview
+## 1. Interface Overview
+* **Left Canvas:** Your primary workspace. Here you can zoom (Scroll Wheel), pan (Right-Click + Drag), and draw polygons.
+* **Left Tool Palette:** Contains the Polygon tool, SAM 2 tool, and Brush Thickness controls.
+* **Right Panel:** Contains the Dataset Navigator, Annotation Classes, Current Image Annotations, and Metadata sections.
 
-* **Left Panel (Canvas):** Displays the image. This is where you draw and edit polygons.
-* **Right Panel (Controls):** Contains navigation, class management, and file metadata.
+## 2. Project Management (`.annoproj`)
+AnnoMate uses a robust project system. A `.annoproj` file saves your images, class definitions, annotations, inspector notes, and the path to your loaded AI model all in one place.
 
-## Workflow
+### Creating a New Workspace
+1. Go to **File > Open Image Folder...** and select a local directory containing your dataset (`.jpg`, `.png`, `.bmp`, `.tif`).
+2. The images will load into the **Dataset Navigator** on the right panel.
 
-### 1. Loading Data
-* Click **Open Folder** in the top right "Tray" section.
-* Select a directory containing images (`.jpg`, `.png`, `.bmp`, `.tiff`).
-* The table will populate with the file list. Rows colored **Green** have already been reviewed; **Yellow** rows are pending.
+### Saving Your Progress
+1. Go to **File > Save Project As...**
+2. Choose a location and name for your project. This will generate your `.annoproj` file and an associated `annotations.coco.json` file.
+3. **Autosave:** Once a project is saved, the application will automatically create an `autosave` backup inside your project folder every 5 minutes while you work.
 
-### 2. Navigation
-* Use the **Prev** and **Next** buttons to cycle through images.
-* **Zoom/Pan:**
-    * **Scroll Wheel:** Zoom in/out.
-    * **Right-Click + Drag:** Pan the image.
-    * **Reset View:** Restores the image to fit the window.
+### Relocating Images
+Annotations are saved using relative paths to your image folder. If you ever move your image folder on your hard drive, your `.annoproj` file will warn you that the images are missing. 
+* Fix this by going to **File > Relocate Images...** and selecting the new folder location. Your annotations will immediately map to the new file paths.
 
-### 3. Creating Annotations (Polygons)
-1.  **Select a Class:** Type a name in the text box (e.g., "Scratch") and click **Add Class**, or select an existing one from the dropdown.
-2.  **Activate Tool:** Click the **Polygon** button.
-3.  **Draw:**
-    * **Left Click:** Add points to the polygon.
-    * **Double Click** (or click the start point): Close the polygon and save it.
-    * **Backspace:** Undo the last point while drawing.
-    * **Escape:** Cancel the current drawing.
+## 3. The Dataset Navigator
+The top of the right panel displays your loaded images.
+* **Navigation:** Click a row or use the **Prev/Next** buttons to switch images.
+* **Status Dots:** 
+  * 🟢 **Green (Reviewed):** The image has annotations, an inspector name, a note, or a final Accept/Reject decision.
+  * 🟠 **Orange (Pending):** The image has not been interacted with.
 
-### 4. Metadata & Review
-* **Inspector:** Enter your name/ID to mark who reviewed the image.
-* **Notes:** Add text notes regarding ambiguity or specific defect details.
-* **Status:** Once an annotation is added or metadata is modified, the image status automatically updates to "Reviewed."
+## 4. Creating Annotations
 
-### 5. Exporting
-AnnoMate supports exporting your work for external use:
-* **Export Polygons + Data:** Saves a JSON file containing all coordinates and metadata, plus visual "burned-in" overlays of your annotations for quick review.
-* **Export CSV:** Saves a spreadsheet summary of the dataset status (Inspector, Notes, Classes present).
-* **Import Data JSON:** Loads previous sessions or annotations sent from other tools.
+### ⬠ Polygon Tool (Shortcut: `P`)
+Used for manual, point-by-point drawing.
+1. Select a class from the **Annotation Classes** list.
+2. Click the **Polygon Tool** (⬠).
+3. **Left Click:** Place vertices on the canvas.
+4. **Backspace:** Undo the last vertex placed.
+5. **Double-Click (or click the start point):** Close and save the polygon.
+6. **Escape:** Cancel the current drawing.
+
+### ✦ SAM 2 Bounding Box Tool (Shortcut: `S`)
+Uses Meta's *Segment Anything 2* AI to automatically generate precise polygon masks. *(Note: Requires internet access on first use to download model weights).*
+1. Click the **SAM Tool** (✦). 
+2. **Left Click & Drag:** Draw a bounding box tightly around the defect.
+3. The AI generates a dashed "Ghost Polygon" preview.
+4. **Enter:** Accept the ghost polygon as an annotation.
+5. **Escape:** Reject the ghost polygon.
+* *Tip: Click the gear icon (⚙) below the SAM tool to switch variants. "Tiny" is fastest; "Large" is most accurate.*
+
+## 5. Editing & Reviewing
+* **Modify Shapes:** With no tool selected, click inside a polygon to drag the entire shape, or click and drag a specific vertex (dot) to adjust its outline.
+* **Adjust Thickness:** Click the **Brush Thickness (◢)** icon. If a polygon is selected, the slider adjusts that specific polygon's line thickness.
+* **Delete:** Select a polygon and press the **Delete** key, or click the Trash icon in the "Current Image Annotations" list.
+* **Accept/Reject Part:** Use the floating **✓ Accept** or **✗ Reject** buttons at the top right of the canvas to mark the part's quality.
+* **Inspector Notes:** Use the bottom-right **Metadata** section to log your name and any notes about the part.
+
+## 6. Exporting & Importing Data
+Found under the **Data** menu:
+* **Export Polygons + Data:** Saves a `_data.json` file containing all polygon coordinates and metadata. It also generates JPEG images with the annotations permanently "burned in" for sharing.
+* **Export Binary Masks:** Renders pure black-and-white `.png` images (defects are white, background is black). This is the standard format required for training AI models.
+* **Export CSV:** Generates a spreadsheet containing the Image Name, Inspector, Notes, Accept/Reject decision, and classes present.
+* **Import JSON Data:** Loads previously exported AnnoMate JSON files or standard **COCO JSON** files directly into your workspace.
