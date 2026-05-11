@@ -134,6 +134,9 @@ class ProjectIO:
                 "score_cache": dict(inference_state.inference_cache),
                 "score_maps_file": score_maps_file,
                 "model_path": self._make_relative_if_inside(model_path, project_dir),
+                "user_config": {
+                    "microsentry": dict(inference_state.microsentry_settings),
+                },
             },
         }
 
@@ -261,6 +264,8 @@ class ProjectIO:
         # Inference cache (float scores only — fast to restore)
         inf_data = project_data.get("inference", {})
         inference_state.inference_cache = dict(inf_data.get("score_cache", {}))
+        user_config = inf_data.get("user_config", {})
+        inference_state.set_microsentry_settings(user_config.get("microsentry", {}))
 
         # Score maps from NPZ (optional)
         npz_path = project_data.get("_resolved_npz_path", "")

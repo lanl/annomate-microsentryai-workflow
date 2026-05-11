@@ -4,13 +4,13 @@ MicrosentrySection — unified Microsentry controls panel for the AnnoMate right
 Layout (when model loaded):
   Load Model button
   Model name label
-  [Heatmap] toggle  +  Transparency slider
-  [Segmentation] toggle  +  Threshold slider
+  [Heatmap] toggle  +  Overlay opacity slider
+  [Segmentation] toggle  +  Detection sensitivity slider
   [Accept AI Polygons] button
-  ▸ Advanced Settings (collapsible)
-      Smoothing slider
-      Simplify Tolerance slider
-      Heatmap Minimum slider
+  ▸ Advanced Settings (collapsible) + Help button
+      Mask smoothness slider
+      Boundary simplification slider
+      Heatmap floor slider
 """
 
 import os
@@ -20,9 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QDialog,
     QLabel,
     QPushButton,
     QSlider,
+    QTextBrowser,
     QToolButton,
 )
 
@@ -113,7 +115,7 @@ class MicrosentrySection(QWidget):
 
         lw.addSpacing(4)
 
-        # Heatmap toggle + transparency slider inline
+        # Heatmap toggle + overlay opacity slider inline
         self._btn_heatmap = QToolButton()
         self._btn_heatmap.setText("Heatmap")
         self._btn_heatmap.setCheckable(True)
@@ -125,6 +127,9 @@ class MicrosentrySection(QWidget):
         self._alpha = QSlider(Qt.Horizontal)
         self._alpha.setRange(0, 100)
         self._alpha.setValue(45)
+        self._alpha.setToolTip(
+            "Controls how visible the heatmap overlay is on top of the image."
+        )
         self._alpha.valueChanged.connect(
             lambda v: (self._alpha_val.setText(f"{v}%"), self._debounce.start())
         )
@@ -136,7 +141,7 @@ class MicrosentrySection(QWidget):
         heatmap_row.addWidget(self._alpha_val)
         lw.addLayout(heatmap_row)
 
-        # Segmentation toggle + threshold slider inline
+        # Segmentation toggle + detection sensitivity slider inline
         self._btn_seg = QToolButton()
         self._btn_seg.setText("Segmentation")
         self._btn_seg.setCheckable(True)
@@ -148,6 +153,10 @@ class MicrosentrySection(QWidget):
         self._thresh = QSlider(Qt.Horizontal)
         self._thresh.setRange(0, 100)
         self._thresh.setValue(95)
+        self._thresh.setToolTip(
+            "Controls the percentile cutoff used to generate anomaly masks; "
+            "higher values keep only stronger anomaly regions."
+        )
         self._thresh.valueChanged.connect(
             lambda v: (self._thresh_val.setText(str(v)), self._debounce.start())
         )
@@ -182,7 +191,19 @@ class MicrosentrySection(QWidget):
             self._btn_advanced.sizePolicy().verticalPolicy(),
         )
         self._btn_advanced.toggled.connect(self._on_advanced_toggled)
-        lw.addWidget(self._btn_advanced)
+
+        self._btn_advanced_help = QPushButton("Help")
+        self._btn_advanced_help.setToolTip(
+            "Explain what the advanced MicroSentryAI settings do"
+        )
+        self._btn_advanced_help.clicked.connect(self._show_advanced_help)
+
+        advanced_header = QHBoxLayout()
+        advanced_header.setContentsMargins(0, 0, 0, 0)
+        advanced_header.setSpacing(4)
+        advanced_header.addWidget(self._btn_advanced, stretch=1)
+        advanced_header.addWidget(self._btn_advanced_help)
+        lw.addLayout(advanced_header)
 
         self._advanced_widget = QWidget()
         aw = QVBoxLayout(self._advanced_widget)
@@ -195,10 +216,13 @@ class MicrosentrySection(QWidget):
         self._sigma = QSlider(Qt.Horizontal)
         self._sigma.setRange(0, 16)
         self._sigma.setValue(4)
+        self._sigma.setToolTip(
+            "Controls how much Gaussian smoothing is applied before mask generation."
+        )
         self._sigma.valueChanged.connect(
             lambda v: (self._sigma_val.setText(str(v)), self._debounce.start())
         )
-        aw.addWidget(_slider_row("Smoothing", self._sigma_val, self._sigma))
+        aw.addWidget(_slider_row("Mask smoothness", self._sigma_val, self._sigma))
 
         self._epsilon_val = QLabel("12")
         self._epsilon_val.setStyleSheet("font-size: 11px;")
@@ -206,11 +230,14 @@ class MicrosentrySection(QWidget):
         self._epsilon = QSlider(Qt.Horizontal)
         self._epsilon.setRange(0, 20)
         self._epsilon.setValue(12)
+        self._epsilon.setToolTip(
+            "Controls polygon simplification; higher values create simpler boundaries."
+        )
         self._epsilon.valueChanged.connect(
             lambda v: (self._epsilon_val.setText(str(v)), self._debounce.start())
         )
         aw.addWidget(
-            _slider_row("Simplify Tolerance", self._epsilon_val, self._epsilon)
+            _slider_row("Boundary simplification", self._epsilon_val, self._epsilon)
         )
 
         self._heat_min_val = QLabel("0%")
@@ -219,10 +246,13 @@ class MicrosentrySection(QWidget):
         self._heat_min = QSlider(Qt.Horizontal)
         self._heat_min.setRange(0, 100)
         self._heat_min.setValue(0)
+        self._heat_min.setToolTip(
+            "Hides lower-intensity heatmap values below this percentile."
+        )
         self._heat_min.valueChanged.connect(
             lambda v: (self._heat_min_val.setText(f"{v}%"), self._debounce.start())
         )
-        aw.addWidget(_slider_row("Heatmap Minimum", self._heat_min_val, self._heat_min))
+        aw.addWidget(_slider_row("Heatmap floor", self._heat_min_val, self._heat_min))
 
         self._advanced_widget.setVisible(False)
         lw.addWidget(self._advanced_widget)
@@ -242,6 +272,71 @@ class MicrosentrySection(QWidget):
         self._advanced_widget.setVisible(checked)
         self._btn_advanced.setText(f"{'▾' if checked else '▸'}  Advanced Settings")
 
+    def _show_advanced_help(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("MicroSentryAI Advanced Settings")
+        dialog.resize(560, 420)
+
+        layout = QVBoxLayout(dialog)
+
+        help_view = QTextBrowser()
+        help_view.setOpenExternalLinks(False)
+        help_view.setHtml(
+            """
+            <h2>Advanced Settings Help</h2>
+            <p>
+              These controls tune how MicroSentryAI turns model heatmaps into
+              visual overlays and editable segmentation polygons.
+            </p>
+
+            <h3>Mask smoothness</h3>
+            <p>
+              Controls Gaussian smoothing before mask generation. Increase it
+              when the heatmap is noisy or produces speckled polygons. Lower it
+              when small defects are being blurred or missed.
+            </p>
+            <p><b>Tradeoff:</b> higher values reduce noise but can merge nearby
+              regions or soften small anomalies.</p>
+
+            <h3>Boundary simplification</h3>
+            <p>
+              Controls how aggressively AI-generated polygon boundaries are
+              simplified after segmentation. Increase it when polygons have too
+              many jagged points. Lower it when the boundary shape needs to stay
+              closer to the original mask.
+            </p>
+            <p><b>Tradeoff:</b> higher values create cleaner, simpler polygons
+              but may lose fine shape detail.</p>
+
+            <h3>Heatmap floor</h3>
+            <p>
+              Hides lower-intensity heatmap values below the selected percentile
+              so weak background signal does not dominate the overlay. Increase
+              it when the heatmap looks cluttered. Lower it when you want to see
+              weaker model responses.
+            </p>
+            <p><b>Tradeoff:</b> higher values make the overlay cleaner but can
+              hide subtle anomalies.</p>
+            """
+        )
+        layout.addWidget(help_view)
+
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        close_row = QHBoxLayout()
+        close_row.addStretch()
+        close_row.addWidget(close_btn)
+        layout.addLayout(close_row)
+
+        dialog.exec()
+
+    def _refresh_value_labels(self) -> None:
+        self._alpha_val.setText(f"{self._alpha.value()}%")
+        self._thresh_val.setText(str(self._thresh.value()))
+        self._sigma_val.setText(str(self._sigma.value()))
+        self._epsilon_val.setText(str(self._epsilon.value()))
+        self._heat_min_val.setText(f"{self._heat_min.value()}%")
+
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
@@ -258,6 +353,41 @@ class MicrosentrySection(QWidget):
         self._lbl_model_backend.setText("")
         self._lbl_no_model.setVisible(True)
         self._loaded_widget.setVisible(False)
+
+    def set_settings(self, settings: dict) -> None:
+        """Apply persisted MicroSentryAI user settings to the controls."""
+        if not settings:
+            return
+
+        widgets = (
+            self._btn_heatmap,
+            self._btn_seg,
+            self._alpha,
+            self._thresh,
+            self._sigma,
+            self._epsilon,
+            self._heat_min,
+        )
+        for widget in widgets:
+            widget.blockSignals(True)
+        try:
+            self._btn_heatmap.setChecked(
+                bool(settings.get("heatmap_enabled", self._btn_heatmap.isChecked()))
+            )
+            self._btn_seg.setChecked(
+                bool(settings.get("seg_enabled", self._btn_seg.isChecked()))
+            )
+            self._alpha.setValue(int(float(settings.get("alpha", 0.45)) * 100))
+            self._thresh.setValue(int(settings.get("seg_pct", 95)))
+            self._sigma.setValue(int(settings.get("sigma", 4)))
+            self._epsilon.setValue(int(settings.get("epsilon", 12)))
+            self._heat_min.setValue(int(settings.get("heat_min", 0)))
+        finally:
+            for widget in widgets:
+                widget.blockSignals(False)
+
+        self._btn_accept.setEnabled(self._btn_seg.isChecked())
+        self._refresh_value_labels()
 
     def get_settings(self) -> dict:
         return {
