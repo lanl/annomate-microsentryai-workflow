@@ -624,9 +624,7 @@ class AnnoMateWindow(QWidget):
             or not os.path.isfile(self._saved_model_path)
         ):
             return False
-        self._load_model_from_path(
-            self._saved_model_path, clear_existing_scores=False
-        )
+        self._load_model_from_path(self._saved_model_path, clear_existing_scores=False)
         return self.inference_controller.has_model()
 
     def _on_microsentry_settings_changed(self) -> None:
