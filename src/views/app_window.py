@@ -65,6 +65,9 @@ class AppWindow(QMainWindow):
         self.annomate_view = AnnoMateWindow(
             dataset_model, io_controller, inference_model, inference_controller
         )
+        self.annomate_view.microsentry_session_changed.connect(
+            self.project_controller.mark_dirty
+        )
 
         self.setCentralWidget(self.annomate_view)
 
@@ -154,11 +157,30 @@ class AppWindow(QMainWindow):
         if warnings:
             QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
 
-        model_path = project_data.get("inference", {}).get("model_path", "")
-        self.annomate_view.set_saved_model_path(model_path)
-        if model_path and not self.inference_controller.has_model():
+        inference_data = project_data.get("inference", {})
+        model_path = inference_data.get("model_path", "")
+        user_config = inference_data.get("user_config", {})
+        microsentry_settings = user_config.get("microsentry", {})
+        should_restore_microsentry = bool(
+            microsentry_settings.get("panel_enabled", bool(model_path))
+        )
+
+        self.annomate_view.begin_microsentry_restore()
+        try:
+            self.annomate_view.set_saved_model_path(model_path)
+            self.annomate_view.set_microsentry_settings(microsentry_settings)
+            self._ms_action.setChecked(should_restore_microsentry)
+            restored_model = (
+                self.annomate_view.load_saved_model_if_available()
+                if should_restore_microsentry
+                else False
+            )
+        finally:
+            self.annomate_view.end_microsentry_restore()
+
+        if should_restore_microsentry and model_path and not restored_model:
             self.statusBar().showMessage(
-                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the MicroSentryAI panel.",
+                f"Could not restore saved model: {os.path.basename(model_path)}",
                 8000,
             )
 

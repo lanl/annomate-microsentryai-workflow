@@ -278,6 +278,37 @@ class TestProjectRoundTrip:
 
         assert inf2.inference_cache.get("img001.jpg") == pytest.approx(0.87)
 
+    def test_round_trip_restores_microsentry_user_config(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        inf.set_microsentry_settings(
+            {
+                "panel_enabled": True,
+                "heatmap_enabled": True,
+                "seg_enabled": True,
+                "seg_pct": 88,
+                "alpha": 0.65,
+                "sigma": 7,
+                "epsilon": 9,
+                "heat_min": 12,
+            }
+        )
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, ValidationState(), inf)
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), ValidationState(), inf2)
+
+        assert inf2.microsentry_settings["panel_enabled"] is True
+        assert inf2.microsentry_settings["heatmap_enabled"] is True
+        assert inf2.microsentry_settings["seg_enabled"] is True
+        assert inf2.microsentry_settings["seg_pct"] == 88
+        assert inf2.microsentry_settings["alpha"] == pytest.approx(0.65)
+        assert inf2.microsentry_settings["sigma"] == 7
+        assert inf2.microsentry_settings["epsilon"] == 9
+        assert inf2.microsentry_settings["heat_min"] == 12
+
     def test_score_maps_saved_and_restored(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         inf = InferenceState()

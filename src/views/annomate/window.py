@@ -223,6 +223,8 @@ class AnnoMateWindow(QWidget):
         parent: Optional Qt parent widget.
     """
 
+    microsentry_session_changed = Signal()
+
     def __init__(
         self,
         dataset_model,
@@ -244,6 +246,7 @@ class AnnoMateWindow(QWidget):
         self._current_ai_contours: list = []
         self._selected_ai_idx: int = -1
         self._saved_model_path: str = ""
+        self._restoring_microsentry_session: bool = False
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
         self._init_ui()
@@ -273,7 +276,7 @@ class AnnoMateWindow(QWidget):
             self._on_load_previous_model_requested
         )
         self.right_panel.microsentry_settings_changed.connect(
-            self._refresh_canvas_render
+            self._on_microsentry_settings_changed
         )
         self.right_panel.accept_polygons_requested.connect(self._on_accept_ai_polygons)
 
@@ -589,8 +592,58 @@ class AnnoMateWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def set_saved_model_path(self, path: str) -> None:
-        """Called by AppWindow after opening a project to record the saved model path."""
+        """Record the saved model path after opening a project."""
         self._saved_model_path = path
+
+    def get_microsentry_settings(self) -> dict:
+        """Return current MicroSentryAI user settings from the right panel."""
+        settings = self.right_panel.get_microsentry_settings()
+        settings["panel_enabled"] = self._microsentry_enabled
+        return settings
+
+    def set_microsentry_settings(self, settings: dict) -> None:
+        """Apply persisted MicroSentryAI user settings to the right panel."""
+        if not settings:
+            return
+        self.right_panel.set_microsentry_settings(settings)
+        self._refresh_canvas_render()
+
+    def begin_microsentry_restore(self) -> None:
+        """Suppress dirty signals while project-open restores MicroSentry state."""
+        self._restoring_microsentry_session = True
+
+    def end_microsentry_restore(self) -> None:
+        """Resume normal dirty tracking after project-open restore."""
+        self._restoring_microsentry_session = False
+
+    def load_saved_model_if_available(self) -> bool:
+        """Load the model saved in the project, preserving restored score maps."""
+        if (
+            self.inference_controller is None
+            or not self._saved_model_path
+            or not os.path.isfile(self._saved_model_path)
+        ):
+            return False
+        self._load_model_from_path(self._saved_model_path, clear_existing_scores=False)
+        return self.inference_controller.has_model()
+
+    def _on_microsentry_settings_changed(self) -> None:
+        """Persist changed MicroSentryAI settings and refresh the canvas."""
+        self._persist_microsentry_settings()
+        self._refresh_canvas_render()
+
+    def _persist_microsentry_settings(self) -> None:
+        """Store current MicroSentryAI UI state for project save/load."""
+        settings = self.right_panel.get_microsentry_settings()
+        settings["panel_enabled"] = self._microsentry_enabled
+        if self.inference_model is not None:
+            setter = getattr(self.inference_model, "set_microsentry_settings", None)
+            if setter is not None:
+                setter(settings)
+            else:
+                self.inference_model.state.set_microsentry_settings(settings)
+        if not self._restoring_microsentry_session:
+            self.microsentry_session_changed.emit()
 
     # ------------------------------------------------------------------ #
     # Microsentry toggle & rendering
@@ -611,6 +664,7 @@ class AnnoMateWindow(QWidget):
             self.right_panel.show_microsentry_section()
         else:
             self.right_panel.hide_microsentry_section()
+        self._persist_microsentry_settings()
         self._refresh_canvas_render()
 
     def _on_load_previous_model_requested(self) -> None:
@@ -628,7 +682,8 @@ class AnnoMateWindow(QWidget):
             QMessageBox.warning(
                 self,
                 "Load Previous Model",
-                f"The saved model file no longer exists:\n{self._saved_model_path}\n\nUse 'Load New' to browse for it.",
+                "The saved model file no longer exists:\n"
+                f"{self._saved_model_path}\n\nUse 'Load New' to browse for it.",
             )
             return
         self._load_model_from_path(self._saved_model_path)
@@ -646,7 +701,9 @@ class AnnoMateWindow(QWidget):
             return
         self._load_model_from_path(path)
 
-    def _load_model_from_path(self, path: str) -> None:
+    def _load_model_from_path(
+        self, path: str, clear_existing_scores: bool = True
+    ) -> None:
         self.status_bar.set_model_loading(True)
         QApplication.processEvents()
         try:
@@ -658,7 +715,8 @@ class AnnoMateWindow(QWidget):
         self.status_bar.set_model_loading(False)
         # Clear score maps from any previous model so the new model re-processes
         # everything rather than reusing stale heatmaps.
-        self.inference_model.clear()
+        if clear_existing_scores:
+            self.inference_model.clear()
         self._refresh_canvas_render()
         self.right_panel.set_model_loaded(name, path)
         self._start_pending_inference()

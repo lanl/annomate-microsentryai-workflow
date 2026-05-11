@@ -166,6 +166,9 @@ class RightPanel(QWidget):
     def get_microsentry_settings(self) -> dict:
         return self._ms_section.get_settings()
 
+    def set_microsentry_settings(self, settings: dict) -> None:
+        self._ms_section.set_settings(settings)
+
     def show_microsentry_section(self) -> None:
         """Make the Microsentry section visible and expanded."""
         self._ms_collapsible.setVisible(True)
