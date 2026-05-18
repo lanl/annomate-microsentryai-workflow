@@ -52,6 +52,7 @@ class ProjectIO:
         created_at: Optional[str] = None,
         save_score_maps: bool = True,
         model_path: str = "",
+        calibration_state=None,
     ) -> str:
         """Write .annoproj + annotations.coco.json to project_dir.
 
@@ -138,6 +139,21 @@ class ProjectIO:
             },
         }
 
+        if calibration_state is not None:
+            cs = calibration_state
+            proj["calibration"] = {
+                "scale": cs.scale,
+                "unit": cs.unit,
+                "calib_p1": list(cs.calib_p1) if cs.calib_p1 else None,
+                "calib_p2": list(cs.calib_p2) if cs.calib_p2 else None,
+                "real_distance": cs.real_distance,
+                "grid_visible": cs.grid_visible,
+                "grid_color": list(cs.grid_color),
+                "grid_opacity": cs.grid_opacity,
+                "grid_spacing_world": cs.grid_spacing_world,
+                "grid_spacing_auto": cs.grid_spacing_auto,
+            }
+
         annoproj_path = os.path.join(project_dir, f"{project_name}.annoproj")
         with open(annoproj_path, "w", encoding="utf-8") as f:
             json.dump(proj, f, indent=2)
@@ -197,6 +213,7 @@ class ProjectIO:
         dataset_state,
         validation_state,
         inference_state,
+        calibration_state=None,
     ) -> None:
         """Mutate the three state objects from load_project() output.
 
@@ -275,6 +292,23 @@ class ProjectIO:
                     inference_state.score_maps[fname] = npz[key]
             except Exception as exc:
                 logger.warning("Could not load score maps from NPZ: %s", exc)
+
+        # Calibration (optional — absent in old project files)
+        if calibration_state is not None:
+            cdata = project_data.get("calibration", {})
+            calibration_state.scale = cdata.get("scale", None)
+            calibration_state.unit = cdata.get("unit", "mm")
+            p1 = cdata.get("calib_p1")
+            calibration_state.calib_p1 = tuple(p1) if p1 else None
+            p2 = cdata.get("calib_p2")
+            calibration_state.calib_p2 = tuple(p2) if p2 else None
+            calibration_state.real_distance = cdata.get("real_distance", 1.0)
+            calibration_state.grid_visible = cdata.get("grid_visible", False)
+            color = cdata.get("grid_color", [58, 90, 122])
+            calibration_state.grid_color = tuple(color)
+            calibration_state.grid_opacity = cdata.get("grid_opacity", 0.5)
+            calibration_state.grid_spacing_world = cdata.get("grid_spacing_world", 1.0)
+            calibration_state.grid_spacing_auto = cdata.get("grid_spacing_auto", True)
 
     # ------------------------------------------------------------------ #
     # COCO export / import

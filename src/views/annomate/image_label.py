@@ -34,6 +34,8 @@ logger = logging.getLogger("AnnoMate.ImageLabel")
 # Tool Constants
 POLYGON = "polygon"
 SAM_BBOX = "sam_bbox"
+CALIBRATE = "calibrate"
+MEASURE = "measure"
 
 
 class ImageLabel(QLabel):
@@ -72,6 +74,7 @@ class ImageLabel(QLabel):
     samBboxDrawn = Signal(
         float, float, float, float
     )  # x1,y1,x2,y2 in original image coords
+    calibrationPointsPlaced = Signal(tuple, tuple)  # (p1_orig, p2_orig)
 
     def __init__(self, parent: object = None) -> None:
         """Initialize ImageLabel with default zoom, pan, and annotation state.
@@ -119,6 +122,10 @@ class ImageLabel(QLabel):
         self._sam_ghost: Optional[Tuple[List[QPointF], float]] = (
             None  # (display_pts, confidence)
         )
+
+        # --- Calibration / measure tool state ---
+        self._calib_model = None   # CalibrationModel; set via set_calibration_model()
+        self._pending_calib_pts: list = []  # accumulates up to 2 original-coord tuples
 
     def set_image(self, bgr: np.ndarray, max_display_dim: int = 1200) -> None:
         """Load a BGR ndarray and prepare it for display.
@@ -174,6 +181,9 @@ class ImageLabel(QLabel):
         self._sam_bbox_start = None
         self._sam_bbox_end = None
         self._sam_ghost = None
+        self._pending_calib_pts = []
+        if self._calib_model is not None:
+            self._calib_model.clear_measurement()
 
         self.update()
 
@@ -252,16 +262,19 @@ class ImageLabel(QLabel):
         """Set the active interaction tool.
 
         Args:
-            tool_name (Optional[str]): Tool identifier — ``"polygon"`` to
-                enable polygon drawing, ``"sam_bbox"`` for SAM-assisted
-                segmentation, or ``None`` to deactivate all tools.
+            tool_name (Optional[str]): Tool identifier — ``"polygon"``,
+                ``"sam_bbox"``, ``"calibrate"``, ``"measure"``, or ``None``.
         """
         if self.current_tool == SAM_BBOX and tool_name != SAM_BBOX:
             self._sam_bbox_start = None
             self._sam_bbox_end = None
             self._sam_ghost = None
+        if self.current_tool in (CALIBRATE, MEASURE) and tool_name not in (CALIBRATE, MEASURE):
+            self._pending_calib_pts = []
+            if self._calib_model is not None:
+                self._calib_model.clear_measurement()
         self.current_tool = tool_name
-        if tool_name == SAM_BBOX:
+        if tool_name in (SAM_BBOX, CALIBRATE, MEASURE):
             self.setCursor(Qt.CrossCursor)
         elif tool_name is None:
             self.setCursor(Qt.ArrowCursor)
@@ -379,6 +392,14 @@ class ImageLabel(QLabel):
             ]
             self._sam_ghost = (disp_pts, confidence)
         self.update()
+
+    def set_calibration_model(self, model) -> None:
+        """Bind a CalibrationModel so the canvas can render the grid and dots."""
+        self._calib_model = model
+        if model is not None:
+            model.calibration_changed.connect(self.update)
+            model.grid_changed.connect(self.update)
+            model.measurement_updated.connect(self.update)
 
     def clear_sam_ghost(self) -> None:
         """Discard the SAM ghost polygon, bbox, and repaint."""
@@ -514,6 +535,15 @@ class ImageLabel(QLabel):
                 self.toolCanceled.emit()
                 return
 
+        if self.current_tool in (CALIBRATE, MEASURE):
+            if event.key() == Qt.Key_Escape:
+                self._pending_calib_pts = []
+                if self._calib_model is not None:
+                    self._calib_model.clear_measurement()
+                self.set_tool(None)
+                self.toolCanceled.emit()
+                return
+
         if event.key() == Qt.Key_Escape:
             self.clear_current_polygon()
             self.set_tool(None)
@@ -565,6 +595,37 @@ class ImageLabel(QLabel):
                     self.current_tool is None
                 ):  # handler cleared the tool (e.g. no class)
                     return
+
+            # --- Calibrate tool ---
+            if self.current_tool == CALIBRATE:
+                pos_view = QPointF(event.pos())
+                pos_disp = self.view_to_display(pos_view)
+                orig_pt = self.display_to_original(pos_disp)
+                self._pending_calib_pts.append(orig_pt)
+                self.update()
+                if len(self._pending_calib_pts) == 2:
+                    p1, p2 = self._pending_calib_pts
+                    # Don't clear here — keep pts visible while the dialog is open.
+                    # window.py clears them via canvas.set_tool(None) after dialog closes.
+                    self.calibrationPointsPlaced.emit(p1, p2)
+                return
+
+            # --- Measure tool ---
+            if self.current_tool == MEASURE:
+                if self._calib_model is None or not self._calib_model.is_calibrated():
+                    return
+                pos_view = QPointF(event.pos())
+                pos_disp = self.view_to_display(pos_view)
+                orig_pt = self.display_to_original(pos_disp)
+                p1, p2 = self._calib_model.meas_points()
+                if p1 is None:
+                    self._calib_model.set_meas_p1(orig_pt)
+                elif p2 is None:
+                    self._calib_model.set_meas_p2(orig_pt)
+                else:
+                    # Start a new measurement
+                    self._calib_model.set_meas_p1(orig_pt)
+                return
 
             pos_view = QPointF(event.pos())
 
@@ -830,6 +891,120 @@ class ImageLabel(QLabel):
         )
         self.update()
 
+    # ------------------------------------------------------------------ #
+    # Calibration rendering helpers
+    # ------------------------------------------------------------------ #
+
+    def _paint_grid(self, painter: QPainter) -> None:
+        """Draw grid lines fixed to the viewport in screen coordinates."""
+        m = self._calib_model
+        if m is None or not m.grid_visible() or not m.is_calibrated():
+            return
+        step_world = m.grid_spacing_world()
+        if step_world <= 0:
+            return
+        step_screen = (step_world / m.scale()) * self._base_scale * self._zoom
+        if step_screen < 8:
+            return
+
+        r, g, b = m.grid_color()
+        alpha = int(m.grid_opacity() * 255)
+        color = QColor(r, g, b, alpha)
+        painter.setPen(QPen(color, 1.0))
+        painter.setBrush(Qt.NoBrush)
+
+        w = float(self.width())
+        h = float(self.height())
+
+        x = 0.0
+        while x <= w:
+            painter.drawLine(QPointF(x, 0), QPointF(x, h))
+            x += step_screen
+
+        y = 0.0
+        while y <= h:
+            painter.drawLine(QPointF(0, y), QPointF(w, y))
+            y += step_screen
+
+    def _paint_calib_dots(self, painter: QPainter) -> None:
+        """Draw calibration and measure dots in display coords (inside scaled painter)."""
+        m = self._calib_model
+
+        # Pending calibration clicks (local state, not yet in model)
+        dot_color = QColor(255, 107, 107)
+        r = 6.0 / self._zoom
+        pen = QPen(dot_color, 1.5 / self._zoom)
+        text_pen = QPen(dot_color)
+        f = painter.font()
+        f.setPointSizeF(max(7.0, 9.0 / self._zoom))
+        painter.setFont(f)
+
+        pts_to_draw = []
+        for i, (ox, oy) in enumerate(self._pending_calib_pts):
+            pts_to_draw.append((ox, oy, str(i + 1), dot_color))
+
+        for ox, oy, label, color in pts_to_draw:
+            cx = ox * self._base_scale
+            cy = oy * self._base_scale
+            painter.setPen(QPen(color, 1.5 / self._zoom))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(cx, cy), r, r)
+            painter.drawEllipse(QPointF(cx, cy), 1.5 / self._zoom, 1.5 / self._zoom)
+            painter.setPen(QPen(color))
+            painter.drawText(QPointF(cx + r + 2.0 / self._zoom, cy - r), label)
+
+        if len(pts_to_draw) == 2:
+            p1d = QPointF(pts_to_draw[0][0] * self._base_scale, pts_to_draw[0][1] * self._base_scale)
+            p2d = QPointF(pts_to_draw[1][0] * self._base_scale, pts_to_draw[1][1] * self._base_scale)
+            dash_pen = QPen(dot_color, 1.5 / self._zoom, Qt.DashLine)
+            dash_pen.setDashPattern([6, 4])
+            painter.setPen(dash_pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawLine(p1d, p2d)
+
+        # Measure points
+        if m is None:
+            return
+        meas_color = QColor(255, 216, 102)
+        mp1, mp2 = m.meas_points()
+        meas_pts = []
+        if mp1:
+            meas_pts.append((mp1[0], mp1[1]))
+        if mp2:
+            meas_pts.append((mp2[0], mp2[1]))
+
+        for ox, oy in meas_pts:
+            cx = ox * self._base_scale
+            cy = oy * self._base_scale
+            painter.setPen(QPen(meas_color, 1.5 / self._zoom))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(cx, cy), r, r)
+            painter.drawEllipse(QPointF(cx, cy), 1.5 / self._zoom, 1.5 / self._zoom)
+
+        if len(meas_pts) == 2:
+            p1d = QPointF(meas_pts[0][0] * self._base_scale, meas_pts[0][1] * self._base_scale)
+            p2d = QPointF(meas_pts[1][0] * self._base_scale, meas_pts[1][1] * self._base_scale)
+            painter.setPen(QPen(meas_color, 1.5 / self._zoom))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawLine(p1d, p2d)
+            dist = m.measured_distance()
+            if dist is not None:
+                mx = (p1d.x() + p2d.x()) / 2
+                my = (p1d.y() + p2d.y()) / 2 - 10.0 / self._zoom
+                f2 = painter.font()
+                f2.setPointSizeF(max(8.0, 10.0 / self._zoom))
+                f2.setBold(True)
+                painter.setFont(f2)
+                painter.setPen(QPen(meas_color))
+                painter.drawText(QPointF(mx, my), f"{dist:.3f} {m.unit()}")
+        elif len(meas_pts) == 1 and self.current_tool == MEASURE and self._mouse_pos:
+            p1d = QPointF(meas_pts[0][0] * self._base_scale, meas_pts[0][1] * self._base_scale)
+            cursor_disp = self.view_to_display(self._mouse_pos)
+            dash_pen = QPen(meas_color, 1.0 / self._zoom, Qt.DashLine)
+            dash_pen.setDashPattern([4, 4])
+            painter.setPen(dash_pen)
+            painter.drawLine(p1d, cursor_disp)
+
     def paintEvent(self, event: QPaintEvent) -> None:
         """Paint the image, annotation overlays, and the in-progress polygon.
 
@@ -948,3 +1123,9 @@ class ImageLabel(QLabel):
                 painter.setBrush(QBrush(self._active_color))
                 painter.setPen(outline_pen)
                 painter.drawEllipse(pt, r, r)
+
+        self._paint_calib_dots(painter)
+
+        # Switch to screen coordinates for the viewport-fixed grid
+        painter.resetTransform()
+        self._paint_grid(painter)

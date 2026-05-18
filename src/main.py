@@ -12,10 +12,12 @@ from PySide6.QtWidgets import QApplication
 from core.states.dataset_state import DatasetState
 from core.states.inference_state import InferenceState
 from core.states.validation_state import ValidationState
+from core.states.calibration_state import CalibrationState
 
 from models.dataset_model import DatasetTableModel
 from models.inference_model import InferenceModel
 from models.validation_model import ValidationModel
+from models.calibration_model import CalibrationModel
 
 from controllers.io_controller import IOController
 from controllers.inference_controller import InferenceController
@@ -40,11 +42,13 @@ def main() -> None:
     dataset_state = DatasetState()
     inference_state = InferenceState()
     validation_state = ValidationState()
+    calibration_state = CalibrationState()
 
     # Models
     dataset_model = DatasetTableModel(dataset_state)
     inference_model = InferenceModel(inference_state)
     validation_model = ValidationModel(validation_state)
+    calibration_model = CalibrationModel(calibration_state)
 
     # Controllers
     io_controller = IOController(dataset_model)
@@ -56,6 +60,7 @@ def main() -> None:
         validation_model,
         io_controller,
         inference_controller,
+        calibration_model=calibration_model,
     )
 
     # View
@@ -67,6 +72,7 @@ def main() -> None:
         inference_controller=inference_controller,
         validation_controller=validation_controller,
         project_controller=project_controller,
+        calibration_model=calibration_model,
     )
     window.show()
 

@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from views.annomate._splitter import StyledSplitter
 
-from views.annomate.image_label import ImageLabel, SAM_BBOX
+from views.annomate.image_label import ImageLabel, SAM_BBOX, CALIBRATE, MEASURE
 from views.annomate.right_panel import RightPanel
 from views.annomate.tool_palette import ToolPalette
 from views.annomate.status_bar import AnnoMateStatusBar
@@ -229,6 +229,7 @@ class AnnoMateWindow(QWidget):
         io_controller,
         inference_model=None,
         inference_controller=None,
+        calibration_model=None,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
@@ -236,6 +237,7 @@ class AnnoMateWindow(QWidget):
         self.io_controller = io_controller
         self.inference_model = inference_model
         self.inference_controller = inference_controller
+        self._calib_model = calibration_model
         self._current_row: int = -1
         self._active_class: str = ""
         self._active_tool: str = ""
@@ -247,6 +249,8 @@ class AnnoMateWindow(QWidget):
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
         self._init_ui()
+        if calibration_model is not None:
+            self.canvas.set_calibration_model(calibration_model)
 
         # Dataset changes
         self.dataset_model.modelReset.connect(self._on_model_reset)
@@ -290,6 +294,9 @@ class AnnoMateWindow(QWidget):
         # SAM tool
         self.canvas.samBboxDrawn.connect(self._on_sam_bbox_drawn)
         self.tool_palette.sam_variant_changed.connect(self._on_sam_variant_changed)
+
+        # Calibration tool
+        self.canvas.calibrationPointsPlaced.connect(self._on_calibration_points_placed)
         self._sam_controller.result_ready.connect(self._on_sam_result_ready)
         self._sam_controller.inference_failed.connect(self._on_sam_inference_failed)
         self._sam_controller.loading_done.connect(self._on_sam_loading_done)
@@ -355,7 +362,7 @@ class AnnoMateWindow(QWidget):
 
         self.canvas.installEventFilter(self)
 
-        self.right_panel = RightPanel(self.dataset_model, self.inference_model, self)
+        self.right_panel = RightPanel(self.dataset_model, self.inference_model, self._calib_model, self)
         self.right_panel.setMinimumWidth(160)
         splitter.addWidget(self.right_panel)
 
@@ -446,6 +453,18 @@ class AnnoMateWindow(QWidget):
                 self._sam_controller.ensure_loaded_async()
             return
 
+        if tool_name == "calibrate":
+            self._active_tool = "calibrate"
+            self.canvas.set_tool(CALIBRATE)
+            self.status_bar.set_tool("calibrate")
+            return
+
+        if tool_name == "measure":
+            self._active_tool = "measure"
+            self.canvas.set_tool(MEASURE)
+            self.status_bar.set_tool("measure")
+            return
+
         self._active_tool = tool_name
         self.canvas.set_tool("polygon" if tool_name == "polygon" else None)
         self.status_bar.set_tool(tool_name)
@@ -455,6 +474,25 @@ class AnnoMateWindow(QWidget):
         self._active_tool = ""
         self.status_bar.set_tool("")
         self.status_bar.set_sam_hint("")
+
+    def _on_calibration_points_placed(self, p1: tuple, p2: tuple) -> None:
+        import math
+        from views.annomate.calibration_dialog import CalibrationDialog
+        from PySide6.QtWidgets import QDialog
+        if self._calib_model is None:
+            return
+        pixel_dist = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+        dlg = CalibrationDialog(pixel_dist, parent=self)
+        if dlg.exec() == QDialog.Accepted:
+            real_dist, unit = dlg.get_result()
+            self._calib_model.set_calib_points(p1, p2)
+            ok = self._calib_model.apply_calibration(real_dist, unit)
+            if not ok:
+                QMessageBox.warning(self, "Calibration", "The two points are too close together.")
+        self.canvas.set_tool(None)  # clears _pending_calib_pts, resets cursor
+        self.tool_palette.deselect_all()
+        self._active_tool = ""
+        self.status_bar.set_tool("")
 
     def _on_draw_attempted(self) -> None:
         """Guard against drawing without a valid class; cancels the tool if missing."""
@@ -859,6 +897,10 @@ class AnnoMateWindow(QWidget):
             self.tool_palette.toggle_polygon()
         elif event.key() == Qt.Key_S:
             self.tool_palette.toggle_sam()
+        elif event.key() == Qt.Key_C:
+            self.tool_palette.toggle_calibrate()
+        elif event.key() == Qt.Key_M:
+            self.tool_palette.toggle_measure()
         elif event.key() == Qt.Key_Delete:
             self._delete_selected_annotation()
         super().keyPressEvent(event)

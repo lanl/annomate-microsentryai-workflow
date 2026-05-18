@@ -45,6 +45,7 @@ class AppWindow(QMainWindow):
         inference_controller,
         validation_controller,
         project_controller,
+        calibration_model=None,
     ) -> None:
         super().__init__()
         self.setWindowTitle(_APP_TITLE)
@@ -57,13 +58,15 @@ class AppWindow(QMainWindow):
         self.inference_controller = inference_controller
         self.validation_controller = validation_controller
         self.project_controller = project_controller
+        self.calibration_model = calibration_model
 
         # Sub-views
         self.validation_view = ValidationWindow(validation_model, validation_controller)
         self.validation_view.setWindowTitle("Validation")
         self.validation_view.resize(900, 650)
         self.annomate_view = AnnoMateWindow(
-            dataset_model, io_controller, inference_model, inference_controller
+            dataset_model, io_controller, inference_model, inference_controller,
+            calibration_model=calibration_model,
         )
 
         self.setCentralWidget(self.annomate_view)

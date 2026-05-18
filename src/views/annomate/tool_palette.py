@@ -177,6 +177,40 @@ class ToolPalette(QFrame):
         layout.addWidget(btn_sam_opts)
         self.sam_variant_combo.currentTextChanged.connect(self._on_sam_combo_changed)
 
+        # ------------------------------------------------------------------ #
+        # Divider before calibration tools
+        # ------------------------------------------------------------------ #
+        divider2 = QFrame()
+        divider2.setFrameShape(QFrame.HLine)
+        divider2.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(divider2)
+
+        # ------------------------------------------------------------------ #
+        # Calibrate tool
+        # ------------------------------------------------------------------ #
+        calib_btn = QToolButton()
+        calib_btn.setText("⊕")
+        calib_btn.setToolTip("Set Calibration Points (C)")
+        calib_btn.setFixedSize(_BTN_W, _BTN_H)
+        calib_btn.setCheckable(True)
+        calib_btn.setFont(font)
+        self._btn_tool[calib_btn] = "calibrate"
+        self._btn_group.addButton(calib_btn)
+        layout.addWidget(calib_btn)
+
+        # ------------------------------------------------------------------ #
+        # Measure tool
+        # ------------------------------------------------------------------ #
+        meas_btn = QToolButton()
+        meas_btn.setText("⇔")
+        meas_btn.setToolTip("Measure Distance (M)")
+        meas_btn.setFixedSize(_BTN_W, _BTN_H)
+        meas_btn.setCheckable(True)
+        meas_btn.setFont(font)
+        self._btn_tool[meas_btn] = "measure"
+        self._btn_group.addButton(meas_btn)
+        layout.addWidget(meas_btn)
+
         self._btn_group.buttonClicked.connect(self._on_btn_clicked)
 
     # ------------------------------------------------------------------ #
@@ -202,6 +236,14 @@ class ToolPalette(QFrame):
     def toggle_sam(self) -> None:
         """Toggle the SAM segment tool on/off."""
         self._toggle_tool("sam_bbox")
+
+    def toggle_calibrate(self) -> None:
+        """Toggle the calibrate tool on/off."""
+        self._toggle_tool("calibrate")
+
+    def toggle_measure(self) -> None:
+        """Toggle the measure tool on/off."""
+        self._toggle_tool("measure")
 
     # ------------------------------------------------------------------ #
     # Internal slots
