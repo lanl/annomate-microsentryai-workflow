@@ -268,6 +268,8 @@ class TestProjectRoundTrip:
     def test_round_trip_restores_inference_cache(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
+        inf.scores = {"img001.jpg": 0.87}
+        inf.labels = {"img001.jpg": "ANOMALY"}
         inf.inference_cache = {"img001.jpg": 0.87}
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, ValidationState(), inf)
@@ -277,6 +279,8 @@ class TestProjectRoundTrip:
         pio.apply_project_to_states(data, DatasetState(), ValidationState(), inf2)
 
         assert inf2.inference_cache.get("img001.jpg") == pytest.approx(0.87)
+        assert inf2.scores.get("img001.jpg") == pytest.approx(0.87)
+        assert inf2.labels.get("img001.jpg") == "ANOMALY"
 
     def test_score_maps_saved_and_restored(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)

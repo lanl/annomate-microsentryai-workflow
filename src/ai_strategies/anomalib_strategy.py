@@ -554,9 +554,10 @@ class AnomalibStrategy:
                 heatmap = heatmap.detach().cpu().numpy()
             heatmap = heatmap.squeeze()
 
-            if heatmap.max() > heatmap.min():
-                heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
-
+            # Do NOT locally re-normalize. The PostProcessor has already mapped the
+            # anomaly map to [0, 1] with 0.5 as the calibrated decision boundary.
+            # Re-normalizing per image would make a good image (values 0.35–0.49)
+            # look identical to a bad one (0.5–1.0) in the heatmap display.
             return score, heatmap.astype(np.float32)
 
         except Exception as e:
@@ -581,40 +582,66 @@ class AnomalibStrategy:
                 *heatmap* is a 2-D ``float32`` array normalised to 0–1.
         """
         try:
-            img = cv2.imread(image_path)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = cv2.resize(img, (256, 256))
-
-            tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
             device_obj = (
                 next(self.raw_model.parameters()).device
                 if hasattr(self.raw_model, "parameters")
                 else torch.device("cpu")
             )
-            tensor = tensor.to(device_obj)
+
+            pre = getattr(self.raw_model, "pre_processor", None)
+            if pre is not None:
+                # Use the model's own pre_processor so resize interpolation and
+                # antialias settings exactly match training — critical for correct
+                # score normalization (wrong resize = wrong scores vs threshold).
+                from PIL import Image as _PIL
+                import torchvision.transforms.functional as _TF
+                pil_img = _PIL.open(image_path).convert("RGB")
+                transformed = pre.transform(pil_img)
+                if not isinstance(transformed, torch.Tensor):
+                    transformed = _TF.to_tensor(transformed)
+                tensor = transformed.unsqueeze(0).float().to(device_obj)
+            else:
+                img = cv2.imread(image_path)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, (256, 256))
+                tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+                tensor = tensor.to(device_obj)
 
             with torch.no_grad():
                 output = self.raw_model(tensor)
 
             score = 0.0
             heatmap = np.zeros((256, 256), dtype=np.float32)
+            postprocessed = False  # True when PostProcessor has already calibrated [0,1]
 
-            if isinstance(output, tuple):
+            # Structured anomalib output (InferenceBatch / named fields) — preferred path.
+            # The raw model is an anomalib LightningModule whose forward() returns an
+            # InferenceBatch (a NamedTuple). Iterating it as a plain tuple is unreliable
+            # because bool fields (pred_label) would overwrite float fields (pred_score).
+            if hasattr(output, "pred_score") and output.pred_score is not None:
+                ps = output.pred_score
+                score = float(ps.item() if isinstance(ps, torch.Tensor) else ps)
+
+            if hasattr(output, "anomaly_map") and output.anomaly_map is not None:
+                heatmap = output.anomaly_map.squeeze().detach().cpu().numpy()
+                postprocessed = True  # map is already calibrated to [0,1] by PostProcessor
+            elif isinstance(output, tuple):
+                # Fallback for non-anomalib models returning plain tuples.
                 for item in output:
-                    if isinstance(item, torch.Tensor):
-                        if (
-                            item.ndim >= 2
-                            and item.numel() > 1
-                            and item.is_floating_point()
-                        ):
-                            heatmap = item.squeeze().cpu().numpy()
-                        elif item.numel() == 1:
-                            score = float(item.cpu().item())
+                    if not isinstance(item, torch.Tensor):
+                        continue
+                    if item.ndim >= 2 and item.numel() > 1 and item.is_floating_point():
+                        heatmap = item.squeeze().cpu().numpy()
+                    elif item.numel() == 1 and item.is_floating_point() and score == 0.0:
+                        score = float(item.cpu().item())
             elif isinstance(output, torch.Tensor):
                 heatmap = output.squeeze().cpu().numpy()
 
             heatmap = heatmap.astype(np.float32)
-            if heatmap.max() > heatmap.min():
+            # Only locally normalize for non-PostProcessor outputs (unknown scale).
+            # PostProcessor-calibrated maps must NOT be re-normalized: doing so collapses
+            # the absolute scale and makes a NORMAL image look as intense as an ANOMALY.
+            if not postprocessed and heatmap.max() > heatmap.min():
                 heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
 
             return score, heatmap

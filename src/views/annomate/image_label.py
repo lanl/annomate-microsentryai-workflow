@@ -197,14 +197,14 @@ class ImageLabel(QLabel):
         s = score_map.astype(np.float32)
         if heat_min_pct > 0:
             thr = np.percentile(s, heat_min_pct)
-            s = np.clip(s - thr, 0.0, None)
+            s = np.clip(s, thr, None)
         s_min, s_max = float(s.min()), float(s.max())
         if s_max <= s_min:
             self._heatmap_pix = None
             self.update()
             return
         s_norm = ((s - s_min) / (s_max - s_min) * 255.0).astype(np.uint8)
-        colored_bgr = cv2.applyColorMap(s_norm, cv2.COLORMAP_JET)
+        colored_bgr = cv2.applyColorMap(s_norm, cv2.COLORMAP_TURBO)
         colored_rgb = cv2.cvtColor(colored_bgr, cv2.COLOR_BGR2RGB)
         pix_w, pix_h = self._display_qpix.width(), self._display_qpix.height()
         resized = cv2.resize(

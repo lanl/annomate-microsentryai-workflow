@@ -611,6 +611,14 @@ class AnnoMateWindow(QWidget):
             self.right_panel.show_microsentry_section()
         else:
             self.right_panel.hide_microsentry_section()
+        self.right_panel.navigator_set_microsentry_mode(checked)
+        if checked:
+            for row in range(self.dataset_model.rowCount()):
+                path = self.dataset_model.get_image_path(row)
+                score = self.inference_model.get_score(path)
+                label = self.inference_model.get_label(path)
+                if score is not None:
+                    self.right_panel.navigator_set_inference(row, score, label)
         self._refresh_canvas_render()
 
     def _on_load_previous_model_requested(self) -> None:
@@ -708,13 +716,7 @@ class AnnoMateWindow(QWidget):
 
         ms = self.right_panel.get_microsentry_settings()
         score_map = self.inference_model.get_score_map(path)
-
-        # Smooth the score map with the configured sigma
         s = score_map.astype(np.float32)
-        sigma = ms["sigma"]
-        if sigma > 0:
-            ksize = int(sigma * 6 + 1) | 1  # ensure odd
-            s = cv2.GaussianBlur(s, (ksize, ksize), sigma)
 
         # Heatmap layer — drawn as a semi-transparent QPixmap over the original
         if ms["heatmap_enabled"]:
@@ -751,11 +753,12 @@ class AnnoMateWindow(QWidget):
     # Inference signal slots
     # ------------------------------------------------------------------ #
 
-    def _on_inference_result(self, path: str, score_map) -> None:
-        self.inference_model.set_score_map(path, score_map)
+    def _on_inference_result(self, path: str, score: float, score_map) -> None:
+        self.inference_model.set_score_map(path, score, score_map)
         row = self._row_for_path(path)
         if row >= 0:
-            self.right_panel.navigator_set_processed(row, True)
+            label = self.inference_model.get_label(path)
+            self.right_panel.navigator_set_inference(row, score, label)
         if row == self._current_row and self._microsentry_enabled:
             self._refresh_canvas_render()
 
@@ -765,7 +768,6 @@ class AnnoMateWindow(QWidget):
 
     def _on_inference_batch_done(self) -> None:
         self.status_bar.clear_inference_progress()
-        self.right_panel.refresh_navigator_processed()
 
     def _on_ai_polygon_clicked(self, idx: int, view_pos: QPointF) -> None:
         self._selected_ai_idx = idx

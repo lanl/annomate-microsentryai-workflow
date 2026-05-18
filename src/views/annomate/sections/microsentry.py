@@ -8,7 +8,6 @@ Layout (when model loaded):
   [Segmentation] toggle  +  Threshold slider
   [Accept AI Polygons] button
   ▸ Advanced Settings (collapsible)
-      Smoothing slider
       Simplify Tolerance slider
       Heatmap Minimum slider
 """
@@ -189,17 +188,6 @@ class MicrosentrySection(QWidget):
         aw.setContentsMargins(8, 0, 0, 0)
         aw.setSpacing(4)
 
-        self._sigma_val = QLabel("4")
-        self._sigma_val.setStyleSheet("font-size: 11px;")
-        self._sigma_val.setFixedWidth(30)
-        self._sigma = QSlider(Qt.Horizontal)
-        self._sigma.setRange(0, 16)
-        self._sigma.setValue(4)
-        self._sigma.valueChanged.connect(
-            lambda v: (self._sigma_val.setText(str(v)), self._debounce.start())
-        )
-        aw.addWidget(_slider_row("Smoothing", self._sigma_val, self._sigma))
-
         self._epsilon_val = QLabel("12")
         self._epsilon_val.setStyleSheet("font-size: 11px;")
         self._epsilon_val.setFixedWidth(30)
@@ -265,7 +253,6 @@ class MicrosentrySection(QWidget):
             "seg_enabled": self._btn_seg.isChecked(),
             "seg_pct": self._thresh.value(),
             "alpha": self._alpha.value() / 100.0,
-            "sigma": self._sigma.value(),
             "epsilon": self._epsilon.value(),
             "heat_min": self._heat_min.value(),
         }

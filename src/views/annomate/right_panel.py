@@ -176,8 +176,8 @@ class RightPanel(QWidget):
         """Fully hide the Microsentry section."""
         self._ms_collapsible.setVisible(False)
 
-    def navigator_set_processed(self, row: int, processed: bool) -> None:
-        self.navigator.set_row_processed(row, processed)
+    def navigator_set_inference(self, row: int, score: float, label: str) -> None:
+        self.navigator.set_row_inference(row, score, label)
 
-    def refresh_navigator_processed(self) -> None:
-        self.navigator.refresh_all_processed()
+    def navigator_set_microsentry_mode(self, enabled: bool) -> None:
+        self.navigator.set_microsentry_mode(enabled)

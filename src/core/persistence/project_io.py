@@ -131,7 +131,8 @@ class ProjectIO:
                 if fname in dataset_state.review_decisions
             },
             "inference": {
-                "score_cache": dict(inference_state.inference_cache),
+                "score_cache": dict(inference_state.scores),
+                "label_cache": dict(inference_state.labels),
                 "score_maps_file": score_maps_file,
                 "model_path": self._make_relative_if_inside(model_path, project_dir),
             },
@@ -258,9 +259,11 @@ class ProjectIO:
         validation_state.pred_path = vdata.get("pred_path", "")
         validation_state.eval_out_path = vdata.get("eval_out_path", "")
 
-        # Inference cache (float scores only — fast to restore)
+        # Inference scores, labels, and cache (fast restore — no NPZ needed)
         inf_data = project_data.get("inference", {})
-        inference_state.inference_cache = dict(inf_data.get("score_cache", {}))
+        inference_state.scores = dict(inf_data.get("score_cache", {}))
+        inference_state.labels = dict(inf_data.get("label_cache", {}))
+        inference_state.inference_cache = dict(inference_state.scores)
 
         # Score maps from NPZ (optional)
         npz_path = project_data.get("_resolved_npz_path", "")

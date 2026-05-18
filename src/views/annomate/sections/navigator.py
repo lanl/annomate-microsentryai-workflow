@@ -29,6 +29,8 @@ _DOT_W = 10
 _ANNOTS_W = 46
 _DECISION_W = 58
 _IMG_MIN_W = 50
+_SCORE_W = 52
+_CLASS_W = 62
 
 
 def _set_decision_label(lbl: QLabel, decision) -> None:
@@ -44,7 +46,7 @@ def _set_decision_label(lbl: QLabel, decision) -> None:
 
 
 class _NavigatorRow(QWidget):
-    """Single image row: status dot | filename | annot count | decision."""
+    """Single image row: status dot | filename | annot count | decision | score | class."""
 
     row_clicked = Signal(int)
 
@@ -97,6 +99,20 @@ class _NavigatorRow(QWidget):
         _set_decision_label(self._decision_lbl, decision)
         h.addWidget(self._decision_lbl)
 
+        # Score (hidden until MicroSentry mode is enabled)
+        self._score_lbl = QLabel("")
+        self._score_lbl.setFixedWidth(_SCORE_W)
+        self._score_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._score_lbl.setVisible(False)
+        h.addWidget(self._score_lbl)
+
+        # Classification label (hidden until MicroSentry mode is enabled)
+        self._class_lbl = QLabel("")
+        self._class_lbl.setFixedWidth(_CLASS_W)
+        self._class_lbl.setAlignment(Qt.AlignCenter)
+        self._class_lbl.setVisible(False)
+        h.addWidget(self._class_lbl)
+
     # ── Update helpers ────────────────────────────────────────────────────────
 
     def update_dot(self, color: str) -> None:
@@ -109,6 +125,21 @@ class _NavigatorRow(QWidget):
 
     def update_decision(self, decision) -> None:
         _set_decision_label(self._decision_lbl, decision)
+
+    def update_inference(self, score: float | None, label: str | None) -> None:
+        if score is None:
+            self._score_lbl.setText("")
+            self._class_lbl.setText("")
+            self._class_lbl.setStyleSheet("")
+        else:
+            self._score_lbl.setText(f"{score:.2f}")
+            self._class_lbl.setText(label or "")
+            color = "#f44336" if label == "ANOMALY" else "#4caf50"
+            self._class_lbl.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+    def set_inference_visible(self, visible: bool) -> None:
+        self._score_lbl.setVisible(visible)
+        self._class_lbl.setVisible(visible)
 
     def set_selected(self, selected: bool) -> None:
         if selected:
@@ -152,6 +183,7 @@ class DataNavigatorSection(QWidget):
         self.inference_model = inference_model
         self._row_widgets: list = []
         self._selected_row: int = -1
+        self._microsentry_mode: bool = False
         self._init_ui()
         self.dataset_model.modelReset.connect(self._rebuild_list)
         self.dataset_model.dataChanged.connect(self._on_data_changed)
@@ -221,6 +253,20 @@ class DataNavigatorSection(QWidget):
         lbl_decision.setAlignment(Qt.AlignCenter)
         lbl_decision.setStyleSheet("font-size: 12px; font-weight: bold;")
         header_h.addWidget(lbl_decision)
+
+        self._lbl_score = QLabel("Score")
+        self._lbl_score.setFixedWidth(_SCORE_W)
+        self._lbl_score.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._lbl_score.setStyleSheet("font-size: 12px; font-weight: bold;")
+        self._lbl_score.setVisible(False)
+        header_h.addWidget(self._lbl_score)
+
+        self._lbl_class = QLabel("Class")
+        self._lbl_class.setFixedWidth(_CLASS_W)
+        self._lbl_class.setAlignment(Qt.AlignCenter)
+        self._lbl_class.setStyleSheet("font-size: 12px; font-weight: bold;")
+        self._lbl_class.setVisible(False)
+        header_h.addWidget(self._lbl_class)
 
         self._header.setVisible(False)
         layout.addWidget(self._header)
@@ -293,6 +339,15 @@ class DataNavigatorSection(QWidget):
                 self._rows_container,
             )
             row_w.row_clicked.connect(self._on_row_clicked)
+
+            if self._microsentry_mode:
+                row_w.set_inference_visible(True)
+                if self.inference_model:
+                    image_path = self.dataset_model.get_image_path(row)
+                    score = self.inference_model.get_score(image_path)
+                    label = self.inference_model.get_label(image_path)
+                    row_w.update_inference(score, label)
+
             self._row_widgets.append(row_w)
             self._rows_layout.insertWidget(self._rows_layout.count() - 1, row_w)
 
@@ -332,8 +387,33 @@ class DataNavigatorSection(QWidget):
         if total > 0:
             self._lbl_counter.setText(f"{current + 1} / {total}")
 
-    def set_row_processed(self, row: int, processed: bool) -> None:
-        """No-op — AI processing is shown in the status bar, not per row."""
+    def set_row_inference(self, row: int, score: float, label: str) -> None:
+        """Update the Score and Class cells for a single row.
 
-    def refresh_all_processed(self) -> None:
-        """No-op — AI processing is shown in the status bar, not per row."""
+        Args:
+            row (int): Row index in the navigator.
+            score (float): Normalized anomaly score [0, 1].
+            label (str): Classification label — ``"ANOMALY"`` or ``"NORMAL"``.
+        """
+        if row < len(self._row_widgets):
+            self._row_widgets[row].update_inference(score, label)
+
+    def set_microsentry_mode(self, enabled: bool) -> None:
+        """Show or hide the Score and Class columns across all rows and the header.
+
+        When enabling, reads any already-processed inference data from
+        ``inference_model`` and populates existing rows immediately.
+
+        Args:
+            enabled (bool): ``True`` to show the columns, ``False`` to hide.
+        """
+        self._microsentry_mode = enabled
+        self._lbl_score.setVisible(enabled)
+        self._lbl_class.setVisible(enabled)
+        for row, rw in enumerate(self._row_widgets):
+            rw.set_inference_visible(enabled)
+            if enabled and self.inference_model:
+                image_path = self.dataset_model.get_image_path(row)
+                score = self.inference_model.get_score(image_path)
+                label = self.inference_model.get_label(image_path)
+                rw.update_inference(score, label)

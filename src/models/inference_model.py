@@ -24,14 +24,15 @@ class InferenceModel:
         """
         self.state = state
 
-    def set_score_map(self, filename: str, score_map: np.ndarray) -> None:
-        """Store a score map for the given image filename.
+    def set_score_map(self, filename: str, score: float, score_map: np.ndarray) -> None:
+        """Store a score map, the actual pred_score, and its classification label.
 
         Args:
             filename (str): Image filename used as the storage key.
+            score (float): Normalized anomaly score [0, 1] from the model's PostProcessor.
             score_map (np.ndarray): 2-D heatmap array of anomaly scores.
         """
-        self.state.set_score_map(filename, score_map)
+        self.state.set_score_map(filename, score, score_map)
 
     def get_score_map(self, filename: str) -> np.ndarray | None:
         """Return the stored score map for the given filename.
@@ -56,6 +57,28 @@ class InferenceModel:
                 ``False`` otherwise.
         """
         return self.state.is_processed(filename)
+
+    def get_score(self, filename: str) -> float | None:
+        """Return the normalized anomaly score [0,1] for the given image, or None.
+
+        Args:
+            filename (str): Image filename to look up.
+
+        Returns:
+            float | None: The pred_score, or ``None`` if not yet processed.
+        """
+        return self.state.scores.get(filename)
+
+    def get_label(self, filename: str) -> str | None:
+        """Return the classification label for the given image, or None.
+
+        Args:
+            filename (str): Image filename to look up.
+
+        Returns:
+            str | None: ``"ANOMALY"`` or ``"NORMAL"``, or ``None`` if not yet processed.
+        """
+        return self.state.labels.get(filename)
 
     def get_processed_count(self) -> int:
         """Return the number of images that have been processed.
