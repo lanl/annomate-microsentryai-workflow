@@ -9,14 +9,16 @@ import os
 
 import cv2
 import numpy as np
-from PySide6.QtCore import Qt, QEvent, QPointF, Signal
+from PySide6.QtCore import Qt, QEvent, QPointF, QTimer, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QWidget,
     QFrame,
     QVBoxLayout,
+    QLabel,
     QSizePolicy,
     QToolButton,
+    QPushButton,
     QFileDialog,
     QMessageBox,
     QHBoxLayout,
@@ -173,6 +175,148 @@ class _ReviewBar(QFrame):
         self.move(max(0, x), self._MARGIN)
 
 
+class _ProjectStartScreen(QFrame):
+    """Centered empty-state panel shown before a project or image folder is loaded."""
+
+    new_project_requested = Signal()
+    open_project_requested = Signal()
+    open_image_folder_requested = Signal()
+    open_recent_project_requested = Signal(str)
+    open_recent_image_folder_requested = Signal(str)
+
+    def __init__(self, parent: QWidget = None) -> None:
+        super().__init__(parent)
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setAutoFillBackground(True)
+        self.setObjectName("ProjectStartScreen")
+        self.setStyleSheet(
+            """
+            QFrame#ProjectStartScreen {
+                border-radius: 10px;
+            }
+            QLabel#ProjectStartTitle {
+                font-size: 22px;
+                font-weight: bold;
+            }
+            QLabel#ProjectStartBody {
+                font-size: 13px;
+            }
+            QPushButton {
+                min-height: 30px;
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            """
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(12)
+
+        title = QLabel("Start a project")
+        title.setObjectName("ProjectStartTitle")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        body = QLabel(
+            "Open an existing .annoproj project, load a folder of images, "
+            "or start a fresh annotation session."
+        )
+        body.setObjectName("ProjectStartBody")
+        body.setAlignment(Qt.AlignCenter)
+        body.setWordWrap(True)
+        layout.addWidget(body)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+
+        btn_open_project = QPushButton("Open Project")
+        btn_open_project.setToolTip("Open an existing .annoproj project")
+        btn_open_project.clicked.connect(
+            lambda: QTimer.singleShot(0, self.open_project_requested.emit)
+        )
+        btn_row.addWidget(btn_open_project)
+
+        btn_open_images = QPushButton("Open Image Folder")
+        btn_open_images.setToolTip("Load images from a local folder")
+        btn_open_images.clicked.connect(
+            lambda: QTimer.singleShot(0, self.open_image_folder_requested.emit)
+        )
+        btn_row.addWidget(btn_open_images)
+
+        btn_new = QPushButton("New Project")
+        btn_new.setToolTip("Start a new blank project")
+        btn_new.clicked.connect(
+            lambda: QTimer.singleShot(0, self.new_project_requested.emit)
+        )
+        btn_row.addWidget(btn_new)
+
+        layout.addLayout(btn_row)
+
+        self._recent_label = QLabel("Recent")
+        self._recent_label.setObjectName("ProjectStartBody")
+        self._recent_label.setStyleSheet("font-weight: bold;")
+        layout.addWidget(self._recent_label)
+
+        recent_row = QHBoxLayout()
+        recent_row.setSpacing(8)
+
+        self._recent_project_path = ""
+        self._btn_recent_project = QPushButton("Open Last Project")
+        self._btn_recent_project.clicked.connect(self._open_recent_project)
+        recent_row.addWidget(self._btn_recent_project)
+
+        self._recent_image_dir = ""
+        self._btn_recent_images = QPushButton("Open Last Image Folder")
+        self._btn_recent_images.clicked.connect(self._open_recent_images)
+        recent_row.addWidget(self._btn_recent_images)
+
+        layout.addLayout(recent_row)
+        self.set_recent_actions("", "")
+        self.adjustSize()
+
+    def set_recent_actions(self, project_path: str, image_dir: str) -> None:
+        """Show shortcuts to the last opened project and image folder."""
+        self._recent_project_path = project_path or ""
+        self._recent_image_dir = image_dir or ""
+
+        has_project = bool(self._recent_project_path)
+        has_images = bool(self._recent_image_dir)
+        self._recent_label.setVisible(has_project or has_images)
+        self._btn_recent_project.setVisible(has_project)
+        self._btn_recent_images.setVisible(has_images)
+
+        if has_project:
+            name = os.path.basename(self._recent_project_path)
+            self._btn_recent_project.setText(f"Last Project: {name}")
+            self._btn_recent_project.setToolTip(self._recent_project_path)
+
+        if has_images:
+            name = os.path.basename(os.path.normpath(self._recent_image_dir))
+            self._btn_recent_images.setText(f"Last Image Folder: {name}")
+            self._btn_recent_images.setToolTip(self._recent_image_dir)
+
+        self.adjustSize()
+
+    def _open_recent_project(self) -> None:
+        if self._recent_project_path:
+            QTimer.singleShot(
+                0,
+                lambda: self.open_recent_project_requested.emit(
+                    self._recent_project_path
+                ),
+            )
+
+    def _open_recent_images(self) -> None:
+        if self._recent_image_dir:
+            QTimer.singleShot(
+                0,
+                lambda: self.open_recent_image_folder_requested.emit(
+                    self._recent_image_dir
+                ),
+            )
+
+
 class _ZoomToolbar(QFrame):
     """Floating vertical toolbar with zoom-in, zoom-out, and reset-view buttons."""
 
@@ -222,6 +366,12 @@ class AnnoMateWindow(QWidget):
         io_controller: IOController instance.
         parent: Optional Qt parent widget.
     """
+
+    new_project_requested = Signal()
+    open_project_requested = Signal()
+    open_image_folder_requested = Signal()
+    open_recent_project_requested = Signal(str)
+    open_recent_image_folder_requested = Signal(str)
 
     def __init__(
         self,
@@ -323,6 +473,7 @@ class AnnoMateWindow(QWidget):
 
         self.status_bar = AnnoMateStatusBar(self)
         root.addWidget(self.status_bar)
+        self._set_start_screen_visible(self.dataset_model.rowCount() == 0)
 
     def _build_workspace(self) -> QWidget:
         workspace = QWidget()
@@ -342,6 +493,24 @@ class AnnoMateWindow(QWidget):
         self.canvas = ImageLabel(self)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         splitter.addWidget(self.canvas)
+
+        self._start_screen = _ProjectStartScreen(self.canvas)
+        self._start_screen.new_project_requested.connect(
+            self.new_project_requested.emit
+        )
+        self._start_screen.open_project_requested.connect(
+            self.open_project_requested.emit
+        )
+        self._start_screen.open_image_folder_requested.connect(
+            self.open_image_folder_requested.emit
+        )
+        self._start_screen.open_recent_project_requested.connect(
+            self.open_recent_project_requested.emit
+        )
+        self._start_screen.open_recent_image_folder_requested.connect(
+            self.open_recent_image_folder_requested.emit
+        )
+        self._start_screen.raise_()
 
         self._zoom_toolbar = _ZoomToolbar(self.canvas, self.canvas)
         self._zoom_toolbar.raise_()
@@ -372,12 +541,37 @@ class AnnoMateWindow(QWidget):
         super().showEvent(event)
         self._zoom_toolbar.reposition(self.canvas.size())
         self._review_bar.reposition(self.canvas.size())
+        self._reposition_start_screen()
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.canvas and event.type() == QEvent.Resize:
             self._zoom_toolbar.reposition(event.size())
             self._review_bar.reposition(event.size())
+            self._reposition_start_screen()
         return super().eventFilter(obj, event)
+
+    def _set_start_screen_visible(self, visible: bool) -> None:
+        """Show the project start panel only while no dataset is loaded."""
+        self._start_screen.setVisible(visible)
+        if visible:
+            self._start_screen.raise_()
+            self._reposition_start_screen()
+
+    def set_project_start_state(self, last_project: str, last_image_dir: str) -> None:
+        """Update start-screen recent actions."""
+        self._start_screen.set_recent_actions(last_project, last_image_dir)
+        self._reposition_start_screen()
+
+    def _reposition_start_screen(self) -> None:
+        """Keep the empty-state panel centered in the canvas area."""
+        if not hasattr(self, "_start_screen"):
+            return
+        width = min(520, max(360, self.canvas.width() - 80))
+        self._start_screen.setFixedWidth(width)
+        self._start_screen.adjustSize()
+        x = max(0, (self.canvas.width() - self._start_screen.width()) // 2)
+        y = max(24, (self.canvas.height() - self._start_screen.height()) // 2)
+        self._start_screen.move(x, y)
 
     # ------------------------------------------------------------------ #
     # Navigation slots
@@ -397,11 +591,13 @@ class AnnoMateWindow(QWidget):
             self.canvas.clear_image()
             self.right_panel.set_current_row(-1)
             self.status_bar.set_class("")
+            self._set_start_screen_visible(True)
 
     def _load_row(self, row: int) -> None:
         bgr = self.io_controller.load_image_for_display(row)
         if bgr is None:
             return
+        self._set_start_screen_visible(False)
         self._current_bgr = bgr
         self._current_row = row
         self._review_bar.set_decision(self.dataset_model.get_review_decision(row))
