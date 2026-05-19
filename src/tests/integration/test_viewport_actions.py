@@ -116,3 +116,38 @@ def test_settings_controls_update_calibration_model(canvas, calibrated_model, qt
     assert calibrated_model.is_calibrated() is False
     assert not bar._btn_measure.isEnabled()
     assert not bar._grid_chk.isEnabled()
+
+
+def test_center_crop_controls_update_canvas(canvas, calibrated_model, qtbot):
+    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
+    bar.set_image_dimensions(100, 100)
+    qtbot.addWidget(bar)
+
+    assert not canvas.center_crop_settings()["enabled"]
+
+    qtbot.mouseClick(bar._crop_chk, Qt.LeftButton)
+    bar._crop_width_spin.setValue(40)
+    bar._crop_height_spin.setValue(30)
+    bar._crop_shape_combo.setCurrentText("Circle")
+    bar._crop_height_spin.setValue(15)
+    bar._crop_opacity_slider.setValue(80)
+
+    settings = canvas.center_crop_settings()
+    assert settings["enabled"] is True
+    assert settings["width"] == 30
+    assert settings["height"] == 30
+    assert settings["shape"] == "circle"
+    assert settings["opacity"] == 0.8
+    assert bar._crop_width_spin.value() == 30
+    assert bar._crop_height_spin.value() == 15
+
+
+def test_center_crop_defaults_to_605px_radius(qtbot):
+    widget = ImageLabel()
+    widget.set_image(np.zeros((1500, 1500, 3), dtype=np.uint8))
+    qtbot.addWidget(widget)
+
+    settings = widget.center_crop_settings()
+    assert settings["shape"] == "circle"
+    assert settings["width"] == 1210
+    assert settings["height"] == 1210
