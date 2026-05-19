@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 
 
-from PySide6.QtCore import Qt, QPointF, QRect, Signal
+from PySide6.QtCore import Qt, QPointF, QRect, QRectF, Signal
 from PySide6.QtGui import (
     QPainter,
     QPen,
@@ -26,6 +26,7 @@ from PySide6.QtGui import (
     QWheelEvent,
     QKeyEvent,
     QPaintEvent,
+    QPainterPath,
 )
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
@@ -96,6 +97,11 @@ class ImageLabel(QLabel):
         self._display_qpix: Optional[QPixmap] = None
         self._heatmap_pix: Optional[QPixmap] = None
         self._heatmap_alpha: float = 0.0
+        self._center_crop_enabled: bool = False
+        self._center_crop_shape: str = "circle"
+        self._center_crop_width: Optional[int] = None
+        self._center_crop_height: Optional[int] = None
+        self._center_crop_opacity: float = 0.37
 
         self._base_scale = 1.0
         self._zoom = 1.0
@@ -184,6 +190,7 @@ class ImageLabel(QLabel):
         self._pending_calib_pts = []
         if self._calib_model is not None:
             self._calib_model.clear_measurement()
+        self._ensure_center_crop_defaults(w, h)
 
         self.update()
 
@@ -245,6 +252,9 @@ class ImageLabel(QLabel):
         self._heatmap_alpha = 0.0
         self._zoom = 1.0
         self._pan = QPointF(0, 0)
+        self._center_crop_enabled = False
+        self._center_crop_width = None
+        self._center_crop_height = None
         self.current_polygon_points.clear()
         self._overlays = []
         self._ai_overlays = []
@@ -300,6 +310,61 @@ class ImageLabel(QLabel):
         """
         self._line_thickness = thickness
         self.update()
+
+    def set_center_crop(
+        self,
+        enabled: Optional[bool] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        shape: Optional[str] = None,
+        opacity: Optional[float] = None,
+    ) -> None:
+        """Set the centered crop preview mask drawn over the image.
+
+        Dimensions are in original image pixels. This is a view overlay only;
+        it does not mutate image data or annotations.
+        """
+        if self._orig_image_bgr is not None:
+            img_h, img_w = self._orig_image_bgr.shape[:2]
+            self._ensure_center_crop_defaults(img_w, img_h)
+        else:
+            img_w = img_h = None
+
+        if enabled is not None:
+            self._center_crop_enabled = bool(enabled)
+        if shape is not None:
+            self._center_crop_shape = (
+                shape if shape in ("rectangle", "circle") else "rectangle"
+            )
+        if width is not None:
+            max_w = img_w if img_w is not None else max(1, width)
+            self._center_crop_width = max(1, min(int(width), max_w))
+        if height is not None:
+            max_h = img_h if img_h is not None else max(1, height)
+            self._center_crop_height = max(1, min(int(height), max_h))
+        if opacity is not None:
+            self._center_crop_opacity = max(0.0, min(1.0, float(opacity)))
+        self.update()
+
+    def center_crop_settings(self) -> dict:
+        """Return the current center crop preview settings."""
+        return {
+            "enabled": self._center_crop_enabled,
+            "shape": self._center_crop_shape,
+            "width": self._center_crop_width,
+            "height": self._center_crop_height,
+            "opacity": self._center_crop_opacity,
+        }
+
+    def _ensure_center_crop_defaults(self, img_w: int, img_h: int) -> None:
+        if self._center_crop_width is None:
+            self._center_crop_width = max(1, min(1210, img_w, img_h))
+        else:
+            self._center_crop_width = max(1, min(self._center_crop_width, img_w))
+        if self._center_crop_height is None:
+            self._center_crop_height = max(1, min(1210, img_w, img_h))
+        else:
+            self._center_crop_height = max(1, min(self._center_crop_height, img_h))
 
     def set_overlays(
         self, poly_list: List[Tuple[List[Tuple[float, float]], QColor]]
@@ -1028,6 +1093,8 @@ class ImageLabel(QLabel):
             painter.drawPixmap(0, 0, self._heatmap_pix)
             painter.setOpacity(1.0)
 
+        self._paint_center_crop(painter)
+
         # Draw SAM bounding-box rubber-band while the user is dragging
         if (
             self.current_tool == SAM_BBOX
@@ -1129,3 +1196,46 @@ class ImageLabel(QLabel):
         # Switch to screen coordinates for the viewport-fixed grid
         painter.resetTransform()
         self._paint_grid(painter)
+
+    def _paint_center_crop(self, painter: QPainter) -> None:
+        """Dim everything outside the configured center crop preview."""
+        if (
+            not self._center_crop_enabled
+            or self._display_qpix is None
+            or self._orig_image_bgr is None
+        ):
+            return
+        img_h, img_w = self._orig_image_bgr.shape[:2]
+        self._ensure_center_crop_defaults(img_w, img_h)
+        crop_w = min(self._center_crop_width or img_w, img_w)
+        crop_h = min(self._center_crop_height or img_h, img_h)
+        if self._center_crop_shape == "circle":
+            diameter = min(crop_w, crop_h)
+            crop_w = crop_h = diameter
+
+        x = ((img_w - crop_w) / 2.0) * self._base_scale
+        y = ((img_h - crop_h) / 2.0) * self._base_scale
+        w = crop_w * self._base_scale
+        h = crop_h * self._base_scale
+        crop_rect = QRectF(x, y, w, h)
+        image_rect = QRectF(0, 0, self._display_qpix.width(), self._display_qpix.height())
+
+        outside = QPainterPath()
+        outside.setFillRule(Qt.OddEvenFill)
+        outside.addRect(image_rect)
+        if self._center_crop_shape == "circle":
+            outside.addEllipse(crop_rect)
+        else:
+            outside.addRect(crop_rect)
+
+        painter.save()
+        painter.fillPath(outside, QColor(0, 0, 0, int(self._center_crop_opacity * 255)))
+        pen = QPen(QColor(255, 255, 255), 1.5 / self._zoom, Qt.DashLine)
+        pen.setDashPattern([6, 4])
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        if self._center_crop_shape == "circle":
+            painter.drawEllipse(crop_rect)
+        else:
+            painter.drawRect(crop_rect)
+        painter.restore()
