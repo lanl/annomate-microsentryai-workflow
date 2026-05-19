@@ -131,6 +131,7 @@ def test_center_crop_controls_update_canvas(canvas, calibrated_model, qtbot):
     bar._crop_shape_combo.setCurrentText("Circle")
     bar._crop_height_spin.setValue(15)
     bar._crop_opacity_slider.setValue(80)
+    bar._crop_center_dot_chk.setChecked(True)
 
     settings = canvas.center_crop_settings()
     assert settings["enabled"] is True
@@ -138,6 +139,7 @@ def test_center_crop_controls_update_canvas(canvas, calibrated_model, qtbot):
     assert settings["height"] == 30
     assert settings["shape"] == "circle"
     assert settings["opacity"] == 0.8
+    assert settings["center_dot"] is True
     assert bar._crop_width_spin.value() == 30
     assert bar._crop_height_spin.value() == 15
 
@@ -170,4 +172,5 @@ def test_center_crop_reset_restores_defaults(canvas, calibrated_model, qtbot):
     assert settings["width"] == 1210
     assert settings["height"] == 1210
     assert settings["opacity"] == 0.37
+    assert settings["center_dot"] is False
     assert bar._crop_height_spin.value() == 605

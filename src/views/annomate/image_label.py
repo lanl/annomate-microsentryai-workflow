@@ -102,6 +102,7 @@ class ImageLabel(QLabel):
         self._center_crop_width: Optional[int] = None
         self._center_crop_height: Optional[int] = None
         self._center_crop_opacity: float = 0.37
+        self._center_crop_dot_visible: bool = False
 
         self._base_scale = 1.0
         self._zoom = 1.0
@@ -318,6 +319,7 @@ class ImageLabel(QLabel):
         height: Optional[int] = None,
         shape: Optional[str] = None,
         opacity: Optional[float] = None,
+        center_dot: Optional[bool] = None,
     ) -> None:
         """Set the centered crop preview mask drawn over the image.
 
@@ -342,6 +344,8 @@ class ImageLabel(QLabel):
             self._center_crop_height = max(1, int(height))
         if opacity is not None:
             self._center_crop_opacity = max(0.0, min(1.0, float(opacity)))
+        if center_dot is not None:
+            self._center_crop_dot_visible = bool(center_dot)
         self.update()
 
     def center_crop_settings(self) -> dict:
@@ -352,6 +356,7 @@ class ImageLabel(QLabel):
             "width": self._center_crop_width,
             "height": self._center_crop_height,
             "opacity": self._center_crop_opacity,
+            "center_dot": self._center_crop_dot_visible,
         }
 
     def _ensure_center_crop_defaults(self, img_w: int, img_h: int) -> None:
@@ -1235,4 +1240,11 @@ class ImageLabel(QLabel):
             painter.drawEllipse(crop_rect)
         else:
             painter.drawRect(crop_rect)
+        if self._center_crop_dot_visible:
+            cx = (img_w / 2.0) * self._base_scale
+            cy = (img_h / 2.0) * self._base_scale
+            radius = 4.0 / self._zoom
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(QColor(255, 0, 0, 170)))
+            painter.drawEllipse(QPointF(cx, cy), radius, radius)
         painter.restore()
