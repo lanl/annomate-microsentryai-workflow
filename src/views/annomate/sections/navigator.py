@@ -225,7 +225,9 @@ class DataNavigatorSection(QWidget):
         self._selected_row = -1
         if has_images:
             total = self.dataset_model.rowCount()
-            self._lbl_counter.setText(f"{total} image{'s' if total != 1 else ''} loaded")
+            self._lbl_counter.setText(
+                f"{total} image{'s' if total != 1 else ''} loaded"
+            )
         else:
             self._lbl_counter.setText("No images loaded")
         self._sync_visible_columns()
@@ -258,7 +260,10 @@ class DataNavigatorSection(QWidget):
         return proxy_index.row() if proxy_index.isValid() else -1
 
     def _on_column_toggled(self, column: int, checked: bool) -> None:
-        if not checked and self._table.horizontalHeader().sortIndicatorSection() == column:
+        if (
+            not checked
+            and self._table.horizontalHeader().sortIndicatorSection() == column
+        ):
             self._table.sortByColumn(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
         self._sync_visible_columns()
 
@@ -279,15 +284,13 @@ class DataNavigatorSection(QWidget):
         self._table.setColumnHidden(
             NavigatorColumns.SCORE,
             not (
-                self._microsentry_mode
-                and self._column_enabled(NavigatorColumns.SCORE)
+                self._microsentry_mode and self._column_enabled(NavigatorColumns.SCORE)
             ),
         )
         self._table.setColumnHidden(
             NavigatorColumns.CLASS,
             not (
-                self._microsentry_mode
-                and self._column_enabled(NavigatorColumns.CLASS)
+                self._microsentry_mode and self._column_enabled(NavigatorColumns.CLASS)
             ),
         )
 

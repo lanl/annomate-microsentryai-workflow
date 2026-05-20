@@ -53,7 +53,9 @@ class TestNavigatorTableModel:
         assert model.data(model.index(0, NavigatorColumns.ANNOTS)) == "1"
         assert model.data(model.index(0, NavigatorColumns.DECISION)) == "Reject"
 
-    def test_inference_values_and_missing_score(self, dataset_model, inference_model, tmp_path):
+    def test_inference_values_and_missing_score(
+        self, dataset_model, inference_model, tmp_path
+    ):
         inference_model.set_score_map(
             str(tmp_path / "a.jpg"), 0.72, np.zeros((2, 2), dtype=np.float32)
         )

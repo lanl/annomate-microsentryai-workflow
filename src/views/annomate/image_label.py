@@ -131,7 +131,7 @@ class ImageLabel(QLabel):
         )
 
         # --- Calibration / measure tool state ---
-        self._calib_model = None   # CalibrationModel; set via set_calibration_model()
+        self._calib_model = None  # CalibrationModel; set via set_calibration_model()
         self._pending_calib_pts: list = []  # accumulates up to 2 original-coord tuples
 
     def set_image(self, bgr: np.ndarray, max_display_dim: int = 1200) -> None:
@@ -280,7 +280,10 @@ class ImageLabel(QLabel):
             self._sam_bbox_start = None
             self._sam_bbox_end = None
             self._sam_ghost = None
-        if self.current_tool in (CALIBRATE, MEASURE) and tool_name not in (CALIBRATE, MEASURE):
+        if self.current_tool in (CALIBRATE, MEASURE) and tool_name not in (
+            CALIBRATE,
+            MEASURE,
+        ):
             self._pending_calib_pts = []
             if self._calib_model is not None:
                 self._calib_model.clear_measurement()
@@ -1001,8 +1004,8 @@ class ImageLabel(QLabel):
         # Pending calibration clicks (local state, not yet in model)
         dot_color = QColor(255, 107, 107)
         r = 6.0 / self._zoom
-        pen = QPen(dot_color, 1.5 / self._zoom)
-        text_pen = QPen(dot_color)
+        QPen(dot_color, 1.5 / self._zoom)
+        QPen(dot_color)
         f = painter.font()
         f.setPointSizeF(max(7.0, 9.0 / self._zoom))
         painter.setFont(f)
@@ -1022,8 +1025,14 @@ class ImageLabel(QLabel):
             painter.drawText(QPointF(cx + r + 2.0 / self._zoom, cy - r), label)
 
         if len(pts_to_draw) == 2:
-            p1d = QPointF(pts_to_draw[0][0] * self._base_scale, pts_to_draw[0][1] * self._base_scale)
-            p2d = QPointF(pts_to_draw[1][0] * self._base_scale, pts_to_draw[1][1] * self._base_scale)
+            p1d = QPointF(
+                pts_to_draw[0][0] * self._base_scale,
+                pts_to_draw[0][1] * self._base_scale,
+            )
+            p2d = QPointF(
+                pts_to_draw[1][0] * self._base_scale,
+                pts_to_draw[1][1] * self._base_scale,
+            )
             dash_pen = QPen(dot_color, 1.5 / self._zoom, Qt.DashLine)
             dash_pen.setDashPattern([6, 4])
             painter.setPen(dash_pen)
@@ -1050,8 +1059,12 @@ class ImageLabel(QLabel):
             painter.drawEllipse(QPointF(cx, cy), 1.5 / self._zoom, 1.5 / self._zoom)
 
         if len(meas_pts) == 2:
-            p1d = QPointF(meas_pts[0][0] * self._base_scale, meas_pts[0][1] * self._base_scale)
-            p2d = QPointF(meas_pts[1][0] * self._base_scale, meas_pts[1][1] * self._base_scale)
+            p1d = QPointF(
+                meas_pts[0][0] * self._base_scale, meas_pts[0][1] * self._base_scale
+            )
+            p2d = QPointF(
+                meas_pts[1][0] * self._base_scale, meas_pts[1][1] * self._base_scale
+            )
             painter.setPen(QPen(meas_color, 1.5 / self._zoom))
             painter.setBrush(Qt.NoBrush)
             painter.drawLine(p1d, p2d)
@@ -1066,7 +1079,9 @@ class ImageLabel(QLabel):
                 painter.setPen(QPen(meas_color))
                 painter.drawText(QPointF(mx, my), f"{dist:.3f} {m.unit()}")
         elif len(meas_pts) == 1 and self.current_tool == MEASURE and self._mouse_pos:
-            p1d = QPointF(meas_pts[0][0] * self._base_scale, meas_pts[0][1] * self._base_scale)
+            p1d = QPointF(
+                meas_pts[0][0] * self._base_scale, meas_pts[0][1] * self._base_scale
+            )
             cursor_disp = self.view_to_display(self._mouse_pos)
             dash_pen = QPen(meas_color, 1.0 / self._zoom, Qt.DashLine)
             dash_pen.setDashPattern([4, 4])
@@ -1221,7 +1236,9 @@ class ImageLabel(QLabel):
         w = crop_w * self._base_scale
         h = crop_h * self._base_scale
         crop_rect = QRectF(x, y, w, h)
-        image_rect = QRectF(0, 0, self._display_qpix.width(), self._display_qpix.height())
+        image_rect = QRectF(
+            0, 0, self._display_qpix.width(), self._display_qpix.height()
+        )
 
         outside = QPainterPath()
         outside.setFillRule(Qt.OddEvenFill)

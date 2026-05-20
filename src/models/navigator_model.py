@@ -164,7 +164,9 @@ class NavigatorTableModel(QAbstractTableModel):
             count = self._dataset_model.get_annotation_count(row)
             return str(count) if count > 0 else ""
         if col == NavigatorColumns.DECISION:
-            return _DECISION_LABELS.get(self._dataset_model.get_review_decision(row), "")
+            return _DECISION_LABELS.get(
+                self._dataset_model.get_review_decision(row), ""
+            )
         if col == NavigatorColumns.SCORE:
             score = self._score(row)
             return "" if score is None else f"{score:.2f}"
@@ -190,7 +192,9 @@ class NavigatorTableModel(QAbstractTableModel):
         return Qt.AlignLeft | Qt.AlignVCenter
 
     def _font(self, row: int, col: int) -> QFont | None:
-        if col == NavigatorColumns.DECISION and self._dataset_model.get_review_decision(row):
+        if col == NavigatorColumns.DECISION and self._dataset_model.get_review_decision(
+            row
+        ):
             font = QFont()
             font.setBold(True)
             return font

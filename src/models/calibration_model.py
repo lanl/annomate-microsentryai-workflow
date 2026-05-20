@@ -194,7 +194,7 @@ class CalibrationModel(QObject):
         target_px = 80
         ideal_world = target_px * scale
         exponent = math.floor(math.log10(ideal_world))
-        base = ideal_world / (10 ** exponent)
+        base = ideal_world / (10**exponent)
         if base < 1.5:
             nice = 1
         elif base < 3.5:
@@ -203,4 +203,4 @@ class CalibrationModel(QObject):
             nice = 5
         else:
             nice = 10
-        return nice * (10 ** exponent)
+        return nice * (10**exponent)

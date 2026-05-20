@@ -22,7 +22,9 @@ class InferenceState:
         """Initialize InferenceState with empty score maps and cache."""
         self.score_maps = {}  # { "img.jpg": np.ndarray }  full heatmap arrays
         self.inference_cache = {}  # { "img.jpg": float }  peak anomaly scores
-        self.scores: dict[str, float] = {}  # { "img.jpg": float }  actual pred_score [0,1]
+        self.scores: dict[
+            str, float
+        ] = {}  # { "img.jpg": float }  actual pred_score [0,1]
         self.labels: dict[str, str] = {}  # { "img.jpg": "ANOMALY" | "NORMAL" }
 
     def clear(self) -> None:

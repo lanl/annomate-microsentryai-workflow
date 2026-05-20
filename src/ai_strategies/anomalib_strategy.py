@@ -595,6 +595,7 @@ class AnomalibStrategy:
                 # score normalization (wrong resize = wrong scores vs threshold).
                 from PIL import Image as _PIL
                 import torchvision.transforms.functional as _TF
+
                 pil_img = _PIL.open(image_path).convert("RGB")
                 transformed = pre.transform(pil_img)
                 if not isinstance(transformed, torch.Tensor):
@@ -604,7 +605,9 @@ class AnomalibStrategy:
                 img = cv2.imread(image_path)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 img = cv2.resize(img, (256, 256))
-                tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+                tensor = (
+                    torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float() / 255.0
+                )
                 tensor = tensor.to(device_obj)
 
             with torch.no_grad():
@@ -612,7 +615,9 @@ class AnomalibStrategy:
 
             score = 0.0
             heatmap = np.zeros((256, 256), dtype=np.float32)
-            postprocessed = False  # True when PostProcessor has already calibrated [0,1]
+            postprocessed = (
+                False  # True when PostProcessor has already calibrated [0,1]
+            )
 
             # Structured anomalib output (InferenceBatch / named fields) — preferred path.
             # The raw model is an anomalib LightningModule whose forward() returns an
@@ -624,7 +629,9 @@ class AnomalibStrategy:
 
             if hasattr(output, "anomaly_map") and output.anomaly_map is not None:
                 heatmap = output.anomaly_map.squeeze().detach().cpu().numpy()
-                postprocessed = True  # map is already calibrated to [0,1] by PostProcessor
+                postprocessed = (
+                    True  # map is already calibrated to [0,1] by PostProcessor
+                )
             elif isinstance(output, tuple):
                 # Fallback for non-anomalib models returning plain tuples.
                 for item in output:
@@ -632,7 +639,9 @@ class AnomalibStrategy:
                         continue
                     if item.ndim >= 2 and item.numel() > 1 and item.is_floating_point():
                         heatmap = item.squeeze().cpu().numpy()
-                    elif item.numel() == 1 and item.is_floating_point() and score == 0.0:
+                    elif (
+                        item.numel() == 1 and item.is_floating_point() and score == 0.0
+                    ):
                         score = float(item.cpu().item())
             elif isinstance(output, torch.Tensor):
                 heatmap = output.squeeze().cpu().numpy()

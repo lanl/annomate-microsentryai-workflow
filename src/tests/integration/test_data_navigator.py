@@ -25,7 +25,9 @@ def navigator(qtbot, tmp_path):
 
 def source_rows(widget):
     return [
-        widget._proxy.mapToSource(widget._proxy.index(row, NavigatorColumns.IMG_ID)).row()
+        widget._proxy.mapToSource(
+            widget._proxy.index(row, NavigatorColumns.IMG_ID)
+        ).row()
         for row in range(widget._proxy.rowCount())
     ]
 

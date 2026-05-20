@@ -7,14 +7,14 @@ class CalibrationState:
         self.unit: str = "mm"
         self.calib_p1: tuple | None = None  # (x, y) in original pixels
         self.calib_p2: tuple | None = None  # (x, y) in original pixels
-        self.real_distance: float = 1.0    # known real-world distance
+        self.real_distance: float = 1.0  # known real-world distance
 
         # Grid appearance
         self.grid_visible: bool = False
         self.grid_color: tuple = (58, 90, 122)  # (r, g, b)
-        self.grid_opacity: float = 0.5          # 0.0–1.0
-        self.grid_spacing_world: float = 1.0    # world units per grid step
-        self.grid_spacing_auto: bool = True      # recompute on calibration
+        self.grid_opacity: float = 0.5  # 0.0–1.0
+        self.grid_spacing_world: float = 1.0  # world units per grid step
+        self.grid_spacing_auto: bool = True  # recompute on calibration
 
         # Measurement points — session-only, never persisted
         self.meas_p1: tuple | None = None

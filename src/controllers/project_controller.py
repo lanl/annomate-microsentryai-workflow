@@ -209,7 +209,9 @@ class ProjectController(QObject):
                     "Annotations are loaded but images will not display."
                 )
 
-            calib_state = self._calibration_model._state if self._calibration_model else None
+            calib_state = (
+                self._calibration_model._state if self._calibration_model else None
+            )
             self._project_io.apply_project_to_states(
                 project_data,
                 ds,
@@ -294,7 +296,9 @@ class ProjectController(QObject):
                 sorted(orphaned),
             )
 
-        calib_state = self._calibration_model._state if self._calibration_model else None
+        calib_state = (
+            self._calibration_model._state if self._calibration_model else None
+        )
         path = self._project_io.save_project(
             project_dir=project_dir,
             project_name=project_name,
@@ -322,7 +326,9 @@ class ProjectController(QObject):
             return
         autosave_dir = os.path.join(project_dir, "autosave")
         try:
-            calib_state = self._calibration_model._state if self._calibration_model else None
+            calib_state = (
+                self._calibration_model._state if self._calibration_model else None
+            )
             path = self._project_io.save_project(
                 project_dir=autosave_dir,
                 project_name=f"{self._project_name}.autosave",

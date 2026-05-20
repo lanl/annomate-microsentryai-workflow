@@ -43,7 +43,9 @@ class InferenceWorker(QThread):
         finished (): Emitted once the loop exits, regardless of outcome.
     """
 
-    resultReady = Signal(str, float, object)  # (absolute_path, score: float, score_map: np.ndarray)
+    resultReady = Signal(
+        str, float, object
+    )  # (absolute_path, score: float, score_map: np.ndarray)
     progress = Signal(int)  # count of images processed so far
     finished = Signal()
 
@@ -108,7 +110,9 @@ class InferenceController(QObject):
         batch_done (): Emitted when the current batch finishes.
     """
 
-    result_ready = Signal(str, float, object)  # (path, score: float, score_map: np.ndarray)
+    result_ready = Signal(
+        str, float, object
+    )  # (path, score: float, score_map: np.ndarray)
     progress = Signal(int)  # images processed so far
     batch_done = Signal()  # all images in a batch finished
 

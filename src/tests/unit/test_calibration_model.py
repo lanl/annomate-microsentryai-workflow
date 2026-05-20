@@ -65,15 +65,19 @@ class TestNiceSpacing:
             s = self._spacing(scale)
             # Normalize: divide by the correct power of 10
             exp = math.floor(math.log10(s))
-            mantissa = round(s / (10 ** exp), 6)
-            assert mantissa in (1.0, 2.0, 5.0, 10.0), f"Bad spacing {s} for scale {scale}"
+            mantissa = round(s / (10**exp), 6)
+            assert mantissa in (1.0, 2.0, 5.0, 10.0), (
+                f"Bad spacing {s} for scale {scale}"
+            )
 
     def test_targets_roughly_80px(self):
         # Spacing / scale should be close to 80 original pixels (within 1.25×)
         for scale in [0.01, 0.1, 1.0]:
             s = self._spacing(scale)
             px = s / scale
-            assert 16 <= px <= 800, f"Grid spacing {s} at scale {scale} → {px}px (out of range)"
+            assert 16 <= px <= 800, (
+                f"Grid spacing {s} at scale {scale} → {px}px (out of range)"
+            )
 
 
 class TestMeasurement:

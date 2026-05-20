@@ -36,7 +36,11 @@ class RightPanel(QWidget):
     accept_polygons_requested = Signal()
 
     def __init__(
-        self, dataset_model, inference_model=None, calibration_model=None, parent: QWidget = None
+        self,
+        dataset_model,
+        inference_model=None,
+        calibration_model=None,
+        parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
         # Left border separating the panel from the canvas

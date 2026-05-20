@@ -1,8 +1,13 @@
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QComboBox, QDialogButtonBox, QMessageBox,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QComboBox,
+    QDialogButtonBox,
+    QMessageBox,
 )
-from PySide6.QtCore import Qt
 
 
 class CalibrationDialog(QDialog):
@@ -24,7 +29,9 @@ class CalibrationDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
 
-        layout.addWidget(QLabel(f"Pixel distance between points: <b>{pixel_dist:.2f} px</b>"))
+        layout.addWidget(
+            QLabel(f"Pixel distance between points: <b>{pixel_dist:.2f} px</b>")
+        )
         layout.addWidget(QLabel("Enter the real-world distance this represents:"))
 
         row = QHBoxLayout()
