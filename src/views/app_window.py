@@ -5,6 +5,7 @@ See MVC.md § Architecture Rules for the full layer contract.
 
 import os
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
     QMainWindow,
     QInputDialog,
@@ -17,6 +18,8 @@ from views.validation.window import ValidationWindow
 from views.annomate.window import AnnoMateWindow
 
 _APP_TITLE = "AnnoMate & MicroSentryAI"
+_LAST_IMAGE_DIR_KEY = "recent/last_image_dir"
+_LAST_PROJECT_KEY = "recent/last_project"
 
 
 class AppWindow(QMainWindow):
@@ -59,15 +62,30 @@ class AppWindow(QMainWindow):
         self.validation_controller = validation_controller
         self.project_controller = project_controller
         self.calibration_model = calibration_model
+        self._settings = QSettings("LANL", "AnnoMateMicroSentryAI")
 
         # Sub-views
         self.validation_view = ValidationWindow(validation_model, validation_controller)
         self.validation_view.setWindowTitle("Validation")
         self.validation_view.resize(900, 650)
         self.annomate_view = AnnoMateWindow(
-            dataset_model, io_controller, inference_model, inference_controller,
+            dataset_model,
+            io_controller,
+            inference_model,
+            inference_controller,
             calibration_model=calibration_model,
         )
+
+        self.annomate_view.new_project_requested.connect(self._new_project)
+        self.annomate_view.open_project_requested.connect(self._open_project)
+        self.annomate_view.open_image_folder_requested.connect(self._open_image_folder)
+        self.annomate_view.open_recent_project_requested.connect(
+            self._open_recent_project
+        )
+        self.annomate_view.open_recent_image_folder_requested.connect(
+            self._open_recent_image_folder
+        )
+        self._refresh_project_start_state()
 
         self.setCentralWidget(self.annomate_view)
 
@@ -126,6 +144,80 @@ class AppWindow(QMainWindow):
         self._ms_action.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
         self._ms_action.toggled.connect(self.annomate_view._on_microsentry_toggled)
         view_menu.addAction(self._ms_action)
+
+    def _refresh_project_start_state(self) -> None:
+        """Refresh recent-action shortcuts on the empty project start screen."""
+        self.annomate_view.set_project_start_state(
+            self._last_project(), self._last_image_dir()
+        )
+
+    def _remember_recent_project(self, path: str) -> None:
+        if path:
+            self._settings.setValue(_LAST_PROJECT_KEY, path)
+
+    def _remember_recent_image_dir(self, path: str) -> None:
+        if path:
+            self._settings.setValue(_LAST_IMAGE_DIR_KEY, path)
+
+    def _last_project(self) -> str:
+        return self._settings.value(_LAST_PROJECT_KEY, "", type=str) or ""
+
+    def _last_image_dir(self) -> str:
+        return self._settings.value(_LAST_IMAGE_DIR_KEY, "", type=str) or ""
+
+    def _open_project_path(self, path: str) -> None:
+        try:
+            project_data, warnings = self.project_controller.open_project(path)
+        except Exception as exc:
+            QMessageBox.critical(
+                self, "Open Project", f"Could not read project:\n{exc}"
+            )
+            return
+
+        if warnings:
+            QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
+
+        model_path = project_data.get("inference", {}).get("model_path", "")
+        self.annomate_view.set_saved_model_path(model_path)
+        if model_path and not self.inference_controller.has_model():
+            self.statusBar().showMessage(
+                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the MicroSentryAI panel.",
+                8000,
+            )
+
+        self._remember_recent_project(path)
+        image_dir = project_data.get("dataset", {}).get("image_dir", "")
+        if image_dir:
+            self._remember_recent_image_dir(image_dir)
+        self._refresh_project_start_state()
+
+    def _open_recent_project(self, path: str) -> None:
+        if self.project_controller.is_dirty and not self._confirm_discard():
+            return
+        if not os.path.exists(path):
+            self._settings.remove(_LAST_PROJECT_KEY)
+            self._refresh_project_start_state()
+            QMessageBox.warning(
+                self,
+                "Open Project",
+                f"Recent project no longer exists:\n{path}",
+            )
+            return
+        self._open_project_path(path)
+
+    def _open_recent_image_folder(self, directory: str) -> None:
+        if not os.path.isdir(directory):
+            self._settings.remove(_LAST_IMAGE_DIR_KEY)
+            self._refresh_project_start_state()
+            QMessageBox.warning(
+                self,
+                "Open Image Folder",
+                f"Recent image folder no longer exists:\n{directory}",
+            )
+            return
+        self.io_controller.load_folder(directory)
+        self._remember_recent_image_dir(directory)
+        self._refresh_project_start_state()
 
     # ================================================================== #
     # Project slots
@@ -209,9 +301,15 @@ class AppWindow(QMainWindow):
             if reply != QMessageBox.Ok:
                 return
         try:
-            save_fn()
+            saved_path = save_fn()
         except Exception as exc:
             QMessageBox.critical(self, "Save Project", f"Could not save:\n{exc}")
+            return
+        self._remember_recent_project(saved_path)
+        image_dir = self.dataset_model.get_image_dir()
+        if image_dir:
+            self._remember_recent_image_dir(image_dir)
+        self._refresh_project_start_state()
 
     def _open_image_folder(self) -> None:
         """Scan a folder for images and load them as the current dataset."""
@@ -231,6 +329,8 @@ class AppWindow(QMainWindow):
             return
         try:
             self.project_controller.relocate_images(new_dir)
+            self._remember_recent_image_dir(new_dir)
+            self._refresh_project_start_state()
         except Exception as exc:
             QMessageBox.critical(
                 self, "Relocate Images", f"Could not scan folder:\n{exc}"
