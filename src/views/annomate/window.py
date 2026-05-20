@@ -314,13 +314,6 @@ class _ProjectStartScreen(QFrame):
         )
         btn_row.addWidget(btn_open_images)
 
-        btn_new = QPushButton("New Project")
-        btn_new.setToolTip("Start a new blank project")
-        btn_new.clicked.connect(
-            lambda: QTimer.singleShot(0, self.new_project_requested.emit)
-        )
-        btn_row.addWidget(btn_new)
-
         layout.addLayout(btn_row)
 
         self._recent_label = QLabel("Recent")
