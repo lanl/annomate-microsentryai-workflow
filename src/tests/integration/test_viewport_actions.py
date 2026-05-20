@@ -87,7 +87,7 @@ def test_grid_toggle_in_settings_updates_model(canvas, calibrated_model, qtbot):
     qtbot.addWidget(bar)
 
     assert calibrated_model.grid_visible() is True
-    qtbot.mouseClick(bar._grid_chk, Qt.LeftButton)
+    bar._grid_chk.click()
 
     assert calibrated_model.grid_visible() is False
     assert not bar._grid_chk.isChecked()
@@ -125,7 +125,7 @@ def test_center_crop_controls_update_canvas(canvas, calibrated_model, qtbot):
 
     assert not canvas.center_crop_settings()["enabled"]
 
-    qtbot.mouseClick(bar._crop_chk, Qt.LeftButton)
+    bar._crop_chk.click()
     bar._crop_width_spin.setValue(40)
     bar._crop_height_spin.setValue(30)
     bar._crop_shape_combo.setCurrentText("Circle")
