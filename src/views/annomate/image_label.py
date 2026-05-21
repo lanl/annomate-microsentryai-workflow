@@ -1339,6 +1339,8 @@ class ImageLabel(QLabel):
         painter.setBrush(Qt.NoBrush)
         if self._center_crop_shape == "circle":
             painter.drawEllipse(crop_rect)
+            if self._center_crop_calibrating:
+                self._paint_center_calibration_grid(painter, crop_rect)
         else:
             painter.drawRect(crop_rect)
         if self._center_crop_dot_visible:
@@ -1348,4 +1350,42 @@ class ImageLabel(QLabel):
             painter.setPen(Qt.NoPen)
             painter.setBrush(QBrush(QColor(255, 0, 0, 170)))
             painter.drawEllipse(QPointF(cx, cy), radius, radius)
+        painter.restore()
+
+    def _paint_center_calibration_grid(
+        self, painter: QPainter, crop_rect: QRectF
+    ) -> None:
+        """Draw a reference grid clipped to the active circular center crop."""
+        diameter_px = crop_rect.width() / max(self._base_scale, 0.0001)
+        divisions = max(4, min(16, int(round(diameter_px / 150.0))))
+        if divisions <= 1:
+            return
+
+        clip_path = QPainterPath()
+        clip_path.addEllipse(crop_rect)
+        painter.save()
+        painter.setClipPath(clip_path)
+
+        spacing_x = crop_rect.width() / divisions
+        spacing_y = crop_rect.height() / divisions
+        center_index = divisions / 2.0
+
+        for i in range(1, divisions):
+            is_center_line = abs(i - center_index) < 0.001
+            alpha = 150 if is_center_line else 85
+            width = (1.25 if is_center_line else 0.75) / self._zoom
+            pen = QPen(QColor(255, 255, 255, alpha), width, Qt.SolidLine)
+            painter.setPen(pen)
+
+            x = crop_rect.left() + i * spacing_x
+            y = crop_rect.top() + i * spacing_y
+            painter.drawLine(
+                QPointF(x, crop_rect.top()),
+                QPointF(x, crop_rect.bottom()),
+            )
+            painter.drawLine(
+                QPointF(crop_rect.left(), y),
+                QPointF(crop_rect.right(), y),
+            )
+
         painter.restore()
