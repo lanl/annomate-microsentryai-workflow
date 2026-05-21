@@ -84,6 +84,15 @@ class TestQueryAPI:
         assert model.is_annotation_visible(0, 0) is False
         assert model.toggle_annotation_visibility(0, 0) is True
 
+    def test_get_class_annotation_count(self, model):
+        model.load_folder("/fake", ["img.jpg", "other.jpg"])
+        model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])
+        model.add_annotation(0, "Other", [(0, 0), (1, 0), (1, 1)])
+        model.add_annotation(1, "Defect", [(0, 0), (1, 0), (1, 1)])
+
+        assert model.get_class_annotation_count("Defect") == 2
+        assert model.get_class_annotation_count("Missing") == 0
+
     def test_get_inspector_empty_initially(self, model):
         model.load_folder("/fake", ["img.jpg"])
         assert model.get_inspector(0) == ""

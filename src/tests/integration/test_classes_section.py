@@ -1,7 +1,7 @@
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QTableView
+from PySide6.QtWidgets import QMessageBox, QTableView
 
 from core.states.dataset_state import DatasetState
 from models.classes_model import CLASS_NAME_ROLE, ClassColumns
@@ -67,16 +67,59 @@ def test_adding_class_selects_new_class_under_active_sort(classes_section, qtbot
     assert widget._selected_name == "Delta"
 
 
-def test_deleting_class_after_sort_targets_correct_class(classes_section, qtbot):
+def test_deleting_class_after_sort_targets_correct_class(
+    classes_section, qtbot, monkeypatch
+):
     widget, model = classes_section
     widget._proxy.sort(ClassColumns.CLASS, Qt.DescendingOrder)
     index = _proxy_index_for_class(widget, "alpha", ClassColumns.DELETE)
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.Yes,
+    )
 
     _click_index(qtbot, widget, index)
 
     assert "alpha" not in model.get_class_names()
     assert "Beta" in model.get_class_names()
     assert "Gamma" in model.get_class_names()
+
+
+def test_deleting_class_with_annotations_can_be_cancelled(
+    classes_section, qtbot, monkeypatch
+):
+    widget, model = classes_section
+    index = _proxy_index_for_class(widget, "Beta", ClassColumns.DELETE)
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.No,
+    )
+
+    _click_index(qtbot, widget, index)
+
+    assert "Beta" in model.get_class_names()
+    assert model.get_class_annotation_count("Beta") == 2
+
+
+def test_deleting_class_without_annotations_does_not_prompt(
+    classes_section, qtbot, monkeypatch
+):
+    widget, model = classes_section
+    model.add_class("Empty", (1, 2, 3))
+    widget._table_model.refresh_classes()
+    index = _proxy_index_for_class(widget, "Empty", ClassColumns.DELETE)
+
+    def fail_if_prompted(*args, **kwargs):
+        raise AssertionError("Delete confirmation should not be shown")
+
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QMessageBox.question",
+        fail_if_prompted,
+    )
+
+    _click_index(qtbot, widget, index)
+
+    assert "Empty" not in model.get_class_names()
 
 
 def test_visibility_button_after_sort_targets_correct_class(classes_section, qtbot):

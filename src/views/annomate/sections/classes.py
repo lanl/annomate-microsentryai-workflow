@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QStyle,
@@ -387,6 +388,18 @@ class ClassesSection(QWidget):
         self._select_class(name, emit=False)
 
     def _delete_class(self, name: str) -> None:
+        count = self.dataset_model.get_class_annotation_count(name)
+        if count > 0:
+            choice = QMessageBox.question(
+                self,
+                "Delete Annotation Class",
+                f'Delete class "{name}" and its {count} annotation(s)?',
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if choice != QMessageBox.Yes:
+                return
+
         self.dataset_model.delete_class(name)
         if self._selected_name == name:
             self._selected_name = ""

@@ -413,6 +413,17 @@ class DatasetTableModel(QAbstractTableModel):
             self.state.image_files[row], annotation_idx
         )
 
+    def get_class_annotation_count(self, class_name: str) -> int:
+        """Return the total number of annotations assigned to *class_name*."""
+        total = 0
+        for annotations in self.state.annotations.values():
+            total += sum(
+                1
+                for annotation in annotations
+                if annotation.get("category_name") == class_name
+            )
+        return total
+
     def get_class_names(self) -> list:
         """Return a copy of the ordered class name registry.
 
