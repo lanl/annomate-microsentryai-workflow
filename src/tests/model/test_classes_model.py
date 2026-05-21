@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt
 from core.states.dataset_state import DatasetState
 from models.classes_model import (
     CLASS_NAME_ROLE,
+    VISIBLE_ROLE,
     ClassColumns,
     ClassSortProxyModel,
     ClassTableModel,
@@ -55,6 +56,20 @@ def test_count_headers_are_compact_with_descriptive_tooltips():
         table_model.headerData(ClassColumns.TOTAL, Qt.Horizontal, Qt.ToolTipRole)
         == "Class count for the whole dataset"
     )
+
+
+def test_visibility_column_reflects_model_state():
+    dataset_model = _make_model()
+    table_model = ClassTableModel(dataset_model)
+    index = table_model.index(0, ClassColumns.VISIBILITY)
+
+    assert index.data(VISIBLE_ROLE) is True
+    assert index.data(Qt.DisplayRole) == "Hide"
+
+    dataset_model.set_class_visible("Beta", False)
+
+    assert index.data(VISIBLE_ROLE) is False
+    assert index.data(Qt.DisplayRole) == "Show"
 
 
 def test_class_name_sort_is_case_insensitive():

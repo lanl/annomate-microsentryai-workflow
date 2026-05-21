@@ -29,11 +29,13 @@ class TestClassRegistry:
     def test_class_names_empty_on_init(self, state):
         assert state.class_names == []
         assert state.class_colors == {}
+        assert state.class_visibility == {}
 
     def test_add_class(self, state):
         state.add_class("Crack", (200, 100, 0))
         assert "Crack" in state.class_names
         assert state.class_colors["Crack"] == (200, 100, 0)
+        assert state.is_class_visible("Crack") is True
 
     def test_add_duplicate_class_is_idempotent(self, state):
         state.add_class("Defect", (255, 0, 0))
@@ -42,14 +44,23 @@ class TestClassRegistry:
 
     def test_delete_class_removes_annotations(self, state):
         state.add_class("Crack", (200, 100, 0))
+        state.set_class_visible("Crack", False)
         state.annotations["img.jpg"] = [
             {"category_name": "Crack", "polygon": [(0, 0)]},
             {"category_name": "Defect", "polygon": [(1, 1)]},
         ]
         state.delete_class("Crack")
         remaining = state.annotations["img.jpg"]
+        assert "Crack" not in state.class_visibility
         assert all(a["category_name"] != "Crack" for a in remaining)
         assert any(a["category_name"] == "Defect" for a in remaining)
+
+    def test_set_class_visible(self, state):
+        state.add_class("Crack", (200, 100, 0))
+
+        state.set_class_visible("Crack", False)
+
+        assert state.is_class_visible("Crack") is False
 
 
 class TestClear:

@@ -6,19 +6,22 @@ class ClassColumns:
     CLASS = 1
     IMAGE = 2
     TOTAL = 3
-    DELETE = 4
+    VISIBILITY = 4
+    DELETE = 5
 
 
 CLASS_NAME_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 COLOR_ROLE = Qt.UserRole + 3
+VISIBLE_ROLE = Qt.UserRole + 4
 
-_HEADERS = ["", "Class", "Img", "Tot", ""]
+_HEADERS = ["", "Class", "Img", "Tot", "", ""]
 _TOOLTIPS = {
     ClassColumns.COLOR: "Annotation class color",
     ClassColumns.CLASS: "Annotation class name",
     ClassColumns.IMAGE: "Class count for this image",
     ClassColumns.TOTAL: "Class count for the whole dataset",
+    ClassColumns.VISIBILITY: "Show or hide this class's annotations",
     ClassColumns.DELETE: "Delete annotation class",
 }
 
@@ -34,6 +37,9 @@ class ClassTableModel(QAbstractTableModel):
 
         self._dataset_model.modelReset.connect(self.refresh_classes)
         self._dataset_model.dataChanged.connect(self._on_source_data_changed)
+        self._dataset_model.classVisibilityChanged.connect(
+            self._on_class_visibility_changed
+        )
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         if parent.isValid():
@@ -75,6 +81,8 @@ class ClassTableModel(QAbstractTableModel):
             return self.sort_value(row, col)
         if role == COLOR_ROLE and col == ClassColumns.COLOR:
             return self._dataset_model.get_class_color(name)
+        if role == VISIBLE_ROLE:
+            return self._dataset_model.is_class_visible(name)
         if role == Qt.ToolTipRole:
             return self._tooltip(name, col)
         if role == Qt.TextAlignmentRole:
@@ -134,7 +142,17 @@ class ClassTableModel(QAbstractTableModel):
         self.dataChanged.emit(
             self.index(0, 0),
             self.index(self.rowCount() - 1, self.columnCount() - 1),
-            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, Qt.ToolTipRole],
+            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, VISIBLE_ROLE, Qt.ToolTipRole],
+        )
+
+    def _on_class_visibility_changed(self, name: str, visible: bool) -> None:
+        row = self._class_names.index(name) if name in self._class_names else -1
+        if row < 0:
+            return
+        self.dataChanged.emit(
+            self.index(row, ClassColumns.VISIBILITY),
+            self.index(row, ClassColumns.VISIBILITY),
+            [Qt.DisplayRole, VISIBLE_ROLE, Qt.ToolTipRole],
         )
 
     def _display(self, name: str, col: int) -> str:
@@ -146,8 +164,10 @@ class ClassTableModel(QAbstractTableModel):
             return str(self._count_image_annotations(name))
         if col == ClassColumns.TOTAL:
             return str(self._count_total_annotations(name))
+        if col == ClassColumns.VISIBILITY:
+            return "Hide" if self._dataset_model.is_class_visible(name) else "Show"
         if col == ClassColumns.DELETE:
-            return "Del"
+            return "Delete"
         return ""
 
     def _tooltip(self, name: str, col: int) -> str:
@@ -156,12 +176,15 @@ class ClassTableModel(QAbstractTableModel):
             return f"{name}: rgb({r}, {g}, {b})"
         if col == ClassColumns.DELETE:
             return f'Delete "{name}"'
+        if col == ClassColumns.VISIBILITY:
+            action = "Hide" if self._dataset_model.is_class_visible(name) else "Show"
+            return f'{action} annotations for "{name}"'
         return self._display(name, col) or (_TOOLTIPS.get(col) or "")
 
     def _alignment(self, col: int) -> Qt.AlignmentFlag:
         if col in (ClassColumns.IMAGE, ClassColumns.TOTAL):
             return Qt.AlignRight | Qt.AlignVCenter
-        if col in (ClassColumns.COLOR, ClassColumns.DELETE):
+        if col in (ClassColumns.COLOR, ClassColumns.VISIBILITY, ClassColumns.DELETE):
             return Qt.AlignCenter
         return Qt.AlignLeft | Qt.AlignVCenter
 

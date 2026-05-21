@@ -2,7 +2,7 @@ import os
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex
+from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Signal
 from PySide6.QtGui import QColor, QBrush
 
 from core.states.dataset_state import DatasetState
@@ -27,6 +27,8 @@ class DatasetTableModel(QAbstractTableModel):
         state (DatasetState): The underlying domain state this model wraps.
         headers (list[str]): Column header labels — ``["Filename", "Status"]``.
     """
+
+    classVisibilityChanged = Signal(str, bool)
 
     def __init__(self, state: DatasetState, parent: object = None) -> None:
         """Initialize DatasetTableModel with a domain state object.
@@ -298,6 +300,22 @@ class DatasetTableModel(QAbstractTableModel):
                 self.index(self.rowCount() - 1, self.columnCount() - 1),
             )
 
+    def set_class_visible(self, name: str, visible: bool) -> None:
+        """Set whether annotations for *name* render in the viewport."""
+        if name not in self.state.class_names:
+            return
+        visible = bool(visible)
+        if self.state.is_class_visible(name) == visible:
+            return
+        self.state.set_class_visible(name, visible)
+        self.classVisibilityChanged.emit(name, visible)
+
+    def toggle_class_visibility(self, name: str) -> bool:
+        """Toggle viewport visibility for *name* and return the new state."""
+        visible = not self.is_class_visible(name)
+        self.set_class_visible(name, visible)
+        return visible
+
     def delete_class(self, name: str) -> None:
         """Remove a class and all annotations that reference it.
 
@@ -392,6 +410,10 @@ class DatasetTableModel(QAbstractTableModel):
                 ``(255, 255, 255)`` for unregistered class names.
         """
         return self.state.class_colors.get(class_name, (255, 255, 255))
+
+    def is_class_visible(self, class_name: str) -> bool:
+        """Return whether annotations for *class_name* should render."""
+        return self.state.is_class_visible(class_name)
 
     def get_used_class_colors(self) -> list:
         """Return all currently assigned RGB color tuples.

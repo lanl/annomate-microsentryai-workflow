@@ -1,5 +1,5 @@
-from PySide6.QtCore import QItemSelectionModel, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import QItemSelectionModel, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from models.classes_model import (
     CLASS_NAME_ROLE,
     COLOR_ROLE,
+    VISIBLE_ROLE,
     ClassColumns,
     ClassSortProxyModel,
     ClassTableModel,
@@ -31,6 +32,7 @@ from models.classes_model import (
 _COLOR_COL_W = 44
 _SWATCH_W = 24
 _COUNT_W = 56
+_VISIBILITY_W = 40
 _DELETE_W = 40
 _NAME_MIN_W = 70
 
@@ -62,12 +64,17 @@ class _ColorSwatchDelegate(QStyledItemDelegate):
         painter.restore()
 
 
-class _DeleteButtonDelegate(QStyledItemDelegate):
-    """Paint delete cells with a button-like style."""
+class _IconButtonDelegate(QStyledItemDelegate):
+    """Paint action cells with a native button frame and compact icon."""
+
+    def __init__(self, action: str, parent=None) -> None:
+        super().__init__(parent)
+        self._action = action
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
+        opt.text = ""
 
         style = opt.widget.style() if opt.widget is not None else QApplication.style()
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter)
@@ -76,11 +83,86 @@ class _DeleteButtonDelegate(QStyledItemDelegate):
         if option.widget is not None:
             button.initFrom(option.widget)
         button.rect = option.rect.adjusted(5, 3, -5, -3)
-        button.text = "Del"
         button.state = QStyle.State_Enabled | QStyle.State_Raised
         if option.state & QStyle.State_MouseOver:
             button.state |= QStyle.State_MouseOver
         style.drawControl(QStyle.CE_PushButton, button, painter)
+        self._paint_icon(painter, button.rect, opt.palette, index)
+
+    def _paint_icon(self, painter: QPainter, rect, palette, index) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        color = palette.buttonText().color()
+        painter.setPen(QPen(color, 1.4))
+        painter.setBrush(Qt.NoBrush)
+
+        if self._action == "visibility":
+            self._paint_eye_icon(painter, QRectF(rect).adjusted(8, 8, -8, -8), index)
+        else:
+            self._paint_trash_icon(painter, QRectF(rect).adjusted(9, 7, -9, -7))
+        painter.restore()
+
+    def _paint_eye_icon(self, painter: QPainter, rect: QRectF, index) -> None:
+        center = rect.center()
+        eye = QPainterPath()
+        eye.moveTo(rect.left(), center.y())
+        eye.cubicTo(
+            rect.left() + rect.width() * 0.25,
+            rect.top(),
+            rect.right() - rect.width() * 0.25,
+            rect.top(),
+            rect.right(),
+            center.y(),
+        )
+        eye.cubicTo(
+            rect.right() - rect.width() * 0.25,
+            rect.bottom(),
+            rect.left() + rect.width() * 0.25,
+            rect.bottom(),
+            rect.left(),
+            center.y(),
+        )
+        painter.drawPath(eye)
+        painter.setBrush(painter.pen().color())
+        radius = max(2.0, min(rect.width(), rect.height()) * 0.18)
+        painter.drawEllipse(center, radius, radius)
+        painter.setBrush(Qt.NoBrush)
+
+        if not bool(index.data(VISIBLE_ROLE)):
+            painter.drawLine(rect.topRight(), rect.bottomLeft())
+
+    def _paint_trash_icon(self, painter: QPainter, rect: QRectF) -> None:
+        w = rect.width()
+        h = rect.height()
+        lid_y = rect.top() + h * 0.22
+        body = QRectF(
+            rect.left() + w * 0.18,
+            lid_y + h * 0.16,
+            w * 0.64,
+            h * 0.62,
+        )
+        painter.drawLine(
+            rect.left() + w * 0.12, lid_y, rect.right() - w * 0.12, lid_y
+        )
+        painter.drawLine(
+            rect.left() + w * 0.38,
+            rect.top() + h * 0.08,
+            rect.right() - w * 0.38,
+            rect.top() + h * 0.08,
+        )
+        painter.drawRect(body)
+        painter.drawLine(
+            body.left() + body.width() * 0.35,
+            body.top() + body.height() * 0.2,
+            body.left() + body.width() * 0.35,
+            body.bottom() - body.height() * 0.15,
+        )
+        painter.drawLine(
+            body.right() - body.width() * 0.35,
+            body.top() + body.height() * 0.2,
+            body.right() - body.width() * 0.35,
+            body.bottom() - body.height() * 0.15,
+        )
 
 
 class ClassesSection(QWidget):
@@ -118,7 +200,10 @@ class ClassesSection(QWidget):
             ClassColumns.COLOR, _ColorSwatchDelegate(self._table)
         )
         self._table.setItemDelegateForColumn(
-            ClassColumns.DELETE, _DeleteButtonDelegate(self._table)
+            ClassColumns.VISIBILITY, _IconButtonDelegate("visibility", self._table)
+        )
+        self._table.setItemDelegateForColumn(
+            ClassColumns.DELETE, _IconButtonDelegate("delete", self._table)
         )
         self._table.setFrameShape(QFrame.NoFrame)
         self._table.setAlternatingRowColors(True)
@@ -167,11 +252,13 @@ class ClassesSection(QWidget):
         header.setSectionResizeMode(ClassColumns.CLASS, QHeaderView.Stretch)
         header.setSectionResizeMode(ClassColumns.IMAGE, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.TOTAL, QHeaderView.Fixed)
+        header.setSectionResizeMode(ClassColumns.VISIBILITY, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.DELETE, QHeaderView.Fixed)
         self._table.setColumnWidth(ClassColumns.COLOR, _COLOR_COL_W)
         self._table.setColumnWidth(ClassColumns.CLASS, _NAME_MIN_W)
         self._table.setColumnWidth(ClassColumns.IMAGE, _COUNT_W)
         self._table.setColumnWidth(ClassColumns.TOTAL, _COUNT_W)
+        self._table.setColumnWidth(ClassColumns.VISIBILITY, _VISIBILITY_W)
         self._table.setColumnWidth(ClassColumns.DELETE, _DELETE_W)
         self._table.sortByColumn(ClassColumns.CLASS, Qt.AscendingOrder)
 
@@ -207,6 +294,9 @@ class ClassesSection(QWidget):
         column = proxy_index.column()
         if column == ClassColumns.COLOR:
             self._change_color(name)
+            return
+        if column == ClassColumns.VISIBILITY:
+            self._toggle_visibility(name)
             return
         if column == ClassColumns.DELETE:
             self._delete_class(name)
@@ -287,6 +377,9 @@ class ClassesSection(QWidget):
             self._selected_name = ""
         self._table_model.refresh_classes()
         self._sync_selection()
+
+    def _toggle_visibility(self, name: str) -> None:
+        self.dataset_model.toggle_class_visibility(name)
 
     def _pick_next_unique_color(self) -> tuple:
         from core.utils.constants import DEFAULT_CLASS_COLORS

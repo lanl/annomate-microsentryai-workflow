@@ -67,6 +67,14 @@ class TestQueryAPI:
         model.add_class("Defect", (255, 0, 0))
         assert model.get_class_color("Defect") == (255, 0, 0)
 
+    def test_class_visibility_defaults_visible_and_toggles(self, model):
+        model.add_class("Defect", (255, 0, 0))
+
+        assert model.is_class_visible("Defect") is True
+        assert model.toggle_class_visibility("Defect") is False
+        assert model.is_class_visible("Defect") is False
+        assert model.toggle_class_visibility("Defect") is True
+
     def test_get_inspector_empty_initially(self, model):
         model.load_folder("/fake", ["img.jpg"])
         assert model.get_inspector(0) == ""

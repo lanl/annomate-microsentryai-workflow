@@ -474,6 +474,9 @@ class AnnoMateWindow(QWidget):
 
         # Keep canvas in sync when annotations change outside the canvas
         self.dataset_model.dataChanged.connect(self._on_dataset_data_changed)
+        self.dataset_model.classVisibilityChanged.connect(
+            lambda *_: self._refresh_canvas_render()
+        )
 
         # Tool palette
         self.tool_palette.tool_selected.connect(self._on_tool_selected)
@@ -992,6 +995,7 @@ class AnnoMateWindow(QWidget):
                 a["polygon"],
                 QColor(*self.dataset_model.get_class_color(a["category_name"])),
                 a.get("thickness", 2.0),
+                self.dataset_model.is_class_visible(a["category_name"]),
             )
             for a in annos
         ]
@@ -1168,6 +1172,7 @@ class AnnoMateWindow(QWidget):
                 a["polygon"],
                 QColor(*self.dataset_model.get_class_color(a["category_name"])),
                 a.get("thickness", 2.0),
+                self.dataset_model.is_class_visible(a["category_name"]),
             )
             for a in annos
         ]
@@ -1250,6 +1255,7 @@ class AnnoMateWindow(QWidget):
                 a["polygon"],
                 QColor(*self.dataset_model.get_class_color(a["category_name"])),
                 a.get("thickness", 2.0),
+                self.dataset_model.is_class_visible(a["category_name"]),
             )
             for a in annos
         ]

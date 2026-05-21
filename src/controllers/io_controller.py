@@ -406,6 +406,7 @@ class IOController:
                     state.class_colors[name] = DEFAULT_CLASS_COLORS[
                         i % len(DEFAULT_CLASS_COLORS)
                     ]
+            state.class_visibility = {name: True for name in state.class_names}
 
         for name, info in images_node.items():
             state.inspectors[name] = info.get("inspector", "")
@@ -447,6 +448,7 @@ class IOController:
                     state.class_colors[name] = DEFAULT_CLASS_COLORS[
                         idx % len(DEFAULT_CLASS_COLORS)
                     ]
+                    state.class_visibility[name] = True
 
         img_id_map = {img["id"]: img["file_name"] for img in images_node}
 

@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QColor
 
 from core.states.calibration_state import CalibrationState
 from core.states.center_template_state import CenterTemplateState
@@ -40,6 +41,22 @@ def test_zoom_buttons_drive_canvas(canvas, calibrated_model, qtbot):
 
     qtbot.mouseClick(bar._btn_zoom_out, Qt.LeftButton)
     assert canvas._zoom < 1.0
+
+
+def test_hidden_annotation_overlays_keep_index_but_clear_selection(canvas):
+    canvas.selected_polygon_idx = 0
+
+    canvas.set_overlays(
+        [
+            ([(0, 0), (10, 0), (10, 10)], QColor(255, 0, 0), 2.0, False),
+            ([(20, 20), (30, 20), (30, 30)], QColor(0, 255, 0), 2.0, True),
+        ]
+    )
+
+    assert len(canvas._overlays) == 2
+    assert canvas._overlays[0][3] is False
+    assert canvas._overlays[1][3] is True
+    assert canvas.selected_polygon_idx == -1
 
 
 def test_calibrate_and_measure_emit_tool_requests(canvas, calibrated_model, qtbot):

@@ -79,6 +79,22 @@ def test_deleting_class_after_sort_targets_correct_class(classes_section, qtbot)
     assert "Gamma" in model.get_class_names()
 
 
+def test_visibility_button_after_sort_targets_correct_class(classes_section, qtbot):
+    widget, model = classes_section
+    widget._proxy.sort(ClassColumns.CLASS, Qt.DescendingOrder)
+    index = _proxy_index_for_class(widget, "alpha", ClassColumns.VISIBILITY)
+
+    _click_index(qtbot, widget, index)
+
+    assert model.is_class_visible("alpha") is False
+    assert model.is_class_visible("Beta") is True
+    assert model.is_class_visible("Gamma") is True
+
+    _click_index(qtbot, widget, index)
+
+    assert model.is_class_visible("alpha") is True
+
+
 def test_color_column_updates_correct_class_after_sort(
     classes_section, qtbot, monkeypatch
 ):

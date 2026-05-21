@@ -118,7 +118,7 @@ class ImageLabel(QLabel):
         self._mouse_pos: Optional[QPointF] = None
 
         self.current_polygon_points: List[QPointF] = []
-        self._overlays: List[Tuple[List[QPointF], QColor]] = []
+        self._overlays: List[Tuple[List[QPointF], QColor, float, bool]] = []
         self._ai_overlays: List[List[QPointF]] = []
 
         # --- UI State Trackers ---
@@ -424,31 +424,37 @@ class ImageLabel(QLabel):
         self.update()
         self.centerCropChanged.emit(self.center_crop_settings())
 
-    def set_overlays(
-        self, poly_list: List[Tuple[List[Tuple[float, float]], QColor]]
-    ) -> None:
+    def set_overlays(self, poly_list: list) -> None:
         """Replace all rendered overlay polygons.
 
         Converts each polygon from original image coordinates to display
         (base-scaled) coordinates and triggers a repaint.
 
         Args:
-            poly_list (List[Tuple[List[Tuple[float, float]], QColor]]): List of
-                ``(points, color)`` pairs where *points* is a list of
-                ``(x, y)`` tuples in original image coordinates.
+            poly_list: List of ``(points, color, thickness[, visible])`` tuples
+                where *points* is a list of ``(x, y)`` tuples in original image
+                coordinates. Hidden overlays keep their index but are not drawn
+                or hit-tested.
         """
         self._overlays = []
-        for pts_orig, color, thick in poly_list:
+        for item in poly_list:
+            pts_orig, color, thick = item[:3]
+            visible = bool(item[3]) if len(item) > 3 else True
             disp_pts = [
                 QPointF(x * self._base_scale, y * self._base_scale)
                 for (x, y) in pts_orig
             ]
-            self._overlays.append((disp_pts, color, thick))
+            self._overlays.append((disp_pts, color, thick, visible))
 
         n = len(self._overlays)
-        if self.selected_polygon_idx >= n:
+        selected_hidden = (
+            0 <= self.selected_polygon_idx < n
+            and not self._overlays[self.selected_polygon_idx][3]
+        )
+        if self.selected_polygon_idx >= n or selected_hidden:
             logger.debug(
-                "selected_polygon_idx %d out of range after overlay update (new size %d) — resetting",
+                "selected_polygon_idx %d unavailable after overlay update "
+                "(new size %d) — resetting",
                 self.selected_polygon_idx,
                 n,
             )
@@ -609,7 +615,9 @@ class ImageLabel(QLabel):
         best_dist = threshold
         best_poly = -1
         best_vert = -1
-        for poly_i, (pts, _, _) in enumerate(self._overlays):
+        for poly_i, (pts, _, _, visible) in enumerate(self._overlays):
+            if not visible:
+                continue
             for vert_i, p_disp in enumerate(pts):
                 p_view = QPointF(
                     p_disp.x() * self._zoom + self._pan.x(),
@@ -774,7 +782,9 @@ class ImageLabel(QLabel):
 
             # --- PRE-CHECK: Identify if we clicked inside any existing polygon ---
             found_idx = -1
-            for i, (pts, _, _) in enumerate(reversed(self._overlays)):
+            for i, (pts, _, _, visible) in enumerate(reversed(self._overlays)):
+                if not visible:
+                    continue
                 if QPolygonF(pts).containsPoint(pos_disp, Qt.OddEvenFill):
                     found_idx = len(self._overlays) - 1 - i
                     break
@@ -860,7 +870,7 @@ class ImageLabel(QLabel):
         # --- Drag vertex ---
         if self._dragging_vertex_idx != -1:
             new_pos = self.view_to_display(self._mouse_pos)
-            pts, _, _ = self._overlays[self._dragging_vertex_poly]
+            pts, _, _, _ = self._overlays[self._dragging_vertex_poly]
             pts[self._dragging_vertex_idx] = new_pos
             self.update()
             return
@@ -876,7 +886,7 @@ class ImageLabel(QLabel):
                 delta_view.x() / self._zoom, delta_view.y() / self._zoom
             )
 
-            pts, _, _ = self._overlays[self.selected_polygon_idx]
+            pts, _, _, _ = self._overlays[self.selected_polygon_idx]
             for i in range(len(pts)):
                 pts[i] = QPointF(
                     pts[i].x() + delta_disp.x(), pts[i].y() + delta_disp.y()
@@ -943,7 +953,7 @@ class ImageLabel(QLabel):
 
             if self._dragging_vertex_idx != -1:
                 poly_i = self._dragging_vertex_poly
-                pts, _, _ = self._overlays[poly_i]
+                pts, _, _, _ = self._overlays[poly_i]
                 pts_orig = [self.display_to_original(p) for p in pts]
                 self._dragging_vertex_idx = -1
                 self._dragging_vertex_poly = -1
@@ -952,7 +962,7 @@ class ImageLabel(QLabel):
 
             if self._dragging_polygon:
                 idx = self.selected_polygon_idx
-                pts, _, _ = self._overlays[idx]
+                pts, _, _, _ = self._overlays[idx]
                 pts_orig = [self.display_to_original(p) for p in pts]
                 self._dragging_polygon = False
                 self._last_mouse_pos = None
@@ -1207,8 +1217,8 @@ class ImageLabel(QLabel):
             painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))
 
         # Draw Overlays with Selection Highlighting
-        for i, (pts, color, thick) in enumerate(self._overlays):
-            if len(pts) >= 2:
+        for i, (pts, color, thick, visible) in enumerate(self._overlays):
+            if visible and len(pts) >= 2:
                 is_selected = i == self.selected_polygon_idx
                 screen_thick = ((thick * 2.0) if is_selected else thick) / self._zoom
                 pen = QPen(color, screen_thick)

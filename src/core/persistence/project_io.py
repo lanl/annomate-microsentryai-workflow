@@ -285,6 +285,9 @@ class ProjectIO:
                     dataset_state.class_colors[name] = DEFAULT_CLASS_COLORS[
                         i % len(DEFAULT_CLASS_COLORS)
                     ]
+            dataset_state.class_visibility = {
+                name: True for name in dataset_state.class_names
+            }
 
         # Annotations from COCO file
         coco_path = project_data.get("resolved_coco_path", "")
@@ -472,6 +475,7 @@ class ProjectIO:
                 dataset_state.class_colors[name] = DEFAULT_CLASS_COLORS[
                     idx % len(DEFAULT_CLASS_COLORS)
                 ]
+                dataset_state.class_visibility[name] = True
 
         img_id_map = {img["id"]: img["file_name"] for img in data.get("images", [])}
 
