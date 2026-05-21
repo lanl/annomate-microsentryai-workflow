@@ -112,6 +112,7 @@ class ImageLabel(QLabel):
         self._base_scale = 1.0
         self._zoom = 1.0
         self._pan = QPointF(0, 0)
+        self._view_is_fit = False
 
         self._panning = False
         self._last_mouse_pos: Optional[QPointF] = None
@@ -163,9 +164,6 @@ class ImageLabel(QLabel):
             1.0 if max(h, w) <= max_display_dim else max_display_dim / float(max(h, w))
         )
 
-        self._zoom = 1.0
-        self._pan = QPointF(0, 0)
-
         new_w = int(w * self._base_scale)
         new_h = int(h * self._base_scale)
 
@@ -178,6 +176,7 @@ class ImageLabel(QLabel):
         )
         self._display_qpix = QPixmap.fromImage(qimg)
         self.image_loaded.emit(w, h)
+        self.reset_view()
 
         # --- Reset all tracking states on new image ---
         self.clear_current_polygon()
@@ -261,6 +260,7 @@ class ImageLabel(QLabel):
         self._heatmap_alpha = 0.0
         self._zoom = 1.0
         self._pan = QPointF(0, 0)
+        self._view_is_fit = False
         self._center_crop_enabled = False
         self._center_crop_width = None
         self._center_crop_height = None
@@ -899,6 +899,7 @@ class ImageLabel(QLabel):
         if self._panning and self._last_mouse_pos is not None:
             delta = self._mouse_pos - self._last_mouse_pos
             self._pan += delta
+            self._view_is_fit = False
             self._last_mouse_pos = self._mouse_pos
             self.update()
             return
@@ -998,6 +999,7 @@ class ImageLabel(QLabel):
 
         old_zoom = self._zoom
         self._zoom = max(0.2, min(8.0, old_zoom * factor))
+        self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
         self._pan = QPointF(
@@ -1015,9 +1017,9 @@ class ImageLabel(QLabel):
         self._apply_zoom(1 / 1.15)
 
     def reset_view(self) -> None:
-        """Reset zoom to ``1.0`` and pan to the origin, then repaint."""
-        self._zoom = 1.0
-        self._pan = QPointF(0, 0)
+        """Fit the image into the current viewport and center it."""
+        self._fit_image_to_view()
+        self._view_is_fit = True
         self.zoom_changed.emit(self._zoom)
         self.update()
 
@@ -1038,6 +1040,7 @@ class ImageLabel(QLabel):
         point_in_disp = self.view_to_display(center)
 
         self._zoom = max(0.2, min(8.0, self._zoom * factor))
+        self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
         self._pan = QPointF(
@@ -1045,6 +1048,32 @@ class ImageLabel(QLabel):
             center.y() - point_in_disp.y() * self._zoom,
         )
         self.update()
+
+    def _fit_image_to_view(self) -> None:
+        """Set zoom/pan so the full display pixmap is centered in the widget."""
+        if self._display_qpix is None:
+            self._zoom = 1.0
+            self._pan = QPointF(0, 0)
+            return
+
+        pix_w = max(1, self._display_qpix.width())
+        pix_h = max(1, self._display_qpix.height())
+        view_w = max(1, self.width())
+        view_h = max(1, self.height())
+
+        self._zoom = min(view_w / pix_w, view_h / pix_h)
+        self._pan = QPointF(
+            (view_w - pix_w * self._zoom) / 2.0,
+            (view_h - pix_h * self._zoom) / 2.0,
+        )
+
+    def resizeEvent(self, event) -> None:
+        """Keep an already reset/newly loaded image fitted as the viewport changes."""
+        super().resizeEvent(event)
+        if self._view_is_fit and self._display_qpix is not None:
+            self._fit_image_to_view()
+            self.zoom_changed.emit(self._zoom)
+            self.update()
 
     # ------------------------------------------------------------------ #
     # Calibration rendering helpers

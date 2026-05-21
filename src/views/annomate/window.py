@@ -681,9 +681,6 @@ class AnnoMateWindow(QWidget):
             bgr
         )  # always set the original; resets zoom (expected on new image)
         self._apply_center_template_match(bgr)
-        self.status_bar.set_zoom(
-            1.0
-        )  # set_image resets zoom without emitting zoom_changed
         self._refresh_canvas_render()  # apply heatmap / overlay layer without resetting zoom
         total = self.dataset_model.rowCount()
         self.right_panel.set_counter(row, total)

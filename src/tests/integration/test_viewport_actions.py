@@ -33,14 +33,32 @@ def test_zoom_buttons_drive_canvas(canvas, calibrated_model, qtbot):
     bar = ViewportActionsBar(canvas, calibrated_model, canvas)
     qtbot.addWidget(bar)
 
+    fit_zoom = canvas._zoom
     qtbot.mouseClick(bar._btn_zoom_in, Qt.LeftButton)
-    assert canvas._zoom > 1.0
+    assert canvas._zoom > fit_zoom
 
     qtbot.mouseClick(bar._btn_reset, Qt.LeftButton)
-    assert canvas._zoom == 1.0
+    assert canvas._zoom == pytest.approx(fit_zoom)
 
     qtbot.mouseClick(bar._btn_zoom_out, Qt.LeftButton)
-    assert canvas._zoom < 1.0
+    assert canvas._zoom < fit_zoom
+
+
+def test_set_image_fits_and_centers_image(canvas):
+    assert canvas._zoom == pytest.approx(2.4)
+    assert canvas._pan.x() == pytest.approx(40.0)
+    assert canvas._pan.y() == pytest.approx(0.0)
+
+
+def test_reset_view_fits_current_viewport(canvas):
+    canvas._zoom = 5.0
+    canvas._pan = QPoint(12, 34)
+
+    canvas.reset_view()
+
+    assert canvas._zoom == pytest.approx(2.4)
+    assert canvas._pan.x() == pytest.approx(40.0)
+    assert canvas._pan.y() == pytest.approx(0.0)
 
 
 def test_hidden_annotation_overlays_keep_index_but_clear_selection(canvas):
@@ -237,7 +255,7 @@ def test_center_template_actions_emit_requests(canvas, calibrated_model, qtbot):
 
 def test_center_crop_drag_updates_original_center(canvas, calibrated_model, qtbot):
     canvas.set_center_crop(enabled=True, center_dot=True, calibrating=True)
-    pos = QPoint(50, 50)
+    pos = QPoint(canvas.width() // 2, canvas.height() // 2)
     qtbot.mousePress(canvas, Qt.LeftButton, pos=pos)
     qtbot.mouseMove(canvas, pos=pos)
     qtbot.mouseRelease(canvas, Qt.LeftButton, pos=pos)
