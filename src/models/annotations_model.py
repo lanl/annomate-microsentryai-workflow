@@ -207,6 +207,10 @@ class AnnotationTableModel(QAbstractTableModel):
         return polygon_area(annotation.get("polygon", [])) * scale * scale
 
     def _format_area_value(self, area: float) -> str:
+        if area == 0:
+            return "0"
+        if abs(area) < 1:
+            return f"{area:.6g}"
         rounded = round(area)
         if abs(rounded) < 1_000_000:
             return str(rounded)

@@ -111,7 +111,18 @@ def test_area_recalculates_with_calibration():
     assert calibration_model.apply_calibration(5.0, "mm")
 
     assert table_model.headerData(AnnotationColumns.AREA, Qt.Horizontal) == "Area (mm)"
-    assert table_model.index(1, AnnotationColumns.AREA).data() == "0"
+    assert table_model.index(1, AnnotationColumns.AREA).data() == "0.01"
+
+
+def test_nonzero_subunit_area_does_not_round_to_zero():
+    calibration_model = CalibrationModel(CalibrationState())
+    table_model = AnnotationTableModel(_make_model(), calibration_model)
+    table_model.set_current_row(0)
+
+    calibration_model.set_calib_points((0.0, 0.0), (100.0, 0.0))
+    assert calibration_model.apply_calibration(5.0, "mm")
+
+    assert table_model.index(0, AnnotationColumns.AREA).data() != "0"
 
 
 def test_area_rounds_to_whole_numbers_before_scientific_notation():
