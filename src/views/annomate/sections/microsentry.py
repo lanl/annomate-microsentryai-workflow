@@ -381,6 +381,7 @@ class MicrosentrySection(QWidget):
             "seg_enabled": self._btn_seg.isChecked(),
             "seg_pct": self._thresh.value() / 10.0,
             "alpha": self._alpha.value() / 100.0,
+            "sigma": self._sigma.value(),
             "epsilon": self._epsilon.value(),
             "heat_min": self._heat_min.value(),
         }
