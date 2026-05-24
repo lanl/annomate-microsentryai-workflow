@@ -4,13 +4,17 @@ See MVC.md § Architecture Rules for the full layer contract.
 """
 
 import os
+import sys
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import (
     QMainWindow,
     QInputDialog,
     QFileDialog,
+    QMenuBar,
     QMessageBox,
+    QVBoxLayout,
+    QWidget,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
@@ -94,8 +98,6 @@ class AppWindow(QMainWindow):
         )
         self._refresh_project_start_state()
 
-        self.setCentralWidget(self.annomate_view)
-
         # React to ProjectController signals
         self.project_controller.dirty_changed.connect(self._update_title)
         self.project_controller.project_saved.connect(
@@ -109,6 +111,7 @@ class AppWindow(QMainWindow):
         )
 
         self._build_menu()
+        self._install_central_widget()
 
     # ================================================================== #
     # Menu bar
@@ -121,15 +124,28 @@ class AppWindow(QMainWindow):
                 act.setShortcut(QKeySequence(shortcut))
             act.triggered.connect(slot)
             menu.addAction(act)
+            return act
 
         file_menu = self.menuBar().addMenu("&File")
-        add(file_menu, "New Project", "Ctrl+N", self._new_project)
-        add(file_menu, "Open Project…", "Ctrl+O", self._open_project)
-        add(file_menu, "Save Project", "Ctrl+S", self._save_project)
-        add(file_menu, "Save Project As…", "Ctrl+Shift+S", self._save_project_as)
+        self._new_project_action = add(
+            file_menu, "New Project", "Ctrl+N", self._new_project
+        )
+        self._open_project_action = add(
+            file_menu, "Open Project…", "Ctrl+O", self._open_project
+        )
+        self._save_project_action = add(
+            file_menu, "Save Project", "Ctrl+S", self._save_project
+        )
+        self._save_project_as_action = add(
+            file_menu, "Save Project As…", "Ctrl+Shift+S", self._save_project_as
+        )
         file_menu.addSeparator()
-        add(file_menu, "Open Image Folder…", "", self._open_image_folder)
-        add(file_menu, "Relocate Images…", "", self._relocate_images)
+        self._open_image_folder_action = add(
+            file_menu, "Open Image Folder…", "", self._open_image_folder
+        )
+        self._relocate_images_action = add(
+            file_menu, "Relocate Images…", "", self._relocate_images
+        )
         file_menu.addSeparator()
         add(file_menu, "Preferences…", "", self._open_preferences)
         file_menu.addSeparator()
@@ -163,6 +179,42 @@ class AppWindow(QMainWindow):
         self._ms_action.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
         self._ms_action.toggled.connect(self.annomate_view._on_microsentry_toggled)
         view_menu.addAction(self._ms_action)
+
+    def _install_central_widget(self) -> None:
+        """Install an in-window File menu on macOS for fullscreen access."""
+        if sys.platform != "darwin":
+            self.setCentralWidget(self.annomate_view)
+            return
+
+        central = QWidget(self)
+        layout = QVBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._build_in_window_file_menu())
+        layout.addWidget(self.annomate_view, stretch=1)
+        self.setCentralWidget(central)
+
+    def _build_in_window_file_menu(self) -> QMenuBar:
+        """Build a non-native File menu for fullscreen macOS workflows."""
+        menu_bar = QMenuBar(self)
+        menu_bar.setNativeMenuBar(False)
+
+        file_menu = menu_bar.addMenu("File")
+        file_menu.addAction(self._new_project_action)
+        file_menu.addAction(self._open_project_action)
+        file_menu.addAction(self._save_project_action)
+        file_menu.addAction(self._save_project_as_action)
+        file_menu.addSeparator()
+        file_menu.addAction(self._open_image_folder_action)
+        file_menu.addAction(self._relocate_images_action)
+
+        return menu_bar
+
+    def _refocus_after_native_dialog(self) -> None:
+        """Return focus to the app after a native macOS file dialog closes."""
+        if sys.platform == "darwin":
+            QTimer.singleShot(0, self.raise_)
+            QTimer.singleShot(0, self.activateWindow)
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
@@ -254,6 +306,7 @@ class AppWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self, "Open Project", os.getcwd(), "AnnoMate Project (*.annoproj)"
         )
+        self._refocus_after_native_dialog()
         if not path:
             return
 
@@ -286,6 +339,7 @@ class AppWindow(QMainWindow):
         parent_dir = QFileDialog.getExistingDirectory(
             self, "Choose Project Folder", os.getcwd()
         )
+        self._refocus_after_native_dialog()
         if not parent_dir:
             return
 
@@ -335,6 +389,7 @@ class AppWindow(QMainWindow):
         directory = QFileDialog.getExistingDirectory(
             self, "Open Image Folder", os.getcwd()
         )
+        self._refocus_after_native_dialog()
         if not directory:
             return
         self.io_controller.load_folder(directory)
@@ -344,6 +399,7 @@ class AppWindow(QMainWindow):
         new_dir = QFileDialog.getExistingDirectory(
             self, "Select New Image Folder", os.getcwd()
         )
+        self._refocus_after_native_dialog()
         if not new_dir:
             return
         try:
@@ -377,6 +433,7 @@ class AppWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self, "Import JSON Data", "", "JSON (*.json)"
         )
+        self._refocus_after_native_dialog()
         if not path:
             return
         try:
@@ -389,6 +446,7 @@ class AppWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self, "Import Annotation Classes", "", "Text Files (*.txt)"
         )
+        self._refocus_after_native_dialog()
         if not path:
             return
         try:
@@ -419,6 +477,7 @@ class AppWindow(QMainWindow):
         out_dir = QFileDialog.getExistingDirectory(
             self, "Choose output folder", os.getcwd()
         )
+        self._refocus_after_native_dialog()
         if not out_dir:
             return
         try:
@@ -431,6 +490,7 @@ class AppWindow(QMainWindow):
         out_dir = QFileDialog.getExistingDirectory(
             self, "Choose ground truth output folder", os.getcwd()
         )
+        self._refocus_after_native_dialog()
         if not out_dir:
             return
         try:
@@ -443,6 +503,7 @@ class AppWindow(QMainWindow):
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Save CSV", "metadata.csv", "CSV (*.csv)"
         )
+        self._refocus_after_native_dialog()
         if not out_path:
             return
         try:
