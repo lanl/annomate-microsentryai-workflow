@@ -338,6 +338,8 @@ class AppWindow(QMainWindow):
         if not directory:
             return
         self.io_controller.load_folder(directory)
+        self._remember_recent_image_dir(directory)
+        self._refresh_project_start_state()
 
     def _relocate_images(self) -> None:
         """Point to a new image directory without clearing annotations."""
