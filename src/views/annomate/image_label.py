@@ -29,6 +29,7 @@ from PySide6.QtGui import (
     QPainterPath,
 )
 from PySide6.QtWidgets import QLabel, QSizePolicy
+from core.utils.geometry import simplify_polygon
 
 logger = logging.getLogger("AnnoMate.ImageLabel")
 
@@ -93,6 +94,9 @@ class ImageLabel(QLabel):
         self.current_tool: Optional[str] = None
         self._active_color = QColor(0, 200, 0)
         self._line_thickness = 2.0
+        self._draw_shape = "point"
+        self._shape_state: Optional[QPointF] = None
+        self._shape_end: Optional[QPointF] = None
 
         self._orig_image_bgr: Optional[np.ndarray] = None
         self._display_qpix: Optional[QPixmap] = None
@@ -130,8 +134,6 @@ class ImageLabel(QLabel):
         self._selected_ai_idx: int = -1
 
         # --- SAM tool state (display coords) ---
-        self._sam_bbox_start: Optional[QPointF] = None
-        self._sam_bbox_end: Optional[QPointF] = None
         self._sam_ghost: Optional[Tuple[List[QPointF], float]] = (
             None  # (display_pts, confidence)
         )
@@ -269,6 +271,8 @@ class ImageLabel(QLabel):
         self._center_crop_calibrating = False
         self._dragging_center_crop = False
         self.current_polygon_points.clear()
+        self._shape_start = None
+        self._shape_end = None
         self._overlays = []
         self._ai_overlays = []
         self.selected_polygon_idx = -1
@@ -276,8 +280,6 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
-        self._sam_bbox_start = None
-        self._sam_bbox_end = None
         self._sam_ghost = None
         self.update()
 
@@ -289,8 +291,6 @@ class ImageLabel(QLabel):
                 ``"sam_bbox"``, ``"calibrate"``, ``"measure"``, or ``None``.
         """
         if self.current_tool == SAM_BBOX and tool_name != SAM_BBOX:
-            self._sam_bbox_start = None
-            self._sam_bbox_end = None
             self._sam_ghost = None
         if self.current_tool in (CALIBRATE, MEASURE) and tool_name not in (
             CALIBRATE,
@@ -304,6 +304,10 @@ class ImageLabel(QLabel):
             self.setCursor(Qt.CrossCursor)
         elif tool_name is None:
             self.setCursor(Qt.ArrowCursor)
+
+    def set_draw_shape(self, shape: str) -> None:
+        """Set drawing sub-mode: 'point', 'brush', 'rectangle', 'circle'."""
+        self._draw_shape = shape
 
     def set_active_color(self, color: QColor) -> None:
         """Set the stroke color used when drawing a new polygon.
@@ -497,6 +501,8 @@ class ImageLabel(QLabel):
     def clear_current_polygon(self) -> None:
         """Discard all in-progress polygon vertices and repaint."""
         self.current_polygon_points.clear()
+        self._shape_start = None
+        self._shape_end = None
         self.update()
 
     # ------------------------------------------------------------------ #
@@ -533,8 +539,6 @@ class ImageLabel(QLabel):
     def clear_sam_ghost(self) -> None:
         """Discard the SAM ghost polygon, bbox, and repaint."""
         self._sam_ghost = None
-        self._sam_bbox_start = None
-        self._sam_bbox_end = None
         self.update()
 
     def accept_sam_ghost(self) -> bool:
@@ -552,9 +556,8 @@ class ImageLabel(QLabel):
         pts_disp, _ = self._sam_ghost
         pts_orig = [self.display_to_original(p) for p in pts_disp]
         self._sam_ghost = None
-        self._sam_bbox_start = None
-        self._sam_bbox_end = None
-        self.polygonFinished.emit(pts_orig)
+        if len(pts_orig) >= 3:
+            self.polygonFinished.emit(pts_orig)
         self.update()
         return True
 
@@ -642,9 +645,31 @@ class ImageLabel(QLabel):
             pts_orig = [
                 self.display_to_original(p) for p in self.current_polygon_points
             ]
-            self.polygonFinished.emit(pts_orig)
+            if self._draw_shape == "brush":
+                pts_orig = simplify_polygon(pts_orig, epsilon=1.5)
+
+            if len(pts_orig) >= 3:
+                if self.current_tool == SAM_BBOX:
+                    xs = [p[0] for p in pts_orig]
+                    ys = [p[1] for p in pts_orig]
+                    ox1, ox2 = min(xs), max(xs)
+                    oy1, oy2 = min(ys), max(ys)
+                    
+                    if self._orig_image_bgr is not None:
+                        img_h, img_w = self._orig_image_bgr.shape[:2]
+                        ox1 = max(0.0, min(ox1, float(img_w)))
+                        ox2 = max(0.0, min(ox2, float(img_w)))
+                        oy1 = max(0.0, min(oy1, float(img_h)))
+                        oy2 = max(0.0, min(oy2, float(img_h)))
+
+                    if (ox2 - ox1) > 4 and (oy2 - oy1) > 4:
+                        self.samBboxDrawn.emit(ox1, oy1, ox2, oy2)
+                else:
+                    self.polygonFinished.emit(pts_orig)
 
         self.current_polygon_points.clear()
+        self._shape_start = None
+        self._shape_end = None
         self.update()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -656,11 +681,14 @@ class ImageLabel(QLabel):
         Args:
             event (QKeyEvent): The key press event.
         """
-        if self.current_tool == SAM_BBOX:
+        if self.current_tool in (POLYGON, SAM_BBOX):
             if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-                self.accept_sam_ghost()
+                if self._sam_ghost is not None:
+                    self.accept_sam_ghost()
+                elif self.current_polygon_points:
+                    self.finish_current_polygon()
                 return
-            if event.key() == Qt.Key_Escape:
+            if event.key() == Qt.Key_Escape and self.current_tool == SAM_BBOX:
                 self.clear_sam_ghost()
                 self.set_tool(None)
                 self.toolCanceled.emit()
@@ -694,7 +722,7 @@ class ImageLabel(QLabel):
         Args:
             event (QMouseEvent): The mouse double-click event.
         """
-        if self.current_tool == POLYGON and self.current_polygon_points:
+        if self.current_tool in (POLYGON, SAM_BBOX) and self.current_polygon_points:
             self.finish_current_polygon()
             return
 
@@ -770,14 +798,6 @@ class ImageLabel(QLabel):
                 event.accept()
                 return
 
-            # --- SAM bbox tool: start rubber-band on press ---
-            if self.current_tool == SAM_BBOX:
-                self._sam_bbox_start = self.view_to_display(pos_view)
-                self._sam_bbox_end = self._sam_bbox_start
-                self._sam_ghost = None
-                self.update()
-                return
-
             pos_disp = self.view_to_display(pos_view)
 
             # --- PRE-CHECK: Identify if we clicked inside any existing polygon ---
@@ -789,8 +809,7 @@ class ImageLabel(QLabel):
                     found_idx = len(self._overlays) - 1 - i
                     break
 
-            # Check AI polygons when no tool is active
-            if self.current_tool != POLYGON and self._ai_overlays:
+            if self.current_tool not in (POLYGON, SAM_BBOX) and self._ai_overlays:
                 ai_hit = -1
                 for i, pts in enumerate(reversed(self._ai_overlays)):
                     if len(pts) >= 3 and QPolygonF(pts).containsPoint(
@@ -808,21 +827,26 @@ class ImageLabel(QLabel):
                     self.update()
                     self.ai_polygon_clicked.emit(-1, pos_view)
 
-            # 1. Normal Polygon Drawing
-            if self.current_tool == POLYGON:
-                # Visually highlight the polygon we clicked on, even while drawing
+            if self.current_tool in (POLYGON, SAM_BBOX):
+                if self.current_tool == SAM_BBOX:
+                    self._sam_ghost = None
+
                 if not self.current_polygon_points:
                     self.selected_polygon_idx = found_idx
                     self.polygonSelected.emit(found_idx)
 
-                if self._near_polygon_start(pos_view):
-                    self.setCursor(Qt.ArrowCursor)
-                    self.finish_current_polygon()
-                    return
+                if self._draw_shape == "point":
+                    if self._near_polygon_start(pos_view):
+                        self.setCursor(Qt.ArrowCursor)
+                        self.finish_current_polygon()
+                        return
+                    self.current_polygon_points.append(pos_disp)
+                elif self._draw_shape == "brush":
+                    self.current_polygon_points.append(pos_disp)
+                elif self._draw_shape in ("rectangle", "circle"):
+                    self._shape_start = pos_disp
+                    self._shape_end = pos_disp
 
-                self.current_polygon_points.append(
-                    self.view_to_display(QPointF(event.pos()))
-                )
                 self.update()
                 return
 
@@ -861,12 +885,6 @@ class ImageLabel(QLabel):
             event.accept()
             return
 
-        # --- SAM bbox rubber-band update ---
-        if self.current_tool == SAM_BBOX and self._sam_bbox_start is not None:
-            self._sam_bbox_end = self.view_to_display(self._mouse_pos)
-            self.update()
-            return
-
         # --- Drag vertex ---
         if self._dragging_vertex_idx != -1:
             new_pos = self.view_to_display(self._mouse_pos)
@@ -875,7 +893,6 @@ class ImageLabel(QLabel):
             self.update()
             return
 
-        # --- Drag entire polygon ---
         if (
             self._dragging_polygon
             and self.selected_polygon_idx != -1
@@ -904,14 +921,29 @@ class ImageLabel(QLabel):
             self.update()
             return
 
-        if self.current_tool == POLYGON and self.current_polygon_points:
-            if self._near_polygon_start(self._mouse_pos):
-                self.setCursor(Qt.CrossCursor)
-            else:
-                self.setCursor(Qt.ArrowCursor)
-            self.update()
+        if self.current_tool in (POLYGON, SAM_BBOX) and (event.buttons() & Qt.LeftButton):
+            if self._draw_shape == "brush":
+                pos_disp = self.view_to_display(self._mouse_pos)
+                if self.current_polygon_points:
+                    last = self.current_polygon_points[-1]
+                    dist = ((pos_disp.x() - last.x())**2 + (pos_disp.y() - last.y())**2)**0.5
+                    if dist > 2.0 / self._zoom:
+                        self.current_polygon_points.append(pos_disp)
+                        self.update()
+            elif self._draw_shape in ("rectangle", "circle"):
+                self._shape_end = self.view_to_display(self._mouse_pos)
+                self.update()
             return
 
+        if self.current_tool in (POLYGON, SAM_BBOX) and self.current_polygon_points:
+            if self._draw_shape in ("point", "brush"):
+                if self._near_polygon_start(self._mouse_pos):
+                    self.setCursor(Qt.CrossCursor)
+                else:
+                    self.setCursor(Qt.ArrowCursor)
+            self.update()
+            return
+        
         if self._center_crop_calibrating and self.current_tool is None:
             self.setCursor(Qt.SizeAllCursor)
         elif self.current_tool is None and self._overlays:
@@ -935,21 +967,29 @@ class ImageLabel(QLabel):
                 event.accept()
                 return
 
-            # --- SAM bbox complete: clear rubber-band and emit original-coords bbox ---
-            if self.current_tool == SAM_BBOX and self._sam_bbox_start is not None:
-                end = self.view_to_display(QPointF(event.pos()))
-                x1 = min(self._sam_bbox_start.x(), end.x())
-                y1 = min(self._sam_bbox_start.y(), end.y())
-                x2 = max(self._sam_bbox_start.x(), end.x())
-                y2 = max(self._sam_bbox_start.y(), end.y())
-                # Clear rubber-band immediately so it disappears on release
-                self._sam_bbox_start = None
-                self._sam_bbox_end = None
-                self.update()
-                if (x2 - x1) > 4 and (y2 - y1) > 4:
-                    ox1, oy1 = self.display_to_original(QPointF(x1, y1))
-                    ox2, oy2 = self.display_to_original(QPointF(x2, y2))
-                    self.samBboxDrawn.emit(ox1, oy1, ox2, oy2)
+            if self.current_tool in (POLYGON, SAM_BBOX):
+                if self._draw_shape == "brush":
+                    self.finish_current_polygon()
+                elif self._draw_shape == "rectangle" and self._shape_start and self._shape_end:
+                    x1, y1 = self._shape_start.x(), self._shape_start.y()
+                    x2, y2 = self._shape_end.x(), self._shape_end.y()
+                    self.current_polygon_points = [
+                        QPointF(x1, y1), QPointF(x2, y1),
+                        QPointF(x2, y2), QPointF(x1, y2)
+                    ]
+                    self.finish_current_polygon()
+                elif self._draw_shape == "circle" and self._shape_start and self._shape_end:
+                    cx, cy = self._shape_start.x(), self._shape_start.y()
+                    dx = self._shape_end.x() - cx
+                    dy = self._shape_end.y() - cy
+                    r = (dx*dx + dy*dy)**0.5
+                    if r > 1.0:
+                        pts = []
+                        for i in range(32):
+                            angle = i * 2 * np.pi / 32
+                            pts.append(QPointF(cx + r * np.cos(angle), cy + r * np.sin(angle)))
+                        self.current_polygon_points = pts
+                        self.finish_current_polygon()
                 return
 
             if self._dragging_vertex_idx != -1:
@@ -1227,24 +1267,26 @@ class ImageLabel(QLabel):
         self._paint_center_crop(painter)
 
         # Draw SAM bounding-box rubber-band while the user is dragging
-        if (
-            self.current_tool == SAM_BBOX
-            and self._sam_bbox_start is not None
-            and self._sam_bbox_end is not None
-        ):
-            from PySide6.QtCore import QRectF
-
-            x1 = min(self._sam_bbox_start.x(), self._sam_bbox_end.x())
-            y1 = min(self._sam_bbox_start.y(), self._sam_bbox_end.y())
-            x2 = max(self._sam_bbox_start.x(), self._sam_bbox_end.x())
-            y2 = max(self._sam_bbox_start.y(), self._sam_bbox_end.y())
-            bbox_color = self._active_color
-            bbox_pen = QPen(bbox_color, 1.5 / self._zoom, Qt.SolidLine)
-            painter.setPen(bbox_pen)
-            fill = QColor(bbox_color.red(), bbox_color.green(), bbox_color.blue(), 30)
-            painter.setBrush(QBrush(fill))
-            painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))
-
+        if self.current_tool in (POLYGON, SAM_BBOX) and self._shape_start and self._shape_end:
+            preview_pen = QPen(self._active_color, self._line_thickness / self._zoom)
+            painter.setPen(preview_pen)
+            
+            if self.current_tool == SAM_BBOX:
+                fill = QColor(self._active_color.red(), self._active_color.green(), self._active_color.blue(), 30)
+                painter.setBrush(QBrush(fill))
+            else:
+                painter.setBrush(Qt.NoBrush)
+                
+            if self._draw_shape == "rectangle":
+                x1, y1 = self._shape_start.x(), self._shape_start.y()
+                x2, y2 = self._shape_end.x(), self._shape_end.y()
+                painter.drawRect(QRectF(min(x1,x2), min(y1,y2), abs(x2-x1), abs(y2-y1)))
+            elif self._draw_shape == "circle":
+                cx, cy = self._shape_start.x(), self._shape_start.y()
+                dx = self._shape_end.x() - cx
+                dy = self._shape_end.y() - cy
+                r = (dx*dx + dy*dy)**0.5
+                painter.drawEllipse(QPointF(cx, cy), r, r)
         # Draw Overlays with Selection Highlighting
         for i, (pts, color, thick, visible) in enumerate(self._overlays):
             if visible and len(pts) >= 2:
@@ -1300,27 +1342,27 @@ class ImageLabel(QLabel):
                 # painter.setFont(f)
                 # painter.drawText(label_pos, f"SAM  {confidence:.2f}")
 
-        if self.current_tool == POLYGON and self.current_polygon_points:
+        if self.current_tool in (POLYGON, SAM_BBOX) and self.current_polygon_points:
             painter.setBrush(Qt.NoBrush)
             painter.setPen(QPen(self._active_color, self._line_thickness / self._zoom))
             painter.drawPolyline(QPolygonF(self.current_polygon_points))
 
-            if self._mouse_pos:
-                cursor_in_disp = self.view_to_display(self._mouse_pos)
-                painter.drawLine(
-                    self.current_polygon_points[-1],
-                    cursor_in_disp,
-                )
+            if self._draw_shape == "point":
+                if self._mouse_pos:
+                    cursor_in_disp = self.view_to_display(self._mouse_pos)
+                    painter.drawLine(
+                        self.current_polygon_points[-1],
+                        cursor_in_disp,
+                    )
 
-            # Draw vertex dots — screen-constant radii by dividing by zoom
-            r_mid = 4.0 / self._zoom
-            r_first = 8.0 / self._zoom
-            outline_pen = QPen(QColor(20, 20, 20), 1.0 / self._zoom)
-            for j, pt in enumerate(self.current_polygon_points):
-                r = r_first if j == 0 else r_mid
-                painter.setBrush(QBrush(self._active_color))
-                painter.setPen(outline_pen)
-                painter.drawEllipse(pt, r, r)
+                r_mid = 4.0 / self._zoom
+                r_first = 8.0 / self._zoom
+                outline_pen = QPen(QColor(20, 20, 20), 1.0 / self._zoom)
+                for j, pt in enumerate(self.current_polygon_points):
+                    r = r_first if j == 0 else r_mid
+                    painter.setBrush(QBrush(self._active_color))
+                    painter.setPen(outline_pen)
+                    painter.drawEllipse(pt, r, r)
 
         self._paint_calib_dots(painter)
 
