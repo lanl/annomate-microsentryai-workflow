@@ -917,7 +917,10 @@ class AnnoMateWindow(QWidget):
         logger.debug("Applying center template match for row %d.", self._current_row)
         result = self._center_template_controller.match_image(bgr)
         if result is None:
-            logger.debug("Center template match produced no result for row %d.", self._current_row)
+            logger.debug(
+                "Center template match produced no result for row %d.",
+                self._current_row,
+            )
             return
         center_x, center_y, _score = result
         crop = self._center_template_model.crop_settings()
@@ -1003,7 +1006,12 @@ class AnnoMateWindow(QWidget):
                 thick = annos[idx].get("thickness", 2.0)
                 self.canvas.set_line_thickness(thick)
 
-                if self._active_tool not in ("polygon", "sam_bbox", "calibrate", "measure"):
+                if self._active_tool not in (
+                    "polygon",
+                    "sam_bbox",
+                    "calibrate",
+                    "measure",
+                ):
                     self.canvas_toolbar.set_context("edit", thick)
         else:
             if self._active_tool not in ("polygon", "sam_bbox", "calibrate", "measure"):

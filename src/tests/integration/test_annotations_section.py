@@ -72,7 +72,9 @@ def test_clicking_sorted_annotation_emits_source_index(annotations_section, qtbo
     assert widget._selected_idx == 2
 
 
-def test_deleting_annotation_after_sort_targets_source_index(annotations_section, qtbot):
+def test_deleting_annotation_after_sort_targets_source_index(
+    annotations_section, qtbot
+):
     widget, model = annotations_section
     widget._proxy.sort(AnnotationColumns.CLASS, Qt.AscendingOrder)
     index = _proxy_index_for_annotation(widget, 0, AnnotationColumns.DELETE)
@@ -105,7 +107,9 @@ def test_annotations_table_expands_to_show_all_rows(annotations_section, qtbot):
     widget, model = annotations_section
 
     assert widget._table.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-    last_index = widget._proxy.index(widget._proxy.rowCount() - 1, AnnotationColumns.CLASS)
+    last_index = widget._proxy.index(
+        widget._proxy.rowCount() - 1, AnnotationColumns.CLASS
+    )
     assert (
         widget._table.visualRect(last_index).bottom()
         < widget._table.viewport().height()
@@ -115,7 +119,9 @@ def test_annotations_table_expands_to_show_all_rows(annotations_section, qtbot):
     model.add_annotation(0, "Crack", [(0, 0), (1, 0), (1, 1)])
     qtbot.wait(50)
 
-    last_index = widget._proxy.index(widget._proxy.rowCount() - 1, AnnotationColumns.CLASS)
+    last_index = widget._proxy.index(
+        widget._proxy.rowCount() - 1, AnnotationColumns.CLASS
+    )
     assert widget._table.height() > old_height
     assert (
         widget._table.visualRect(last_index).bottom()

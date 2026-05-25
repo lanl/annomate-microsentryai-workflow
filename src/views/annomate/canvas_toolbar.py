@@ -5,7 +5,14 @@ Provides context-sensitive controls for Polygon shapes, SAM variations, and edit
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QVBoxLayout, QLabel, QComboBox, QSlider, QWidget, QPushButton
+    QFrame,
+    QHBoxLayout,
+    QVBoxLayout,
+    QLabel,
+    QComboBox,
+    QSlider,
+    QWidget,
+    QPushButton,
 )
 
 _SAM_VARIANT_MAP = {
@@ -14,6 +21,7 @@ _SAM_VARIANT_MAP = {
     "SAM2.1 Base+": "sam2_b.pt",
     "SAM2.1 Large": "sam2_l.pt",
 }
+
 
 class CanvasToolbar(QFrame):
     thickness_changed = Signal(float)
@@ -40,7 +48,7 @@ class CanvasToolbar(QFrame):
         self._top_bar = QWidget()
         top_layout = QHBoxLayout(self._top_bar)
         top_layout.setContentsMargins(4, 2, 4, 2)
-        
+
         self._btn_toggle = QPushButton("Settings (None)")
         self._btn_toggle.setFlat(True)
         self._btn_toggle.setCheckable(True)
@@ -105,7 +113,7 @@ class CanvasToolbar(QFrame):
             "Point-by-point": "point",
             "Free Brush": "brush",
             "Rectangle": "rectangle",
-            "Circle": "circle"
+            "Circle": "circle",
         }
         self.shape_changed.emit(mapping.get(text, "point"))
 
@@ -122,7 +130,9 @@ class CanvasToolbar(QFrame):
 
     def set_sam_status(self, status: str, color: str):
         self._lbl_sam_status.setText(status)
-        self._lbl_sam_status.setStyleSheet(f"color: {color}; font-style: {'italic' if color == 'grey' else 'normal'};")
+        self._lbl_sam_status.setStyleSheet(
+            f"color: {color}; font-style: {'italic' if color == 'grey' else 'normal'};"
+        )
 
     def set_context(self, context: str, thickness: float = 2.0):
         """Update toolbar state based on selected canvas context."""
@@ -134,7 +144,9 @@ class CanvasToolbar(QFrame):
             return
 
         self._btn_toggle.setEnabled(True)
-        self._btn_toggle.setText("▾ Settings" if self._btn_toggle.isChecked() else "▸ Settings")
+        self._btn_toggle.setText(
+            "▾ Settings" if self._btn_toggle.isChecked() else "▸ Settings"
+        )
         self._content.setVisible(self._btn_toggle.isChecked())
 
         self._combo_shape.blockSignals(True)
@@ -156,7 +168,9 @@ class CanvasToolbar(QFrame):
         self._lbl_sam_status.setVisible(show_sam)
 
         if context in ("polygon", "sam_bbox"):
-            self._combo_shape.addItems(["Point-by-point", "Free Brush", "Rectangle", "Circle"])
+            self._combo_shape.addItems(
+                ["Point-by-point", "Free Brush", "Rectangle", "Circle"]
+            )
 
         self._combo_shape.blockSignals(False)
 

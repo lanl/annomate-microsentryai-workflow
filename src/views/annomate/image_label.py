@@ -654,7 +654,7 @@ class ImageLabel(QLabel):
                     ys = [p[1] for p in pts_orig]
                     ox1, ox2 = min(xs), max(xs)
                     oy1, oy2 = min(ys), max(ys)
-                    
+
                     if self._orig_image_bgr is not None:
                         img_h, img_w = self._orig_image_bgr.shape[:2]
                         ox1 = max(0.0, min(ox1, float(img_w)))
@@ -921,12 +921,16 @@ class ImageLabel(QLabel):
             self.update()
             return
 
-        if self.current_tool in (POLYGON, SAM_BBOX) and (event.buttons() & Qt.LeftButton):
+        if self.current_tool in (POLYGON, SAM_BBOX) and (
+            event.buttons() & Qt.LeftButton
+        ):
             if self._draw_shape == "brush":
                 pos_disp = self.view_to_display(self._mouse_pos)
                 if self.current_polygon_points:
                     last = self.current_polygon_points[-1]
-                    dist = ((pos_disp.x() - last.x())**2 + (pos_disp.y() - last.y())**2)**0.5
+                    dist = (
+                        (pos_disp.x() - last.x()) ** 2 + (pos_disp.y() - last.y()) ** 2
+                    ) ** 0.5
                     if dist > 2.0 / self._zoom:
                         self.current_polygon_points.append(pos_disp)
                         self.update()
@@ -943,7 +947,7 @@ class ImageLabel(QLabel):
                     self.setCursor(Qt.ArrowCursor)
             self.update()
             return
-        
+
         if self._center_crop_calibrating and self.current_tool is None:
             self.setCursor(Qt.SizeAllCursor)
         elif self.current_tool is None and self._overlays:
@@ -970,24 +974,36 @@ class ImageLabel(QLabel):
             if self.current_tool in (POLYGON, SAM_BBOX):
                 if self._draw_shape == "brush":
                     self.finish_current_polygon()
-                elif self._draw_shape == "rectangle" and self._shape_start and self._shape_end:
+                elif (
+                    self._draw_shape == "rectangle"
+                    and self._shape_start
+                    and self._shape_end
+                ):
                     x1, y1 = self._shape_start.x(), self._shape_start.y()
                     x2, y2 = self._shape_end.x(), self._shape_end.y()
                     self.current_polygon_points = [
-                        QPointF(x1, y1), QPointF(x2, y1),
-                        QPointF(x2, y2), QPointF(x1, y2)
+                        QPointF(x1, y1),
+                        QPointF(x2, y1),
+                        QPointF(x2, y2),
+                        QPointF(x1, y2),
                     ]
                     self.finish_current_polygon()
-                elif self._draw_shape == "circle" and self._shape_start and self._shape_end:
+                elif (
+                    self._draw_shape == "circle"
+                    and self._shape_start
+                    and self._shape_end
+                ):
                     cx, cy = self._shape_start.x(), self._shape_start.y()
                     dx = self._shape_end.x() - cx
                     dy = self._shape_end.y() - cy
-                    r = (dx*dx + dy*dy)**0.5
+                    r = (dx * dx + dy * dy) ** 0.5
                     if r > 1.0:
                         pts = []
                         for i in range(32):
                             angle = i * 2 * np.pi / 32
-                            pts.append(QPointF(cx + r * np.cos(angle), cy + r * np.sin(angle)))
+                            pts.append(
+                                QPointF(cx + r * np.cos(angle), cy + r * np.sin(angle))
+                            )
                         self.current_polygon_points = pts
                         self.finish_current_polygon()
                 return
@@ -1267,25 +1283,36 @@ class ImageLabel(QLabel):
         self._paint_center_crop(painter)
 
         # Draw SAM bounding-box rubber-band while the user is dragging
-        if self.current_tool in (POLYGON, SAM_BBOX) and self._shape_start and self._shape_end:
+        if (
+            self.current_tool in (POLYGON, SAM_BBOX)
+            and self._shape_start
+            and self._shape_end
+        ):
             preview_pen = QPen(self._active_color, self._line_thickness / self._zoom)
             painter.setPen(preview_pen)
-            
+
             if self.current_tool == SAM_BBOX:
-                fill = QColor(self._active_color.red(), self._active_color.green(), self._active_color.blue(), 30)
+                fill = QColor(
+                    self._active_color.red(),
+                    self._active_color.green(),
+                    self._active_color.blue(),
+                    30,
+                )
                 painter.setBrush(QBrush(fill))
             else:
                 painter.setBrush(Qt.NoBrush)
-                
+
             if self._draw_shape == "rectangle":
                 x1, y1 = self._shape_start.x(), self._shape_start.y()
                 x2, y2 = self._shape_end.x(), self._shape_end.y()
-                painter.drawRect(QRectF(min(x1,x2), min(y1,y2), abs(x2-x1), abs(y2-y1)))
+                painter.drawRect(
+                    QRectF(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+                )
             elif self._draw_shape == "circle":
                 cx, cy = self._shape_start.x(), self._shape_start.y()
                 dx = self._shape_end.x() - cx
                 dy = self._shape_end.y() - cy
-                r = (dx*dx + dy*dy)**0.5
+                r = (dx * dx + dy * dy) ** 0.5
                 painter.drawEllipse(QPointF(cx, cy), r, r)
         # Draw Overlays with Selection Highlighting
         for i, (pts, color, thick, visible) in enumerate(self._overlays):

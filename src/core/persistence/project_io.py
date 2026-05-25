@@ -360,9 +360,7 @@ class ProjectIO:
             )
             calibration_state.real_distance = cdata.get("real_distance", 1.0)
             calibration_state.grid_visible = (
-                True
-                if using_default_pixel_scale
-                else cdata.get("grid_visible", True)
+                True if using_default_pixel_scale else cdata.get("grid_visible", True)
             )
             color = cdata.get("grid_color", [58, 90, 122])
             calibration_state.grid_color = tuple(color)

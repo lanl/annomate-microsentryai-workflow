@@ -723,9 +723,7 @@ class ViewportActionsBar(QFrame):
         self._crop_center_dot_chk.setEnabled(self._has_image)
         self._btn_reset_crop.setEnabled(self._has_image)
         self._btn_calibrate_center.setEnabled(self._has_image)
-        self._btn_accept_center.setEnabled(
-            self._has_image and self._center_calibrating
-        )
+        self._btn_accept_center.setEnabled(self._has_image and self._center_calibrating)
         self._btn_clear_template.setEnabled(
             self._center_template_model is not None
             and self._center_template_model.has_template()
@@ -736,9 +734,7 @@ class ViewportActionsBar(QFrame):
         self._color_btn.setEnabled(scale_available)
         self._radio_auto.setEnabled(scale_available)
         self._radio_fixed.setEnabled(scale_available)
-        self._spacing_edit.setEnabled(
-            scale_available and self._radio_fixed.isChecked()
-        )
+        self._spacing_edit.setEnabled(scale_available and self._radio_fixed.isChecked())
         self._btn_clear_measurement.setEnabled(scale_available)
         self._btn_reset_calibration.setEnabled(scale_available)
         if not scale_available and self._active_tool == "measure":
