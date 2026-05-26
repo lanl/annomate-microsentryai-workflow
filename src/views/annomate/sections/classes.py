@@ -142,9 +142,7 @@ class _IconButtonDelegate(QStyledItemDelegate):
             w * 0.64,
             h * 0.62,
         )
-        painter.drawLine(
-            rect.left() + w * 0.12, lid_y, rect.right() - w * 0.12, lid_y
-        )
+        painter.drawLine(rect.left() + w * 0.12, lid_y, rect.right() - w * 0.12, lid_y)
         painter.drawLine(
             rect.left() + w * 0.38,
             rect.top() + h * 0.08,

@@ -15,9 +15,7 @@ def locate_center(
     """
     img_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image
     tpl_gray = (
-        cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
-        if template.ndim == 3
-        else template
+        cv2.cvtColor(template, cv2.COLOR_BGR2GRAY) if template.ndim == 3 else template
     )
     result = cv2.matchTemplate(img_gray, tpl_gray, cv2.TM_CCOEFF_NORMED)
     _, max_val, _, max_loc = cv2.minMaxLoc(result)

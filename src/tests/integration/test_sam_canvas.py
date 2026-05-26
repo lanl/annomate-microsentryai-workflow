@@ -33,12 +33,12 @@ def test_sam_tool_sets_crosscursor(canvas):
 
 def test_polygon_tool_does_not_affect_sam_state(canvas):
     canvas.set_tool(SAM_BBOX)
-    canvas._sam_bbox_start = QPointF(10, 10)
-    canvas._sam_bbox_end = QPointF(50, 50)
+    canvas._shape_start = QPointF(10, 10)
+    canvas._shape_end = QPointF(50, 50)
     # Switching to polygon should clear SAM state
     canvas.set_tool(POLYGON)
-    assert canvas._sam_bbox_start is None
-    assert canvas._sam_bbox_end is None
+    assert canvas._shape_start is None
+    assert canvas._shape_end is None
     assert canvas._sam_ghost is None
 
 
@@ -64,12 +64,12 @@ def test_set_sam_ghost_empty_pts_clears_ghost(canvas):
 
 def test_clear_sam_ghost_clears_all_state(canvas):
     canvas.set_sam_ghost([(0, 0), (10, 0), (10, 10)], 0.9)
-    canvas._sam_bbox_start = QPointF(5, 5)
-    canvas._sam_bbox_end = QPointF(20, 20)
+    canvas._shape_start = QPointF(5, 5)
+    canvas._shape_end = QPointF(20, 20)
     canvas.clear_sam_ghost()
     assert canvas._sam_ghost is None
-    assert canvas._sam_bbox_start is None
-    assert canvas._sam_bbox_end is None
+    assert canvas._shape_start is None
+    assert canvas._shape_end is None
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +100,8 @@ def test_accept_sam_ghost_clears_state(canvas):
     canvas.set_sam_ghost([(0, 0), (10, 0), (10, 10)], 0.5)
     canvas.accept_sam_ghost()
     assert canvas._sam_ghost is None
-    assert canvas._sam_bbox_start is None
-    assert canvas._sam_bbox_end is None
+    assert canvas._shape_start is None
+    assert canvas._shape_end is None
 
 
 def test_accept_sam_ghost_returns_false_when_no_ghost(canvas):
