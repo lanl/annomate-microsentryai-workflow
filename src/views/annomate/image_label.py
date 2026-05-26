@@ -292,6 +292,8 @@ class ImageLabel(QLabel):
         """
         if self.current_tool == SAM_BBOX and tool_name != SAM_BBOX:
             self._sam_ghost = None
+            self._shape_start = None
+            self._shape_end = None
         if self.current_tool in (CALIBRATE, MEASURE) and tool_name not in (
             CALIBRATE,
             MEASURE,
@@ -539,6 +541,8 @@ class ImageLabel(QLabel):
     def clear_sam_ghost(self) -> None:
         """Discard the SAM ghost polygon, bbox, and repaint."""
         self._sam_ghost = None
+        self._shape_start = None
+        self._shape_end = None
         self.update()
 
     def accept_sam_ghost(self) -> bool:
@@ -556,6 +560,8 @@ class ImageLabel(QLabel):
         pts_disp, _ = self._sam_ghost
         pts_orig = [self.display_to_original(p) for p in pts_disp]
         self._sam_ghost = None
+        self._shape_start = None
+        self._shape_end = None
         if len(pts_orig) >= 3:
             self.polygonFinished.emit(pts_orig)
         self.update()
