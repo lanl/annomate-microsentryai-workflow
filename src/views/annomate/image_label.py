@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QKeyEvent,
     QPaintEvent,
     QPainterPath,
+    QFontMetricsF,
 )
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
@@ -1109,6 +1110,31 @@ class ImageLabel(QLabel):
         while y <= h:
             painter.drawLine(QPointF(0, y), QPointF(w, y))
             y += step_screen
+
+        self._paint_grid_watermark(painter, step_world, m.unit(), w, h)
+
+    def _paint_grid_watermark(
+        self,
+        painter: QPainter,
+        step_world: float,
+        unit: str,
+        viewport_w: float,
+        viewport_h: float,
+    ) -> None:
+        label = f"Grid: {step_world:g} {unit}"
+        font = painter.font()
+        font.setPointSizeF(9.0)
+        painter.setFont(font)
+        fm = QFontMetricsF(font)
+        margin = 6.0
+        text_w = fm.horizontalAdvance(label)
+        text_h = fm.height()
+        x = viewport_w - text_w - margin
+        y = viewport_h - margin
+        painter.setPen(QColor(0, 0, 0, 120))
+        painter.drawText(QPointF(x + 1, y + 1), label)
+        painter.setPen(QColor(255, 255, 255, 200))
+        painter.drawText(QPointF(x, y), label)
 
     def _paint_calib_dots(self, painter: QPainter) -> None:
         """Draw calibration and measure dots in display coords (inside scaled painter)."""
