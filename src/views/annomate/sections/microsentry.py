@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QTextBrowser,
     QToolButton,
@@ -208,22 +209,40 @@ class MicrosentrySection(QWidget):
         )
         self._btn_advanced.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self._btn_advanced.setSizePolicy(
-            self._btn_advanced.sizePolicy().horizontalPolicy(),
+            QSizePolicy.Fixed,
             self._btn_advanced.sizePolicy().verticalPolicy(),
         )
         self._btn_advanced.toggled.connect(self._on_advanced_toggled)
 
-        self._btn_advanced_help = QPushButton("Help")
+        self._btn_advanced_help = QToolButton()
+        self._btn_advanced_help.setText("i")
         self._btn_advanced_help.setToolTip(
             "Explain what the advanced MicroSentryAI settings do"
+        )
+        self._btn_advanced_help.setFixedSize(20, 20)
+        self._btn_advanced_help.setStyleSheet(
+            """
+            QToolButton {
+                color: #1f6feb;
+                border: 1px solid #1f6feb;
+                border-radius: 10px;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 0px;
+            }
+            QToolButton:hover {
+                background: rgba(31, 111, 235, 24);
+            }
+            """
         )
         self._btn_advanced_help.clicked.connect(self._show_advanced_help)
 
         advanced_header = QHBoxLayout()
         advanced_header.setContentsMargins(0, 0, 0, 0)
         advanced_header.setSpacing(4)
-        advanced_header.addWidget(self._btn_advanced, stretch=1)
+        advanced_header.addWidget(self._btn_advanced)
         advanced_header.addWidget(self._btn_advanced_help)
+        advanced_header.addStretch()
         lw.addLayout(advanced_header)
 
         self._advanced_widget = QWidget()
