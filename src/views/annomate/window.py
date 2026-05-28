@@ -1380,7 +1380,8 @@ class AnnoMateWindow(QWidget):
         self.tool_palette.sam_status_lbl.setStyleSheet(
             "color: green; font-style: normal;"
         )
-        self.status_bar.set_sam_hint(f"Ready: {display_name}  ·  draw bbox to segment")
+        if self._active_tool == "sam_bbox":
+            self.status_bar.set_sam_hint(f"Ready: {display_name}  ·  draw bbox to segment")
 
     def _on_sam_loading_failed(self, msg: str) -> None:
         self._sam_loading = False
