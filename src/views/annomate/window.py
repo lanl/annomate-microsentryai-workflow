@@ -902,12 +902,13 @@ class AnnoMateWindow(QWidget):
             crop.get("width") or 1210,
             crop.get("height") or 1210,
         )
+        current_dot = self.canvas.center_crop_settings().get("center_dot", True)
         self.canvas.set_center_crop(
             enabled=True,
             shape=crop.get("shape") or "circle",
             width=crop.get("width") or 1210,
             height=crop.get("height") or 1210,
-            center_dot=True,
+            center_dot=current_dot,
             center_x=center_x,
             center_y=center_y,
             calibrating=False,
