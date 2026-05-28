@@ -45,6 +45,8 @@ class CalibrationModel(QObject):
 
         self._state.scale = real_distance / pixel_dist
         self._state.unit = unit
+        self._state.px_count = pixel_dist
+        self._state.world_val = real_distance
         self._state.user_calibrated = True
         self._state.real_distance = real_distance
         self._state.grid_visible = True
@@ -56,14 +58,16 @@ class CalibrationModel(QObject):
         self.grid_changed.emit()
         return True
 
-    def apply_scale_direct(self, scale: float, unit: str) -> None:
+    def apply_scale_direct(self, px_count: float, world_val: float, unit: str) -> None:
         """Set scale from a known ratio without requiring calibration points."""
-        self._state.scale = scale
+        self._state.px_count = px_count
+        self._state.world_val = world_val
+        self._state.scale = world_val / px_count
         self._state.unit = unit
         self._state.user_calibrated = True
         self._state.grid_visible = True
         if self._state.grid_spacing_auto:
-            self._state.grid_spacing_world = self._nice_spacing(scale)
+            self._state.grid_spacing_world = self._nice_spacing(self._state.scale)
         self.calibration_changed.emit()
         self.grid_changed.emit()
 
@@ -134,6 +138,12 @@ class CalibrationModel(QObject):
     def unit(self) -> str:
         return self._state.unit
 
+    def px_count(self) -> float:
+        return self._state.px_count
+
+    def world_val(self) -> float:
+        return self._state.world_val
+
     def grid_visible(self) -> bool:
         return self._state.grid_visible
 
@@ -171,6 +181,8 @@ class CalibrationModel(QObject):
         return {
             "scale": s.scale,
             "unit": s.unit,
+            "px_count": s.px_count,
+            "world_val": s.world_val,
             "user_calibrated": s.user_calibrated,
             "calib_p1": list(s.calib_p1) if s.calib_p1 else None,
             "calib_p2": list(s.calib_p2) if s.calib_p2 else None,
@@ -195,6 +207,9 @@ class CalibrationModel(QObject):
         else:
             s.scale = scale
             s.unit = data.get("unit", "mm")
+            # Restore original ratio sides; fall back gracefully for old projects
+            s.px_count = data.get("px_count", 1.0)
+            s.world_val = data.get("world_val", scale)
             s.user_calibrated = data.get("user_calibrated", True)
         p1 = data.get("calib_p1")
         s.calib_p1 = tuple(p1) if p1 and not using_default_pixel_scale else None

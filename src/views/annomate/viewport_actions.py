@@ -519,8 +519,8 @@ class ViewportActionsBar(QFrame):
             return
         from core.persistence.calibration_io import parse_ratio_string
         try:
-            scale, unit = parse_ratio_string(f"{px_text}:{val_text}")
-            self._model.apply_scale_direct(scale, unit)
+            px_count, world_val, unit = parse_ratio_string(f"{px_text}:{val_text}")
+            self._model.apply_scale_direct(px_count, world_val, unit)
         except ValueError as exc:
             QMessageBox.warning(self, "Invalid Ratio", str(exc))
 
@@ -536,7 +536,7 @@ class ViewportActionsBar(QFrame):
         from core.persistence.calibration_io import read_calibration_ratio
         try:
             data = read_calibration_ratio(path)
-            self._model.apply_scale_direct(data["scale_world_per_px"], data["unit"])
+            self._model.apply_scale_direct(data["px_count"], data["world_val"], data["unit"])
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
 
@@ -554,7 +554,7 @@ class ViewportActionsBar(QFrame):
             return
         from core.persistence.calibration_io import write_calibration_ratio
         try:
-            write_calibration_ratio(path, self._model.scale(), self._model.unit())
+            write_calibration_ratio(path, self._model.px_count(), self._model.world_val(), self._model.unit())
             QMessageBox.information(self, "Export Calibration Ratio", f"Saved to:\n{path}")
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
@@ -727,9 +727,10 @@ class ViewportActionsBar(QFrame):
                 self._ratio_val_edit.clear()
             return
         from core.persistence.calibration_io import format_ratio_string
-        scale = self._model.scale()
+        px_count = self._model.px_count()
+        world_val = self._model.world_val()
         unit = self._model.unit()
-        ratio_str = format_ratio_string(scale, unit)
+        ratio_str = format_ratio_string(px_count, world_val, unit)
         self._calib_status_lbl.setText(f"Current Calibration: {ratio_str}")
         left, right = ratio_str.split(":", 1)
         if not self._ratio_px_edit.hasFocus():

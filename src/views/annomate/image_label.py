@@ -1116,18 +1116,19 @@ class ImageLabel(QLabel):
             painter.drawLine(QPointF(0, y), QPointF(w, y))
             y += step_screen
 
-        self._paint_grid_watermark(painter, step_world, m.scale(), m.unit(), w, h)
+        self._paint_grid_watermark(painter, step_world, m.px_count(), m.world_val(), m.unit(), w, h)
 
     def _paint_grid_watermark(
         self,
         painter: QPainter,
         step_world: float,
-        scale: float,
+        px_count: float,
+        world_val: float,
         unit: str,
         viewport_w: float,
         viewport_h: float,
     ) -> None:
-        line1 = f"1px:{scale:g}{unit}"
+        line1 = f"{px_count:g}px:{world_val:g}{unit}"
         line2 = f"Grid: {step_world:g} {unit}"
         font = painter.font()
         font.setPointSizeF(11.0)

@@ -5,6 +5,8 @@ class CalibrationState:
         # Calibration reference (original image coords)
         self.scale: float | None = 1.0  # current units per original image pixel
         self.unit: str = "px"
+        self.px_count: float = 1.0   # left-side of user ratio (e.g. 500 for "500px:1cm")
+        self.world_val: float = 1.0  # right-side of user ratio (e.g. 1.0 for "500px:1cm")
         self.user_calibrated: bool = False
         self.calib_p1: tuple | None = None  # (x, y) in original pixels
         self.calib_p2: tuple | None = None  # (x, y) in original pixels
@@ -30,6 +32,8 @@ class CalibrationState:
     def clear_calibration(self) -> None:
         self.scale = 1.0
         self.unit = "px"
+        self.px_count = 1.0
+        self.world_val = 1.0
         self.user_calibrated = False
         self.calib_p1 = None
         self.calib_p2 = None
