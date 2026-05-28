@@ -493,6 +493,8 @@ class AppWindow(QMainWindow):
                 event.ignore()
                 return
         self.project_controller.autosave_manager.stop()
+        if self.center_template_controller is not None:
+            self.center_template_controller.shutdown()
         super().closeEvent(event)
 
     def _open_validation(self) -> None:

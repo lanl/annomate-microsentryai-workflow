@@ -14,7 +14,6 @@ logger = logging.getLogger("AnnoMate.CenterTemplateController")
 class CenterCropWorker(QThread):
     result_ready = Signal(str, float, float, float)  # (path, cx, cy, score)
     progress = Signal(int)
-    finished = Signal()
 
     def __init__(self, template, anchor_x, anchor_y, file_list):
         super().__init__()
@@ -46,7 +45,6 @@ class CenterCropWorker(QThread):
             except Exception as e:
                 logger.error("CenterCropWorker: failed for %s: %s", path, e)
             self.progress.emit(i + 1)
-        self.finished.emit()
 
     def stop(self):
         self._running = False
@@ -224,6 +222,9 @@ class CenterTemplateController(QObject):
         self._worker.finished.connect(self._on_worker_finished)
         self._worker.start()
         logger.info("CenterCropWorker started for %d paths", len(file_paths))
+
+    def shutdown(self) -> None:
+        self._stop_worker()
 
     def _stop_worker(self) -> None:
         if self._worker and self._worker.isRunning():
