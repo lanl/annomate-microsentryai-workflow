@@ -156,7 +156,6 @@ class AppWindow(QMainWindow):
             "",
             self._export_annotation_classes,
         )
-        add(data_menu, "Export Polygons + Data…", "", self._export_polygons)
         add(data_menu, "Export Binary Masks…", "", self._export_binary_masks)
         add(data_menu, "Export CSV…", "", self._export_csv)
         add(
@@ -426,18 +425,6 @@ class AppWindow(QMainWindow):
                 self.project_controller.project_dir
             )
             QMessageBox.information(self, "Export Annotation Classes", msg)
-        except Exception as exc:
-            QMessageBox.critical(self, "Export Error", str(exc))
-
-    def _export_polygons(self) -> None:
-        out_dir = QFileDialog.getExistingDirectory(
-            self, "Choose output folder", self._export_start_dir()
-        )
-        if not out_dir:
-            return
-        try:
-            msg = self.io_controller.export_polygons_and_data(out_dir)
-            QMessageBox.information(self, "Export", msg)
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 

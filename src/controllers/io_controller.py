@@ -13,12 +13,10 @@ import json
 import logging
 import shutil
 from pathlib import Path
-from datetime import datetime
 from typing import Optional
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw
 
 from core.utils.constants import DEFAULT_CLASS_COLORS
 
@@ -84,99 +82,6 @@ class IOController:
             logger.warning(f"Could not read image: {path}")
         return bgr
 
-    def export_polygons_and_data(self, out_dir: str) -> str:
-        """Write overlay images and a JSON data file to *out_dir*.
-
-        For each annotated image, composites filled polygon overlays onto the
-        source image using Pillow and saves the result as a JPEG. A single
-        JSON file containing all annotations, metadata, and class definitions
-        is written alongside the overlay images. Colors are stored as plain
-        ``[r, g, b]`` lists for JSON serialisability.
-
-        Args:
-            out_dir (str): Absolute path to the output directory.
-
-        Returns:
-            str: Human-readable success message including the count of overlay
-                images saved and the path to the JSON data file.
-
-        Raises:
-            RuntimeError: If no images are currently loaded in the model.
-        """
-        state = self.model.state
-        if not state.image_files:
-            logger.warning("Attempted to export, but no images are loaded.")
-            raise RuntimeError("No images loaded.")
-
-        logger.debug("Starting polygon export to: %s", out_dir)
-
-        out_path = Path(out_dir)
-        tray_name = Path(state.image_dir).name if state.image_dir else "tray"
-        timestamp = datetime.now().strftime("%m-%d-%y-%H-%M-%S")
-
-        payload = {
-            "meta": {"tray": tray_name, "exported_at": timestamp},
-            "classes": list(state.class_names),
-            # Colors stored as (r,g,b) tuples — JSON-serialisable, no Qt needed.
-            "class_colors": {
-                name: list(rgb) for name, rgb in state.class_colors.items()
-            },
-            "images": {},
-        }
-
-        saved_count = 0
-        for name in state.image_files:
-            anns = state.annotations.get(name, [])
-            is_rev = state.is_reviewed(name)
-
-            payload["images"][name] = {
-                "inspector": state.inspectors.get(name, "") if is_rev else "",
-                "note": state.notes.get(name, "") if is_rev else "",
-                "annotations": [
-                    {
-                        "class": a["category_name"],
-                        "polygon": [(float(x), float(y)) for (x, y) in a["polygon"]],
-                        "thickness": a.get("thickness", 2.0),
-                    }
-                    for a in anns
-                ],
-            }
-
-            if not anns:
-                continue
-
-            src = Path(state.image_dir) / name
-            if not src.exists():
-                continue
-
-            try:
-                base = Image.open(src).convert("RGBA")
-                overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
-                draw = ImageDraw.Draw(overlay, "RGBA")
-
-                for a in anns:
-                    pts = [(float(x), float(y)) for (x, y) in a["polygon"]]
-                    if len(pts) < 2:
-                        continue
-                    rgb = state.class_colors.get(a["category_name"], (255, 255, 255))
-                    draw.polygon(pts, fill=(*rgb, 80), outline=(*rgb, 255))
-                    draw.line(pts + [pts[0]], fill=(*rgb, 255), width=3)
-
-                composed = Image.alpha_composite(base, overlay).convert("RGB")
-                out_name = f"{tray_name}_{Path(name).stem}_{timestamp}_poly.jpg"
-                composed.save(out_path / out_name, "JPEG", quality=95)
-                saved_count += 1
-            except Exception as e:
-                logger.error(f"Failed to export overlay for {name}: {e}")
-
-        data_path = out_path / f"{tray_name}_{timestamp}_data.json"
-        with open(data_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-
-        logger.debug(
-            "Successfully exported %d overlay images and data JSON.", saved_count
-        )
-        return f"Saved {saved_count} image(s) + data JSON:\n{data_path}"
 
     def export_csv(self, out_path: str) -> str:
         """Write per-image metadata to a CSV file at *out_path*.
