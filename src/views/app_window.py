@@ -136,7 +136,6 @@ class AppWindow(QMainWindow):
         add(file_menu, "Exit", "Ctrl+Q", self.close)
 
         data_menu = self.menuBar().addMenu("&Data")
-        add(data_menu, "Import JSON Data…", "", self._import_coco)
         add(
             data_menu,
             "Import Annotation Classes…",
@@ -382,18 +381,6 @@ class AppWindow(QMainWindow):
     # ================================================================== #
     # Data menu handlers
     # ================================================================== #
-
-    def _import_coco(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Import JSON Data", "", "JSON (*.json)"
-        )
-        if not path:
-            return
-        try:
-            self.io_controller.import_data_json(path)
-        except Exception as exc:
-            QMessageBox.critical(self, "Import JSON Data", f"Import failed:\n{exc}")
-            return
 
     def _import_annotation_classes(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
