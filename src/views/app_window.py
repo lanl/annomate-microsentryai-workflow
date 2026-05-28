@@ -443,13 +443,13 @@ class AppWindow(QMainWindow):
             QMessageBox.critical(self, "Export Error", str(exc))
 
     def _export_binary_masks(self) -> None:
-        out_dir = QFileDialog.getExistingDirectory(
+        chosen = QFileDialog.getExistingDirectory(
             self, "Choose ground truth output folder", self._export_start_dir()
         )
-        if not out_dir:
+        if not chosen:
             return
         try:
-            msg = self.io_controller.export_binary_masks(out_dir)
+            msg = self.io_controller.export_binary_masks(os.path.join(chosen, "binary_masks"))
             QMessageBox.information(self, "Export Binary Masks", msg)
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
