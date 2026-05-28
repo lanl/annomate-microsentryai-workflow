@@ -494,6 +494,7 @@ class ViewportActionsBar(QFrame):
         x = (canvas_size.width() - self.width()) // 2
         y = canvas_size.height() - self.height() - self._MARGIN
         self.move(max(0, x), max(0, y))
+        self._canvas.set_watermark_bar_y(max(0, y))
 
     def _on_tool_clicked(self, tool_name: str, checked: bool) -> None:
         if self._refreshing:

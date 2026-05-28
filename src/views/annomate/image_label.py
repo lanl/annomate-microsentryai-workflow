@@ -140,6 +140,7 @@ class ImageLabel(QLabel):
         # --- Calibration / measure tool state ---
         self._calib_model = None  # CalibrationModel; set via set_calibration_model()
         self._pending_calib_pts: list = []  # accumulates up to 2 original-coord tuples
+        self._watermark_bar_y: int | None = None
 
     def set_image(self, bgr: np.ndarray, max_display_dim: int = 1200) -> None:
         """Load a BGR ndarray and prepare it for display.
@@ -530,6 +531,10 @@ class ImageLabel(QLabel):
             model.calibration_changed.connect(self.update)
             model.grid_changed.connect(self.update)
             model.measurement_updated.connect(self.update)
+
+    def set_watermark_bar_y(self, y: int) -> None:
+        """Tell the canvas where the floating action bar's top edge sits (canvas coords)."""
+        self._watermark_bar_y = y
 
     def clear_sam_ghost(self) -> None:
         """Discard the SAM ghost polygon, bbox, and repaint."""
@@ -1111,30 +1116,46 @@ class ImageLabel(QLabel):
             painter.drawLine(QPointF(0, y), QPointF(w, y))
             y += step_screen
 
-        self._paint_grid_watermark(painter, step_world, m.unit(), w, h)
+        self._paint_grid_watermark(painter, step_world, m.scale(), m.unit(), w, h)
 
     def _paint_grid_watermark(
         self,
         painter: QPainter,
         step_world: float,
+        scale: float,
         unit: str,
         viewport_w: float,
         viewport_h: float,
     ) -> None:
-        label = f"Grid: {step_world:g} {unit}"
+        line1 = f"1px:{scale:g}{unit}"
+        line2 = f"Grid: {step_world:g} {unit}"
         font = painter.font()
-        font.setPointSizeF(9.0)
+        font.setPointSizeF(11.0)
         painter.setFont(font)
         fm = QFontMetricsF(font)
-        margin = 6.0
-        text_w = fm.horizontalAdvance(label)
-        text_h = fm.height()
-        x = viewport_w - text_w - margin
-        y = viewport_h - margin
+        margin = 12.0
+        line_h = fm.height()
+
+        w1 = fm.horizontalAdvance(line1)
+        w2 = fm.horizontalAdvance(line2)
+
+        if self._watermark_bar_y is not None:
+            top_y = float(self._watermark_bar_y)
+        else:
+            top_y = viewport_h - 2 * line_h - margin
+
+        baseline1 = top_y + fm.ascent()
+        baseline2 = baseline1 + line_h
+
+        x1 = viewport_w - w1 - margin
+        x2 = viewport_w - w2 - margin
+
         painter.setPen(QColor(0, 0, 0, 120))
-        painter.drawText(QPointF(x + 1, y + 1), label)
+        painter.drawText(QPointF(x1 + 1, baseline1 + 1), line1)
+        painter.drawText(QPointF(x2 + 1, baseline2 + 1), line2)
         painter.setPen(QColor(255, 255, 255, 200))
-        painter.drawText(QPointF(x, y), label)
+        painter.drawText(QPointF(x1, baseline1), line1)
+        painter.drawText(QPointF(x2, baseline2), line2)
 
     def _paint_calib_dots(self, painter: QPainter) -> None:
         """Draw calibration and measure dots in display coords (inside scaled painter)."""

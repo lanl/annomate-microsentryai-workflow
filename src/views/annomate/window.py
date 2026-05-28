@@ -960,8 +960,6 @@ class AnnoMateWindow(QWidget):
     def _on_review_decision(self, decision) -> None:
         if self._current_row >= 0:
             self.dataset_model.set_review_decision(self._current_row, decision)
-            if decision in ("accept", "reject"):
-                self._next_image()
 
     def _on_annotation_selected(self, idx: int) -> None:
         """Apply selection to the canvas and sync the UI slider to match the polygon's thickness."""
