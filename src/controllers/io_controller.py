@@ -180,9 +180,10 @@ class IOController:
     def export_csv(self, out_path: str) -> str:
         """Write per-image metadata to a CSV file at *out_path*.
 
-        Each row contains tray name, image filename, inspector, note, and a
-        comma-separated list of unique annotation class names (or ``"good"``
-        when the image has been reviewed but carries no annotations).
+        Each row contains tray name, image filename, accept/reject decision,
+        inspector, note, and a comma-separated list of unique annotation class
+        names (or ``"good"`` when the image has been reviewed but carries no
+        annotations).
 
         Args:
             out_path (str): Absolute path for the output CSV file.
@@ -207,9 +208,10 @@ class IOController:
                 {
                     "tray": tray_name,
                     "image_name": name,
+                    "decision": state.review_decisions.get(name, "") if reviewed else "",
                     "inspector": state.inspectors.get(name, "") if reviewed else "",
                     "note": state.notes.get(name, "") if reviewed else "",
-                    "classes": (", ".join(unique_classes) if unique_classes else "good")
+                    "classes": (",".join(unique_classes) if unique_classes else "good")
                     if reviewed
                     else "",
                 }
@@ -217,7 +219,8 @@ class IOController:
 
         with open(out_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["tray", "image_name", "inspector", "note", "classes"]
+                f,
+                fieldnames=["tray", "image_name", "decision", "classes", "inspector", "note"],
             )
             writer.writeheader()
             writer.writerows(rows)
