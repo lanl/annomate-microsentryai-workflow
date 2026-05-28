@@ -495,6 +495,9 @@ class AppWindow(QMainWindow):
         self.project_controller.autosave_manager.stop()
         if self.center_template_controller is not None:
             self.center_template_controller.shutdown()
+        self.inference_controller.shutdown()
+        self.validation_controller.shutdown()
+        self.annomate_view.shutdown()
         super().closeEvent(event)
 
     def _open_validation(self) -> None:

@@ -51,7 +51,6 @@ class SAMWorker(QThread):
 
     resultReady = Signal(list, float)  # (polygon_pts, confidence)
     failed = Signal(str)
-    finished = Signal()
 
     def __init__(
         self,
@@ -76,8 +75,6 @@ class SAMWorker(QThread):
         except Exception as exc:
             logger.warning("SAM inference error: %s", exc)
             self.failed.emit(str(exc))
-        finally:
-            self.finished.emit()
 
 
 # ------------------------------------------------------------------ #
@@ -187,6 +184,10 @@ class SAMController(QObject):
         if self._infer_worker is not None:
             self._infer_worker.deleteLater()
             self._infer_worker = None
+
+    def shutdown(self) -> None:
+        self._stop_load_worker()
+        self._stop_infer_worker()
 
     def _stop_load_worker(self) -> None:
         if self._load_worker is not None:

@@ -101,7 +101,6 @@ class MaskGenWorker(QThread):
 
     progress = Signal(int)  # 0–100
     log_message = Signal(str)
-    finished = Signal()
 
     def __init__(self, input_dir: str, json_path: str, output_dir: str) -> None:
         """Initialize MaskGenWorker with paths needed for mask generation.
@@ -123,106 +122,103 @@ class MaskGenWorker(QThread):
         renders annotated polygons to a binary mask, and saves the result.
         Always emits :attr:`finished` on exit, even when an error occurs.
         """
+        os.makedirs(self.output_dir, exist_ok=True)
+
         try:
-            os.makedirs(self.output_dir, exist_ok=True)
+            with open(self.json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            image_data_map = data.get("images", {})
+            if not image_data_map and isinstance(data, dict):
+                image_data_map = data.get("_via_img_metadata", data)
+        except Exception as e:
+            self.log_message.emit(f"Critical Error loading JSON: {e}")
+            return
 
+        files = []
+        for ext in ("*.jpg", "*.jpeg", "*.png"):
+            files.extend(glob.glob(os.path.join(self.input_dir, ext)))
+
+        total = len(files)
+        if total == 0:
+            self.log_message.emit("Error: No images found in input folder.")
+            return
+
+        processed = 0
+        for i, filepath in enumerate(files):
             try:
-                with open(self.json_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                image_data_map = data.get("images", {})
-                if not image_data_map and isinstance(data, dict):
-                    image_data_map = data.get("_via_img_metadata", data)
-            except Exception as e:
-                self.log_message.emit(f"Critical Error loading JSON: {e}")
-                return
+                filename = os.path.basename(filepath)
+                image_id = get_robust_id(filename)
 
-            files = []
-            for ext in ("*.jpg", "*.jpeg", "*.png"):
-                files.extend(glob.glob(os.path.join(self.input_dir, ext)))
-
-            total = len(files)
-            if total == 0:
-                self.log_message.emit("Error: No images found in input folder.")
-                return
-
-            processed = 0
-            for i, filepath in enumerate(files):
-                try:
-                    filename = os.path.basename(filepath)
-                    image_id = get_robust_id(filename)
-
+                json_key = next(
+                    (
+                        k
+                        for k in image_data_map
+                        if k == f"{image_id}.png" or k == f"{image_id}.jpg"
+                    ),
+                    None,
+                )
+                if not json_key:
                     json_key = next(
-                        (
-                            k
-                            for k in image_data_map
-                            if k == f"{image_id}.png" or k == f"{image_id}.jpg"
-                        ),
+                        (k for k in image_data_map if image_id in k), None
+                    )
+                if not json_key and "_" in image_id:
+                    simple = image_id.split("_")[-1]
+                    json_key = next(
+                        (k for k in image_data_map if k.startswith(f"{simple}.")),
                         None,
                     )
-                    if not json_key:
-                        json_key = next(
-                            (k for k in image_data_map if image_id in k), None
-                        )
-                    if not json_key and "_" in image_id:
-                        simple = image_id.split("_")[-1]
-                        json_key = next(
-                            (k for k in image_data_map if k.startswith(f"{simple}.")),
-                            None,
-                        )
 
-                    if json_key:
-                        img = cv2.imread(filepath)
-                        if img is None:
-                            continue
-                        h, w = img.shape[:2]
-                        final_mask = np.zeros((h, w), dtype=np.uint8)
+                if json_key:
+                    img = cv2.imread(filepath)
+                    if img is None:
+                        continue
+                    h, w = img.shape[:2]
+                    final_mask = np.zeros((h, w), dtype=np.uint8)
 
-                        entry = image_data_map[json_key]
-                        annotations = entry.get("annotations", [])
-                        if isinstance(annotations, dict):
-                            annotations = annotations.values()
+                    entry = image_data_map[json_key]
+                    annotations = entry.get("annotations", [])
+                    if isinstance(annotations, dict):
+                        annotations = annotations.values()
 
-                        drawn = 0
-                        for ann in annotations:
-                            poly_points = ann.get("polygon")
-                            if not poly_points and "shape_attributes" in ann:
-                                sa = ann["shape_attributes"]
-                                if sa.get("name") == "polygon":
-                                    poly_points = list(
-                                        zip(
-                                            sa.get("all_points_x", []),
-                                            sa.get("all_points_y", []),
-                                        )
+                    drawn = 0
+                    for ann in annotations:
+                        poly_points = ann.get("polygon")
+                        if not poly_points and "shape_attributes" in ann:
+                            sa = ann["shape_attributes"]
+                            if sa.get("name") == "polygon":
+                                poly_points = list(
+                                    zip(
+                                        sa.get("all_points_x", []),
+                                        sa.get("all_points_y", []),
                                     )
-                            if poly_points:
-                                pts = np.array(poly_points, dtype=np.int32).reshape(
-                                    (-1, 1, 2)
                                 )
-                                cv2.fillPoly(final_mask, [pts], 255)
-                                drawn += 1
-
-                        if drawn > 0:
-                            out_name = f"{image_id}_binary_mask.png"
-                            cv2.imwrite(
-                                os.path.join(self.output_dir, out_name), final_mask
+                        if poly_points:
+                            pts = np.array(poly_points, dtype=np.int32).reshape(
+                                (-1, 1, 2)
                             )
-                            self.log_message.emit(f"✓ Matched {filename} → mask saved")
-                            processed += 1
-                    else:
-                        self.log_message.emit(
-                            f"Warning: ID {image_id} not found in JSON."
+                            cv2.fillPoly(final_mask, [pts], 255)
+                            drawn += 1
+
+                    if drawn > 0:
+                        out_name = f"{image_id}_binary_mask.png"
+                        cv2.imwrite(
+                            os.path.join(self.output_dir, out_name), final_mask
                         )
+                        self.log_message.emit(f"✓ Matched {filename} → mask saved")
+                        processed += 1
+                else:
+                    self.log_message.emit(
+                        f"Warning: ID {image_id} not found in JSON."
+                    )
 
-                except Exception as e:
-                    self.log_message.emit(f"Error processing {filename}: {e}")
+            except Exception as e:
+                self.log_message.emit(f"Error processing {filename}: {e}")
 
-                self.progress.emit(int((i + 1) / total * 100))
+            self.progress.emit(int((i + 1) / total * 100))
 
-            self.log_message.emit(
-                f"Generation complete. Processed {processed}/{total}."
-            )
-        finally:
-            self.finished.emit()
+        self.log_message.emit(
+            f"Generation complete. Processed {processed}/{total}."
+        )
 
 
 class EvaluationWorker(QThread):
@@ -250,7 +246,6 @@ class EvaluationWorker(QThread):
     progress = Signal(int)  # 0–100
     log_message = Signal(str)
     match_found = Signal(str, str, float)  # (overlay_image_path, display_text, iou)
-    finished = Signal()
 
     def __init__(self, gt_dir: str, pred_dir: str, out_dir: str) -> None:
         """Initialize EvaluationWorker with paths needed for mask evaluation.
@@ -275,93 +270,90 @@ class EvaluationWorker(QThread):
         ``evaluation_log.txt`` to *out_dir*. Always emits :attr:`finished` on
         exit, even when an error occurs.
         """
-        try:
-            outline_color = (0, 0, 255)
-            thickness = 2
-            comparator = MaskComparator(
-                gt_outline_color=outline_color,
-                gt_outline_thickness=thickness,
+        outline_color = (0, 0, 255)
+        thickness = 2
+        comparator = MaskComparator(
+            gt_outline_color=outline_color,
+            gt_outline_thickness=thickness,
+        )
+        os.makedirs(self.out_dir, exist_ok=True)
+
+        log_path = os.path.join(self.out_dir, "evaluation_log.txt")
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            write_log_header(
+                log_file,
+                self.gt_dir,
+                self.pred_dir,
+                self.out_dir,
+                outline_color,
+                thickness,
             )
-            os.makedirs(self.out_dir, exist_ok=True)
 
-            log_path = os.path.join(self.out_dir, "evaluation_log.txt")
-            with open(log_path, "w", encoding="utf-8") as log_file:
-                write_log_header(
-                    log_file,
-                    self.gt_dir,
-                    self.pred_dir,
-                    self.out_dir,
-                    outline_color,
-                    thickness,
+            valid_exts = ("*.png", "*.jpg", "*.jpeg", "*.bmp")
+            gt_files = []
+            pred_files_raw = []
+            for ext in valid_exts:
+                gt_files.extend(glob.glob(os.path.join(self.gt_dir, ext)))
+                pred_files_raw.extend(glob.glob(os.path.join(self.pred_dir, ext)))
+
+            total = len(gt_files)
+            if total == 0:
+                self.log_message.emit(
+                    "Error: No images found in Ground Truth folder."
                 )
+                log_file.write("ERROR: No Ground Truth images found.\n")
+                return
 
-                valid_exts = ("*.png", "*.jpg", "*.jpeg", "*.bmp")
-                gt_files = []
-                pred_files_raw = []
-                for ext in valid_exts:
-                    gt_files.extend(glob.glob(os.path.join(self.gt_dir, ext)))
-                    pred_files_raw.extend(glob.glob(os.path.join(self.pred_dir, ext)))
+            pred_map = {
+                get_robust_id(os.path.basename(p)): p for p in pred_files_raw
+            }
 
-                total = len(gt_files)
-                if total == 0:
-                    self.log_message.emit(
-                        "Error: No images found in Ground Truth folder."
-                    )
-                    log_file.write("ERROR: No Ground Truth images found.\n")
-                    return
+            for i, gt_path in enumerate(sorted(gt_files)):
+                gt_filename = os.path.basename(gt_path)
+                gt_id = get_robust_id(gt_filename)
 
-                pred_map = {
-                    get_robust_id(os.path.basename(p)): p for p in pred_files_raw
-                }
+                if gt_id in pred_map:
+                    pred_path = pred_map[gt_id]
+                    try:
+                        gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
+                        pred = cv2.imread(pred_path, cv2.IMREAD_GRAYSCALE)
+                        if gt is None or pred is None:
+                            continue
 
-                for i, gt_path in enumerate(sorted(gt_files)):
-                    gt_filename = os.path.basename(gt_path)
-                    gt_id = get_robust_id(gt_filename)
+                        _, gt = cv2.threshold(gt, 1, 255, cv2.THRESH_BINARY)
+                        _, pred = cv2.threshold(pred, 1, 255, cv2.THRESH_BINARY)
 
-                    if gt_id in pred_map:
-                        pred_path = pred_map[gt_id]
-                        try:
-                            gt = cv2.imread(gt_path, cv2.IMREAD_GRAYSCALE)
-                            pred = cv2.imread(pred_path, cv2.IMREAD_GRAYSCALE)
-                            if gt is None or pred is None:
-                                continue
-
-                            _, gt = cv2.threshold(gt, 1, 255, cv2.THRESH_BINARY)
-                            _, pred = cv2.threshold(pred, 1, 255, cv2.THRESH_BINARY)
-
-                            if gt.shape != pred.shape:
-                                pred = cv2.resize(
-                                    pred,
-                                    (gt.shape[1], gt.shape[0]),
-                                    interpolation=cv2.INTER_NEAREST,
-                                )
-
-                            _, overlay, metrics = comparator.compare_masks(gt, pred)
-
-                            out_path = os.path.join(self.out_dir, f"eval_{gt_id}.png")
-                            cv2.imwrite(out_path, overlay)
-
-                            iou = metrics["iou"]
-                            self.log_message.emit(f"✓ Match: {gt_id} | IoU: {iou:.1f}%")
-                            self.match_found.emit(
-                                out_path, f"Tray_Image: {gt_id} | IoU: {iou:.1f}%", iou
+                        if gt.shape != pred.shape:
+                            pred = cv2.resize(
+                                pred,
+                                (gt.shape[1], gt.shape[0]),
+                                interpolation=cv2.INTER_NEAREST,
                             )
-                            log_results(log_file, gt_id, metrics)
 
-                        except Exception as e:
-                            self.log_message.emit(f"Error evaluating {gt_id}: {e}")
-                            log_skip(log_file, gt_id, f"Processing Error: {e}")
-                    else:
-                        self.log_message.emit(
-                            f"⚠ Skip {gt_id}: No matching prediction found."
+                        _, overlay, metrics = comparator.compare_masks(gt, pred)
+
+                        out_path = os.path.join(self.out_dir, f"eval_{gt_id}.png")
+                        cv2.imwrite(out_path, overlay)
+
+                        iou = metrics["iou"]
+                        self.log_message.emit(f"✓ Match: {gt_id} | IoU: {iou:.1f}%")
+                        self.match_found.emit(
+                            out_path, f"Tray_Image: {gt_id} | IoU: {iou:.1f}%", iou
                         )
-                        log_skip(log_file, gt_id, "No prediction match found")
+                        log_results(log_file, gt_id, metrics)
 
-                    self.progress.emit(int((i + 1) / total * 100))
+                    except Exception as e:
+                        self.log_message.emit(f"Error evaluating {gt_id}: {e}")
+                        log_skip(log_file, gt_id, f"Processing Error: {e}")
+                else:
+                    self.log_message.emit(
+                        f"⚠ Skip {gt_id}: No matching prediction found."
+                    )
+                    log_skip(log_file, gt_id, "No prediction match found")
 
-            self.log_message.emit(f"Evaluation complete. Log saved to: {log_path}")
-        finally:
-            self.finished.emit()
+                self.progress.emit(int((i + 1) / total * 100))
+
+        self.log_message.emit(f"Evaluation complete. Log saved to: {log_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +434,12 @@ class ValidationController:
             self.model.get_eval_out_path(),
         )
         return self._eval_worker
+
+    def shutdown(self) -> None:
+        self._stop(self._gen_worker)
+        self._gen_worker = None
+        self._stop(self._eval_worker)
+        self._eval_worker = None
 
     @staticmethod
     def _stop(worker: Optional[QThread]) -> None:

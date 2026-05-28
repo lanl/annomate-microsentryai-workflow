@@ -47,7 +47,6 @@ class InferenceWorker(QThread):
         str, float, object
     )  # (absolute_path, score: float, score_map: np.ndarray)
     progress = Signal(int)  # count of images processed so far
-    finished = Signal()
 
     def __init__(self, strategy, file_list: List[str]) -> None:
         """Initialize InferenceWorker with a strategy and file list.
@@ -80,7 +79,6 @@ class InferenceWorker(QThread):
             except Exception as e:
                 logger.error("Inference failed for %s: %s", path, e)
             self.progress.emit(i + 1)
-        self.finished.emit()
 
     def stop(self) -> None:
         """Request cooperative cancellation of the inference loop.
@@ -232,6 +230,9 @@ class InferenceController(QObject):
         self._worker.progress.connect(self.progress)
         self._worker.finished.connect(self.batch_done)
         self._worker.start()
+
+    def shutdown(self) -> None:
+        self._stop_worker()
 
     def _stop_worker(self) -> None:
         """Gracefully stop and clean up the current inference worker.

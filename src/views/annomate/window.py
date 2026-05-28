@@ -1415,3 +1415,6 @@ class AnnoMateWindow(QWidget):
     def _on_sam_inference_failed(self, msg: str) -> None:
         self.canvas.setCursor(Qt.CrossCursor)
         self.status_bar.set_sam_hint(f"Inference error — {msg}")
+
+    def shutdown(self) -> None:
+        self._sam_controller.shutdown()
