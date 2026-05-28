@@ -165,6 +165,7 @@ class AppWindow(QMainWindow):
             "",
             self._export_calibration_ratio,
         )
+        add(data_menu, "Export Train Structure…", "", self._export_train_structure)
 
         validation_menu = self.menuBar().addMenu("&Validation")
         add(validation_menu, "Open Validation…", "", self._open_validation)
@@ -507,6 +508,27 @@ class AppWindow(QMainWindow):
             QMessageBox.information(self, "Import Calibration Ratio", f"Loaded from:\n{path}")
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
+
+    def _export_train_structure(self) -> None:
+        parent_dir = QFileDialog.getExistingDirectory(
+            self, "Choose Train Structure Output Folder", self._export_start_dir()
+        )
+        if not parent_dir:
+            return
+
+        default_name = self.project_controller.project_name or "dataset"
+        name, ok = QInputDialog.getText(
+            self, "Dataset Folder Name", "Enter dataset folder name:", text=default_name
+        )
+        if not ok or not name.strip():
+            return
+
+        out_dir = os.path.join(parent_dir, name.strip())
+        try:
+            msg = self.io_controller.export_train_structure(out_dir)
+            QMessageBox.information(self, "Export Train Structure", msg)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
 
     # ================================================================== #
     # Title, close, unsaved-changes guard

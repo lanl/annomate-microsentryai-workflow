@@ -11,6 +11,7 @@ import os
 import csv
 import json
 import logging
+import shutil
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -302,6 +303,76 @@ class IOController:
                 f.write(f"{name}\n")
 
         return f"Annotation classes saved to:\n{class_path}"
+
+    def export_train_structure(self, out_dir: str) -> str:
+        """Export an MVTec-style anomaly detection training directory.
+
+        Structure:
+            {out_dir}/
+            ├── train/good/          reviewed images with no annotations
+            ├── test/{defect}/       annotated images; multi-class joined with "-"
+            └── ground_truth/{defect}/  binary mask PNGs (same subfolder as test)
+
+        Args:
+            out_dir: Root directory to write the structure into.
+
+        Returns:
+            str: Human-readable summary of counts written.
+
+        Raises:
+            RuntimeError: If no images are loaded.
+        """
+        state = self.model.state
+        if not state.image_files:
+            raise RuntimeError("No images loaded.")
+
+        root = Path(out_dir)
+        counts = {"train_good": 0, "test": 0, "masks": 0, "skipped": 0}
+
+        for name in state.image_files:
+            src = Path(state.image_dir) / name
+            if not src.exists():
+                counts["skipped"] += 1
+                logger.warning("Image not found, skipping: %s", src)
+                continue
+
+            anns = state.annotations.get(name, [])
+            reviewed = state.is_reviewed(name)
+
+            if not anns and reviewed:
+                dest = root / "train" / "good"
+                dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest / name)
+                counts["train_good"] += 1
+
+            elif anns:
+                folder = "-".join(sorted({a["category_name"] for a in anns}))
+
+                test_dest = root / "test" / folder
+                test_dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, test_dest / name)
+                counts["test"] += 1
+
+                img = cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    h, w = img.shape[:2]
+                    mask = np.zeros((h, w), dtype=np.uint8)
+                    for a in anns:
+                        pts = np.array(a["polygon"], dtype=np.int32).reshape((-1, 1, 2))
+                        cv2.fillPoly(mask, [pts], 255)
+                    gt_dest = root / "ground_truth" / folder
+                    gt_dest.mkdir(parents=True, exist_ok=True)
+                    cv2.imwrite(str(gt_dest / f"{src.stem}.png"), mask)
+                    counts["masks"] += 1
+
+        logger.debug("Exported train structure to: %s — %s", out_dir, counts)
+        return (
+            f"Train structure exported to:\n{out_dir}\n"
+            f"  train/good:      {counts['train_good']} images\n"
+            f"  test/*:          {counts['test']} images\n"
+            f"  ground_truth/*:  {counts['masks']} masks"
+            + (f"\n  skipped:         {counts['skipped']} (file not found)" if counts["skipped"] else "")
+        )
 
     # ------------------------------------------------------------------ #
     # Import
