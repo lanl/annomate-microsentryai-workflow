@@ -412,6 +412,9 @@ class AppWindow(QMainWindow):
             )
             return
 
+    def _export_start_dir(self) -> str:
+        return self.project_controller.project_dir or os.getcwd()
+
     def _export_annotation_classes(self) -> None:
         if not self.project_controller.has_project:
             self._save_project_as()
@@ -429,7 +432,7 @@ class AppWindow(QMainWindow):
 
     def _export_polygons(self) -> None:
         out_dir = QFileDialog.getExistingDirectory(
-            self, "Choose output folder", os.getcwd()
+            self, "Choose output folder", self._export_start_dir()
         )
         if not out_dir:
             return
@@ -441,7 +444,7 @@ class AppWindow(QMainWindow):
 
     def _export_binary_masks(self) -> None:
         out_dir = QFileDialog.getExistingDirectory(
-            self, "Choose ground truth output folder", os.getcwd()
+            self, "Choose ground truth output folder", self._export_start_dir()
         )
         if not out_dir:
             return
@@ -453,7 +456,7 @@ class AppWindow(QMainWindow):
 
     def _export_csv(self) -> None:
         out_path, _ = QFileDialog.getSaveFileName(
-            self, "Save CSV", "metadata.csv", "CSV (*.csv)"
+            self, "Save CSV", os.path.join(self._export_start_dir(), "metadata.csv"), "CSV (*.csv)"
         )
         if not out_path:
             return
@@ -471,7 +474,7 @@ class AppWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(
             self,
             "Export Calibration Ratio",
-            os.path.join(os.getcwd(), "calibration.annocalib"),
+            os.path.join(self._export_start_dir(), "calibration.annocalib"),
             "Calibration Ratio (*.annocalib)",
         )
         if not path:
@@ -489,7 +492,7 @@ class AppWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Import Calibration Ratio",
-            os.getcwd(),
+            self._export_start_dir(),
             "Calibration Ratio (*.annocalib)",
         )
         if not path:
