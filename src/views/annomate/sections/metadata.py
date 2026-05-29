@@ -1,8 +1,10 @@
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QTextEdit,
 )
 
@@ -13,13 +15,18 @@ class MetadataSection(QWidget):
     Writes to the model on edit (editingFinished / textChanged) and refreshes
     when the current row changes.  Signals are blocked during programmatic
     population to avoid spurious writes.
+
+    A session inspector can be set via the "Set Inspector" button. Once set,
+    it pre-fills the inspector field for any image that has no saved inspector.
     """
 
     def __init__(self, dataset_model, parent: QWidget = None) -> None:
         super().__init__(parent)
         self.dataset_model = dataset_model
         self._current_row: int = -1
+        self._session_inspector: str = ""
         self._init_ui()
+        dataset_model.modelReset.connect(self._reset_session_inspector)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -28,10 +35,22 @@ class MetadataSection(QWidget):
 
         layout.addWidget(QLabel("Inspector"))
 
+        inspector_row = QHBoxLayout()
+        inspector_row.setSpacing(4)
         self._inspector_edit = QLineEdit()
         self._inspector_edit.setPlaceholderText("Inspector name…")
         self._inspector_edit.editingFinished.connect(self._store_inspector)
-        layout.addWidget(self._inspector_edit)
+        inspector_row.addWidget(self._inspector_edit)
+
+        self._set_inspector_btn = QPushButton("Set Inspector")
+        self._set_inspector_btn.setFixedWidth(95)
+        self._set_inspector_btn.clicked.connect(self._on_set_inspector)
+        inspector_row.addWidget(self._set_inspector_btn)
+        layout.addLayout(inspector_row)
+
+        self._session_lbl = QLabel("Session Inspector: —")
+        self._session_lbl.setStyleSheet("color: grey; font-size: 11px;")
+        layout.addWidget(self._session_lbl)
 
         layout.addWidget(QLabel("Image note"))
 
@@ -50,9 +69,8 @@ class MetadataSection(QWidget):
         self._note_edit.blockSignals(True)
 
         if self._current_row >= 0:
-            self._inspector_edit.setText(
-                self.dataset_model.get_inspector(self._current_row)
-            )
+            saved = self.dataset_model.get_inspector(self._current_row)
+            self._inspector_edit.setText(saved if saved else self._session_inspector)
             self._note_edit.setPlainText(self.dataset_model.get_note(self._current_row))
             self._inspector_edit.setEnabled(True)
             self._note_edit.setEnabled(True)
@@ -64,6 +82,20 @@ class MetadataSection(QWidget):
 
         self._inspector_edit.blockSignals(False)
         self._note_edit.blockSignals(False)
+
+    def _reset_session_inspector(self) -> None:
+        self._session_inspector = ""
+        self._session_lbl.setText("Session Inspector: —")
+
+    def _on_set_inspector(self) -> None:
+        name = self._inspector_edit.text().strip()
+        self._session_inspector = name
+        self._session_lbl.setText(
+            f"Session Inspector: {name}" if name else "Session Inspector: —"
+        )
+        for row in range(self.dataset_model.rowCount()):
+            if not self.dataset_model.get_inspector(row):
+                self.dataset_model.set_inspector(row, name)
 
     def _store_inspector(self) -> None:
         if self._current_row < 0:
