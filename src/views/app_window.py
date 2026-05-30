@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QFileDialog,
     QMessageBox,
+    QToolButton,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
@@ -148,7 +149,16 @@ class AppWindow(QMainWindow):
         self._ms_action.setCheckable(True)
         self._ms_action.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
         self._ms_action.toggled.connect(self.annomate_view._on_microsentry_toggled)
+        self._ms_action.toggled.connect(self._sync_ms_btn)
         view_menu.addAction(self._ms_action)
+
+        self._btn_ms = QToolButton()
+        self._btn_ms.setText("Enable Microsentry")
+        self._btn_ms.setCheckable(True)
+        self._btn_ms.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
+        self._btn_ms.setStyleSheet("QToolButton { margin: 3px 4px; padding: 1px 6px; }")
+        self._btn_ms.toggled.connect(self._sync_ms_action)
+        self.menuBar().setCornerWidget(self._btn_ms)
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
@@ -469,4 +479,22 @@ class AppWindow(QMainWindow):
         self.inference_controller.shutdown()
         self.annomate_view.shutdown()
         super().closeEvent(event)
+
+    def _update_ms_btn_text(self, checked: bool) -> None:
+        self._btn_ms.setText("Disable Microsentry" if checked else "Enable Microsentry")
+
+    def _sync_ms_btn(self, checked: bool) -> None:
+        """Keep the corner button in sync when the menu action is toggled."""
+        self._btn_ms.blockSignals(True)
+        self._btn_ms.setChecked(checked)
+        self._btn_ms.blockSignals(False)
+        self._update_ms_btn_text(checked)
+
+    def _sync_ms_action(self, checked: bool) -> None:
+        """Keep the menu action in sync when the corner button is toggled."""
+        self._ms_action.blockSignals(True)
+        self._ms_action.setChecked(checked)
+        self._ms_action.blockSignals(False)
+        self._update_ms_btn_text(checked)
+        self.annomate_view._on_microsentry_toggled(checked)
 
