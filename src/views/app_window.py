@@ -245,6 +245,7 @@ class AppWindow(QMainWindow):
         if self.project_controller.is_dirty and not self._confirm_discard():
             return
         self.project_controller.new_project()
+        self._refresh_project_start_state()
 
     def _open_project(self) -> None:
         if self.project_controller.is_dirty and not self._confirm_discard():
@@ -256,24 +257,7 @@ class AppWindow(QMainWindow):
         if not path:
             return
 
-        try:
-            project_data, warnings = self.project_controller.open_project(path)
-        except Exception as exc:
-            QMessageBox.critical(
-                self, "Open Project", f"Could not read project:\n{exc}"
-            )
-            return
-
-        if warnings:
-            QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
-
-        model_path = project_data.get("inference", {}).get("model_path", "")
-        self.annomate_view.set_saved_model_path(model_path)
-        if model_path and not self.inference_controller.has_model():
-            self.statusBar().showMessage(
-                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the MicroSentryAI panel.",
-                8000,
-            )
+        self._open_project_path(path)
 
     def _save_project(self) -> None:
         if not self.project_controller.has_project:
