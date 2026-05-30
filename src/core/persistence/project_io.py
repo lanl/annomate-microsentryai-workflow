@@ -291,6 +291,8 @@ class ProjectIO:
             dataset_state.class_visibility = {
                 name: True for name in dataset_state.class_names
             }
+        else:
+            dataset_state.reset_classes()
 
         # Annotations from COCO file
         coco_path = project_data.get("resolved_coco_path", "")
