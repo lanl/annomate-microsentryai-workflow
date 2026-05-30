@@ -150,11 +150,23 @@ class MicrosentrySection(QWidget):
         self._thresh.valueChanged.connect(
             lambda v: (self._thresh_val.setText(f"{v / 10:.1f}"), self._debounce.start())
         )
+        self._thresh_dec = QPushButton("<")
+        self._thresh_dec.setFixedWidth(20)
+        self._thresh_dec.clicked.connect(
+            lambda: self._thresh.setValue(self._thresh.value() - 1)
+        )
+        self._thresh_inc = QPushButton(">")
+        self._thresh_inc.setFixedWidth(20)
+        self._thresh_inc.clicked.connect(
+            lambda: self._thresh.setValue(self._thresh.value() + 1)
+        )
         seg_row = QHBoxLayout()
         seg_row.setContentsMargins(0, 0, 0, 0)
         seg_row.setSpacing(4)
         seg_row.addWidget(self._btn_seg)
         seg_row.addWidget(self._thresh, stretch=1)
+        seg_row.addWidget(self._thresh_dec)
+        seg_row.addWidget(self._thresh_inc)
         seg_row.addWidget(self._thresh_val)
         lw.addLayout(seg_row)
 
