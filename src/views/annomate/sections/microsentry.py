@@ -141,14 +141,14 @@ class MicrosentrySection(QWidget):
         self._btn_seg.setCheckable(True)
         self._btn_seg.setToolTip("Show AI segmentation polygons on the canvas")
         self._btn_seg.toggled.connect(self._on_seg_toggled)
-        self._thresh_val = QLabel("95")
+        self._thresh_val = QLabel("95.0")
         self._thresh_val.setStyleSheet("font-size: 11px;")
-        self._thresh_val.setFixedWidth(30)
+        self._thresh_val.setFixedWidth(40)
         self._thresh = QSlider(Qt.Horizontal)
-        self._thresh.setRange(0, 100)
-        self._thresh.setValue(95)
+        self._thresh.setRange(0, 1000)
+        self._thresh.setValue(950)
         self._thresh.valueChanged.connect(
-            lambda v: (self._thresh_val.setText(str(v)), self._debounce.start())
+            lambda v: (self._thresh_val.setText(f"{v / 10:.1f}"), self._debounce.start())
         )
         seg_row = QHBoxLayout()
         seg_row.setContentsMargins(0, 0, 0, 0)
@@ -251,7 +251,7 @@ class MicrosentrySection(QWidget):
         return {
             "heatmap_enabled": self._btn_heatmap.isChecked(),
             "seg_enabled": self._btn_seg.isChecked(),
-            "seg_pct": self._thresh.value(),
+            "seg_pct": self._thresh.value() / 10.0,
             "alpha": self._alpha.value() / 100.0,
             "epsilon": self._epsilon.value(),
             "heat_min": self._heat_min.value(),

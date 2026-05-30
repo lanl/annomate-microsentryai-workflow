@@ -331,7 +331,7 @@ class InferenceController(QObject):
     def compute_segmentation(
         self,
         smoothed_s: Optional[np.ndarray],
-        seg_pct: int,
+        seg_pct: float,
         epsilon: float,
         display_w: int,
         display_h: int,
