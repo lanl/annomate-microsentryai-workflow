@@ -1315,7 +1315,8 @@ class ImageLabel(QLabel):
                 )
                 painter.drawPolygon(QPolygonF(pts + [pts[0]]))
 
-                r = 4.0 / self._zoom
+                screen_r = max(1.75, min(4.0, self._zoom * 2.0))
+                r = screen_r / self._zoom
                 painter.setBrush(QBrush(color))
                 painter.setPen(QPen(QColor(20, 20, 20), 1.0 / self._zoom))
                 for p in pts:
