@@ -70,7 +70,11 @@ class MetadataSection(QWidget):
 
         if self._current_row >= 0:
             saved = self.dataset_model.get_inspector(self._current_row)
-            self._inspector_edit.setText(saved if saved else self._session_inspector)
+            if not saved and self._session_inspector:
+                self._inspector_edit.setText(self._session_inspector)
+                self.dataset_model.set_inspector(self._current_row, self._session_inspector)
+            else:
+                self._inspector_edit.setText(saved)
             self._note_edit.setPlainText(self.dataset_model.get_note(self._current_row))
             self._inspector_edit.setEnabled(True)
             self._note_edit.setEnabled(True)
@@ -93,9 +97,8 @@ class MetadataSection(QWidget):
         self._session_lbl.setText(
             f"Session Inspector: {name}" if name else "Session Inspector: —"
         )
-        for row in range(self.dataset_model.rowCount()):
-            if not self.dataset_model.get_inspector(row):
-                self.dataset_model.set_inspector(row, name)
+        if self._current_row >= 0:
+            self.dataset_model.set_inspector(self._current_row, name)
 
     def _store_inspector(self) -> None:
         if self._current_row < 0:
