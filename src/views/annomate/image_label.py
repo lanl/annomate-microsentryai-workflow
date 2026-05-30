@@ -126,6 +126,7 @@ class ImageLabel(QLabel):
         # --- UI State Trackers ---
         self.selected_polygon_idx: int = -1
         self._dragging_polygon: bool = False
+        self._polygon_drag_moved: bool = False
         self._dragging_vertex_idx: int = -1
         self._dragging_vertex_poly: int = -1
         self._selected_ai_idx: int = -1
@@ -188,6 +189,7 @@ class ImageLabel(QLabel):
         self._heatmap_alpha = 0.0
         self.selected_polygon_idx = -1
         self._dragging_polygon = False
+        self._polygon_drag_moved = False
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
@@ -275,6 +277,7 @@ class ImageLabel(QLabel):
         self._ai_overlays = []
         self.selected_polygon_idx = -1
         self._dragging_polygon = False
+        self._polygon_drag_moved = False
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
@@ -848,6 +851,7 @@ class ImageLabel(QLabel):
 
             if found_idx != -1:
                 self._dragging_polygon = True
+                self._polygon_drag_moved = False
                 self._last_mouse_pos = pos_view
 
         elif event.button() == Qt.RightButton:
@@ -898,6 +902,7 @@ class ImageLabel(QLabel):
                     pts[i].x() + delta_disp.x(), pts[i].y() + delta_disp.y()
                 )
 
+            self._polygon_drag_moved = True
             self._last_mouse_pos = self._mouse_pos
             self.update()
             return
@@ -968,12 +973,15 @@ class ImageLabel(QLabel):
                 return
 
             if self._dragging_polygon:
-                idx = self.selected_polygon_idx
-                pts, _, _, _ = self._overlays[idx]
-                pts_orig = [self.display_to_original(p) for p in pts]
+                moved = self._polygon_drag_moved
                 self._dragging_polygon = False
+                self._polygon_drag_moved = False
                 self._last_mouse_pos = None
-                self.polygonEdited.emit(idx, pts_orig)
+                if moved:
+                    idx = self.selected_polygon_idx
+                    pts, _, _, _ = self._overlays[idx]
+                    pts_orig = [self.display_to_original(p) for p in pts]
+                    self.polygonEdited.emit(idx, pts_orig)
                 return
 
         if event.button() == Qt.RightButton:
