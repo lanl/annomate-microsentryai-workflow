@@ -249,18 +249,17 @@ class AppWindow(QMainWindow):
 
         self._open_project_path(path)
 
-    def _save_project(self) -> None:
+    def _save_project(self) -> bool:
         if not self.project_controller.has_project:
-            self._save_project_as()
-            return
-        self._check_orphans_then_save(self.project_controller.save_project)
+            return self._save_project_as()
+        return self._check_orphans_then_save(self.project_controller.save_project)
 
-    def _save_project_as(self) -> None:
+    def _save_project_as(self) -> bool:
         project_dir = QFileDialog.getExistingDirectory(
             self, "Choose Project Folder", os.getcwd()
         )
         if not project_dir:
-            return
+            return False
 
         image_dir = self.dataset_model.get_image_dir()
         from pathlib import Path
@@ -271,13 +270,13 @@ class AppWindow(QMainWindow):
             self, "Project Name", "Enter project name:", text=default_name
         )
         if not ok or not name.strip():
-            return
+            return False
 
-        self._check_orphans_then_save(
+        return self._check_orphans_then_save(
             lambda: self.project_controller.save_project_as(project_dir, name.strip())
         )
 
-    def _check_orphans_then_save(self, save_fn) -> None:
+    def _check_orphans_then_save(self, save_fn) -> bool:
         """Show orphaned-annotation warning if needed, then call save_fn."""
         warning = self.project_controller.orphaned_annotations_warning()
         if warning:
@@ -289,17 +288,18 @@ class AppWindow(QMainWindow):
                 QMessageBox.Cancel,
             )
             if reply != QMessageBox.Ok:
-                return
+                return False
         try:
             saved_path = save_fn()
         except Exception as exc:
             QMessageBox.critical(self, "Save Project", f"Could not save:\n{exc}")
-            return
+            return False
         self._remember_recent_project(saved_path)
         image_dir = self.dataset_model.get_image_dir()
         if image_dir:
             self._remember_recent_image_dir(image_dir)
         self._refresh_project_start_state()
+        return True
 
     def _open_image_folder(self) -> None:
         """Scan a folder for images and load them as the current dataset."""
@@ -364,9 +364,7 @@ class AppWindow(QMainWindow):
 
     def _export_annotation_classes(self) -> None:
         if not self.project_controller.has_project:
-            self._save_project_as()
-            project_dir = self.project_controller.project_dir
-            if not project_dir or not os.path.isdir(project_dir):
+            if not self._save_project_as():
                 return
 
         try:
@@ -445,8 +443,7 @@ class AppWindow(QMainWindow):
             QMessageBox.Save,
         )
         if reply == QMessageBox.Save:
-            self._save_project()
-            return True
+            return self._save_project()
         return reply == QMessageBox.Discard
 
     def closeEvent(self, event) -> None:
@@ -459,7 +456,9 @@ class AppWindow(QMainWindow):
                 QMessageBox.Save,
             )
             if reply == QMessageBox.Save:
-                self._save_project()
+                if not self._save_project():
+                    event.ignore()
+                    return
                 event.accept()
             elif reply == QMessageBox.Discard:
                 event.accept()
@@ -476,4 +475,3 @@ class AppWindow(QMainWindow):
     def _on_ms_btn_toggled(self, checked: bool) -> None:
         self._btn_ms.setText("Disable Microsentry" if checked else "Enable Microsentry")
         self.annomate_view._on_microsentry_toggled(checked)
-
