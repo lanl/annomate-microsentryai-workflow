@@ -9,6 +9,7 @@ so callers can inspect data before applying it.
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -69,6 +70,8 @@ class ProjectIO:
             save_score_maps: When True, write inference score maps to NPZ.
             model_path: Absolute path to the inference model file (informational).
         """
+        _t0 = time.perf_counter()
+
         project_dir = str(Path(project_dir).resolve())
         os.makedirs(project_dir, exist_ok=True)
 
@@ -77,10 +80,13 @@ class ProjectIO:
             created_at = now
 
         coco_path = os.path.join(project_dir, _COCO_FILENAME)
+        _t1 = time.perf_counter()
         self.export_coco(coco_path, dataset_state)
+        _t2 = time.perf_counter()
+        logger.info("save_project [export_coco]:      %.3fs", _t2 - _t1)
 
         score_maps_file = ""
-        if save_score_maps and inference_state.score_maps:
+        if save_score_maps and inference_state.score_maps and inference_state.score_maps_dirty:
             npz_path = os.path.join(project_dir, _SCOREMAPS_FILENAME)
             try:
                 np.savez_compressed(
@@ -91,8 +97,13 @@ class ProjectIO:
                     },
                 )
                 score_maps_file = _SCOREMAPS_FILENAME
+                inference_state.score_maps_dirty = False
             except Exception as exc:
                 logger.warning("Could not save score maps: %s", exc)
+        elif inference_state.score_maps:
+            score_maps_file = _SCOREMAPS_FILENAME
+        _t3 = time.perf_counter()
+        logger.info("save_project [score_maps npz]:   %.3fs (dirty=%s)", _t3 - _t2, inference_state.score_maps_dirty)
 
         scores_by_fname = {
             os.path.basename(k): v for k, v in inference_state.scores.items()
@@ -128,6 +139,8 @@ class ProjectIO:
                 entry["note"] = note
             if entry:
                 per_image[fname] = entry
+        _t4 = time.perf_counter()
+        logger.info("save_project [build per_image]:  %.3fs", _t4 - _t3)
 
         proj = {
             "version": _SCHEMA_VERSION,
@@ -199,8 +212,12 @@ class ProjectIO:
             )
 
         annoproj_path = os.path.join(project_dir, f"{project_name}.annoproj")
+        _t5 = time.perf_counter()
         with open(annoproj_path, "w", encoding="utf-8") as f:
             json.dump(proj, f, indent=2)
+        _t6 = time.perf_counter()
+        logger.info("save_project [write annoproj]:   %.3fs", _t6 - _t5)
+        logger.info("save_project [total]:            %.3fs", _t6 - _t0)
 
         logger.debug("Project saved to: %s", annoproj_path)
         return annoproj_path
@@ -354,6 +371,7 @@ class ProjectIO:
                 for key in npz.files:
                     fname = self._npz_key_to_filename(key)
                     inference_state.score_maps[fname] = npz[key]
+                inference_state.score_maps_dirty = False
             except Exception as exc:
                 logger.warning("Could not load score maps from NPZ: %s", exc)
 
@@ -470,12 +488,16 @@ class ProjectIO:
 
         ann_id = 1
         for img_id, fname in enumerate(dataset_state.image_files, start=1):
-            img_path = (
-                os.path.join(dataset_state.image_dir, fname)
-                if dataset_state.image_dir
-                else fname
-            )
-            w, h = self._read_image_size(img_path)
+            if fname in dataset_state.image_sizes:
+                w, h = dataset_state.image_sizes[fname]
+            else:
+                img_path = (
+                    os.path.join(dataset_state.image_dir, fname)
+                    if dataset_state.image_dir
+                    else fname
+                )
+                w, h = self._read_image_size(img_path)
+                dataset_state.image_sizes[fname] = (w, h)
             coco["images"].append(
                 {"id": img_id, "file_name": fname, "width": w, "height": h}
             )
@@ -496,9 +518,18 @@ class ProjectIO:
                 )
                 ann_id += 1
 
+        _cache_hits = sum(1 for f in dataset_state.image_files if f in dataset_state.image_sizes)
+        logger.info(
+            "export_coco: %d images, %d size-cache hits, %d PIL reads",
+            len(dataset_state.image_files),
+            _cache_hits,
+            len(dataset_state.image_files) - _cache_hits,
+        )
+        _tw = time.perf_counter()
         os.makedirs(str(Path(coco_path).parent), exist_ok=True)
         with open(coco_path, "w", encoding="utf-8") as f:
             json.dump(coco, f, indent=2)
+        logger.info("export_coco [json write]:        %.3fs", time.perf_counter() - _tw)
 
         logger.debug("COCO JSON written to: %s (%d annotations)", coco_path, ann_id - 1)
 
@@ -528,7 +559,12 @@ class ProjectIO:
                 ]
                 dataset_state.class_visibility[name] = True
 
-        img_id_map = {img["id"]: img["file_name"] for img in data.get("images", [])}
+        img_id_map = {}
+        for img in data.get("images", []):
+            img_id_map[img["id"]] = img["file_name"]
+            w, h = img.get("width", 0), img.get("height", 0)
+            if w and h:
+                dataset_state.image_sizes[img["file_name"]] = (w, h)
 
         for ann in data.get("annotations", []):
             img_id = ann["image_id"]

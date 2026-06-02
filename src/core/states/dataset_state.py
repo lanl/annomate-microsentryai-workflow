@@ -36,6 +36,7 @@ class DatasetState:
         self.notes = {}  # { "img.jpg": "Needs review" }
         self.review_decisions = {}  # { "img.jpg": "accept" | "reject" }
         self.decision_timestamps = {}  # { "img.jpg": ISO-8601 UTC string }
+        self.image_sizes = {}  # { "img.jpg": (width, height) } — cached to avoid PIL reads on save
 
         # Class registry — initialized from defaults, NOT cleared on folder load
         self.class_names = list(DEFAULT_CLASSES.keys())
@@ -51,6 +52,7 @@ class DatasetState:
         self.notes.clear()
         self.review_decisions.clear()
         self.decision_timestamps.clear()
+        self.image_sizes.clear()
 
     def reset_classes(self) -> None:
         """Reset the class registry back to defaults."""

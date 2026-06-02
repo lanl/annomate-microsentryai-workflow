@@ -266,6 +266,7 @@ class TestProjectRoundTrip:
         inf = InferenceState()
         arr = np.array([[0.1, 0.9], [0.5, 0.3]], dtype=np.float32)
         inf.score_maps["img001.jpg"] = arr
+        inf.score_maps_dirty = True
         inf.inference_cache["img001.jpg"] = float(arr.max())
 
         proj_dir = str(tmp_path / "proj")
@@ -285,6 +286,7 @@ class TestProjectRoundTrip:
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
         inf.score_maps["img001.jpg"] = np.zeros((4, 4), dtype=np.float32)
+        inf.score_maps_dirty = True
 
         proj_dir = str(tmp_path / "proj")
         pio.save_project(

@@ -26,6 +26,7 @@ class InferenceState:
             str, float
         ] = {}  # { "img.jpg": float }  actual pred_score [0,1]
         self.labels: dict[str, str] = {}  # { "img.jpg": "ANOMALY" | "NORMAL" }
+        self.score_maps_dirty: bool = False  # True when score_maps changed since last NPZ write
 
     def clear(self) -> None:
         """Clear all stored score maps and cached anomaly scores."""
@@ -33,6 +34,7 @@ class InferenceState:
         self.inference_cache.clear()
         self.scores.clear()
         self.labels.clear()
+        self.score_maps_dirty = False
 
     def set_score_map(self, filename: str, score: float, score_map: np.ndarray) -> None:
         """Store a score map, the actual pred_score, and its ANOMALY/NORMAL label.
@@ -46,6 +48,7 @@ class InferenceState:
         self.scores[filename] = float(score)
         self.labels[filename] = "ANOMALY" if score >= 0.5 else "NORMAL"
         self.inference_cache[filename] = float(score)
+        self.score_maps_dirty = True
 
     def get_score_map(self, filename: str) -> np.ndarray | None:
         """Return the stored score map for the given filename.
