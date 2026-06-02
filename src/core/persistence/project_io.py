@@ -94,12 +94,37 @@ class ProjectIO:
             except Exception as exc:
                 logger.warning("Could not save score maps: %s", exc)
 
-        review_status = {}
-        for fname in dataset_state.image_files:
+        scores_by_fname = {
+            os.path.basename(k): v for k, v in inference_state.scores.items()
+        }
+        labels_by_fname = {
+            os.path.basename(k): v for k, v in inference_state.labels.items()
+        }
+        per_image = {}
+        all_fnames = (
+            set(dataset_state.image_files)
+            | set(scores_by_fname)
+            | set(labels_by_fname)
+        )
+        for fname in all_fnames:
+            entry = {}
+            score = scores_by_fname.get(fname)
+            label = labels_by_fname.get(fname)
+            decision = dataset_state.review_decisions.get(fname, "")
             inspector = dataset_state.inspectors.get(fname, "")
             note = dataset_state.notes.get(fname, "")
-            if inspector or note:
-                review_status[fname] = {"inspector": inspector, "note": note}
+            if score is not None:
+                entry["score"] = score
+            if label is not None:
+                entry["label"] = label
+            if decision:
+                entry["decision"] = decision
+            if inspector:
+                entry["inspector"] = inspector
+            if note:
+                entry["note"] = note
+            if entry:
+                per_image[fname] = entry
 
         proj = {
             "version": _SCHEMA_VERSION,
@@ -107,7 +132,7 @@ class ProjectIO:
             "modified_at": now,
             "project_name": project_name,
             "dataset": {
-                "image_dir": self._make_relative_if_inside(
+                "image_dir": self._as_relative_path(
                     dataset_state.image_dir or "", project_dir
                 ),
                 "class_names": list(dataset_state.class_names),
@@ -116,17 +141,10 @@ class ProjectIO:
                 },
             },
             "annotations_file": _COCO_FILENAME,
-            "review_status": review_status,
-            "review_decisions": {
-                fname: dataset_state.review_decisions[fname]
-                for fname in dataset_state.image_files
-                if fname in dataset_state.review_decisions
-            },
+            "per_image": per_image,
             "inference": {
-                "score_cache": dict(inference_state.scores),
-                "label_cache": dict(inference_state.labels),
+                "model_path": self._as_relative_path(model_path, project_dir),
                 "score_maps_file": score_maps_file,
-                "model_path": self._make_relative_if_inside(model_path, project_dir),
             },
         }
 
@@ -152,7 +170,7 @@ class ProjectIO:
             ts = center_template_state
             proj["center_template"] = {
                 "enabled": ts.enabled,
-                "template_file": self._make_relative_if_inside(
+                "template_file": self._as_relative_path(
                     ts.template_path or ts.template_file, project_dir
                 ),
                 "anchor_x": ts.anchor_x,
@@ -291,19 +309,36 @@ class ProjectIO:
             except Exception as exc:
                 logger.warning("Could not load COCO annotations: %s", exc)
 
-        # Review status (inspector / note)
-        for fname, info in project_data.get("review_status", {}).items():
-            dataset_state.inspectors[fname] = info.get("inspector", "")
-            dataset_state.notes[fname] = info.get("note", "")
+        image_dir = project_data.get("dataset", {}).get("image_dir", "")
 
-        # Image-level review decisions
-        for fname, decision in project_data.get("review_decisions", {}).items():
-            dataset_state.review_decisions[fname] = decision
+        if "per_image" in project_data:
+            for fname, info in project_data["per_image"].items():
+                abs_path = os.path.join(image_dir, fname) if image_dir else fname
+                score = info.get("score")
+                label = info.get("label")
+                if score is not None:
+                    inference_state.scores[abs_path] = score
+                if label is not None:
+                    inference_state.labels[abs_path] = label
+                if info.get("decision"):
+                    dataset_state.review_decisions[fname] = info["decision"]
+                dataset_state.inspectors[fname] = info.get("inspector", "")
+                dataset_state.notes[fname] = info.get("note", "")
+        else:
+            # Legacy format: separate review_status, review_decisions, score_cache, label_cache
+            for fname, info in project_data.get("review_status", {}).items():
+                dataset_state.inspectors[fname] = info.get("inspector", "")
+                dataset_state.notes[fname] = info.get("note", "")
+            for fname, decision in project_data.get("review_decisions", {}).items():
+                dataset_state.review_decisions[fname] = decision
+            inf_data = project_data.get("inference", {})
+            for k, v in inf_data.get("score_cache", {}).items():
+                abs_k = k if os.path.isabs(k) else os.path.join(image_dir, k)
+                inference_state.scores[abs_k] = v
+            for k, v in inf_data.get("label_cache", {}).items():
+                abs_k = k if os.path.isabs(k) else os.path.join(image_dir, k)
+                inference_state.labels[abs_k] = v
 
-        # Inference scores, labels, and cache (fast restore — no NPZ needed)
-        inf_data = project_data.get("inference", {})
-        inference_state.scores = dict(inf_data.get("score_cache", {}))
-        inference_state.labels = dict(inf_data.get("label_cache", {}))
         inference_state.inference_cache = dict(inference_state.scores)
 
         # Score maps from NPZ (optional)
@@ -573,12 +608,11 @@ class ProjectIO:
             .replace("__dot__", ".")
         )
 
-    def _make_relative_if_inside(self, path: str, base_dir: str) -> str:
-        """Return path relative to base_dir if it lives inside it, else unchanged."""
+    def _as_relative_path(self, path: str, base_dir: str) -> str:
         if not path:
             return path
         try:
-            return str(Path(path).relative_to(base_dir))
+            return os.path.relpath(path, base_dir)
         except ValueError:
             return path
 

@@ -245,10 +245,11 @@ class TestProjectRoundTrip:
 
     def test_round_trip_restores_inference_cache(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
         inf = InferenceState()
-        inf.scores = {"img001.jpg": 0.87}
-        inf.labels = {"img001.jpg": "ANOMALY"}
-        inf.inference_cache = {"img001.jpg": 0.87}
+        inf.scores = {abs_img: 0.87}
+        inf.labels = {abs_img: "ANOMALY"}
+        inf.inference_cache = {abs_img: 0.87}
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf)
 
@@ -256,9 +257,9 @@ class TestProjectRoundTrip:
         inf2 = InferenceState()
         pio.apply_project_to_states(data, DatasetState(), inf2)
 
-        assert inf2.inference_cache.get("img001.jpg") == pytest.approx(0.87)
-        assert inf2.scores.get("img001.jpg") == pytest.approx(0.87)
-        assert inf2.labels.get("img001.jpg") == "ANOMALY"
+        assert inf2.scores.get(abs_img) == pytest.approx(0.87)
+        assert inf2.labels.get(abs_img) == "ANOMALY"
+        assert inf2.inference_cache.get(abs_img) == pytest.approx(0.87)
 
     def test_score_maps_saved_and_restored(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
@@ -471,3 +472,135 @@ class TestProjectRoundTrip:
 
         assert restored.enabled is False
         assert restored.template_file == "center_template.png"
+
+    # ------------------------------------------------------------------ #
+    # per_image format
+    # ------------------------------------------------------------------ #
+
+    def test_per_image_replaces_old_keys(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.scores = {abs_img: 0.75}
+        inf.labels = {abs_img: "ANOMALY"}
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert "per_image" in raw
+        assert "review_status" not in raw
+        assert "review_decisions" not in raw
+        assert "score_cache" not in raw.get("inference", {})
+        assert "label_cache" not in raw.get("inference", {})
+
+    def test_per_image_uses_basename_keys(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.scores = {abs_img: 0.5}
+        inf.labels = {abs_img: "NORMAL"}
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert "img001.jpg" in raw["per_image"]
+        assert all(
+            not key.startswith("/") for key in raw["per_image"]
+        ), "per_image keys must be basenames, not absolute paths"
+
+    def test_per_image_round_trip_review_decision(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        ds.review_decisions["img001.jpg"] = "reject"
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+
+        data = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(data, ds2, InferenceState())
+
+        assert ds2.review_decisions.get("img001.jpg") == "reject"
+
+    def test_per_image_all_fields_round_trip(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        ds.review_decisions["img001.jpg"] = "accept"
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.scores = {abs_img: 0.42}
+        inf.labels = {abs_img: "NORMAL"}
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        data = pio.load_project(path)
+        ds2 = DatasetState()
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, ds2, inf2)
+
+        assert ds2.inspectors.get("img001.jpg") == "Alice"
+        assert ds2.notes.get("img001.jpg") == "test note"
+        assert ds2.review_decisions.get("img001.jpg") == "accept"
+        assert inf2.scores.get(abs_img) == pytest.approx(0.42)
+        assert inf2.labels.get(abs_img) == "NORMAL"
+
+    def test_legacy_format_loads_review_status_and_decisions(self, pio, tmp_path):
+        ds = _make_dataset(tmp_path)
+        legacy_data = {
+            "dataset": {"image_dir": str(tmp_path / "images")},
+            "review_status": {
+                "img001.jpg": {"inspector": "Bob", "note": "looks fine"}
+            },
+            "review_decisions": {"img001.jpg": "accept"},
+        }
+
+        ds2 = DatasetState()
+        inf2 = InferenceState()
+        pio.apply_project_to_states(legacy_data, ds2, inf2)
+
+        assert ds2.inspectors.get("img001.jpg") == "Bob"
+        assert ds2.notes.get("img001.jpg") == "looks fine"
+        assert ds2.review_decisions.get("img001.jpg") == "accept"
+
+    def test_legacy_format_loads_absolute_cache_keys(self, pio, tmp_path):
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        legacy_data = {
+            "dataset": {"image_dir": str(tmp_path / "images")},
+            "inference": {
+                "score_cache": {abs_img: 0.9},
+                "label_cache": {abs_img: "ANOMALY"},
+            },
+        }
+
+        inf2 = InferenceState()
+        pio.apply_project_to_states(legacy_data, DatasetState(), inf2)
+
+        assert inf2.scores.get(abs_img) == pytest.approx(0.9)
+        assert inf2.labels.get(abs_img) == "ANOMALY"
+
+    def test_as_relative_path_with_traversal(self, pio, tmp_path):
+        base = str(tmp_path / "project" / "subdir")
+        sibling = str(tmp_path / "project" / "model.pt")
+        result = pio._as_relative_path(sibling, base)
+        assert result == "../model.pt"
+
+    def test_image_dir_outside_project_becomes_relative(self, pio, tmp_path):
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        from PIL import Image as PILImage
+        PILImage.new("RGB", (10, 10)).save(img_dir / "img001.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img001.jpg"]
+
+        proj_dir = str(tmp_path / "myproject")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        saved_dir = raw["dataset"]["image_dir"]
+        assert not saved_dir.startswith("/"), "image_dir should be relative"
+        assert saved_dir == "../images"
