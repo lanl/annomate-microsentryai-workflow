@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from core.utils.constants import DEFAULT_CLASSES
 
 
@@ -33,6 +35,7 @@ class DatasetState:
         self.inspectors = {}  # { "img.jpg": "John Doe" }
         self.notes = {}  # { "img.jpg": "Needs review" }
         self.review_decisions = {}  # { "img.jpg": "accept" | "reject" }
+        self.decision_timestamps = {}  # { "img.jpg": ISO-8601 UTC string }
 
         # Class registry — initialized from defaults, NOT cleared on folder load
         self.class_names = list(DEFAULT_CLASSES.keys())
@@ -47,6 +50,7 @@ class DatasetState:
         self.inspectors.clear()
         self.notes.clear()
         self.review_decisions.clear()
+        self.decision_timestamps.clear()
 
     def reset_classes(self) -> None:
         """Reset the class registry back to defaults."""
@@ -219,8 +223,10 @@ class DatasetState:
         """
         if decision is None:
             self.review_decisions.pop(image_name, None)
+            self.decision_timestamps.pop(image_name, None)
         else:
             self.review_decisions[image_name] = decision
+            self.decision_timestamps[image_name] = datetime.now(timezone.utc).isoformat()
 
     def get_review_decision(self, image_name: str):
         """Return the image-level review decision, or None if not set."""
