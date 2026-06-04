@@ -24,21 +24,26 @@ class _CollapsibleSection(QWidget):
     toggled = Signal(bool)
 
     def __init__(
-        self, title: str, parent: QWidget = None, expandable: bool = False
+        self,
+        title: str,
+        parent: QWidget = None,
+        expandable: bool = False,
+        expanded: bool = True,
     ) -> None:
         super().__init__(parent)
         v_policy = QSizePolicy.Expanding if expandable else QSizePolicy.Maximum
         self.setSizePolicy(QSizePolicy.Expanding, v_policy)
         self._title = title
-        self._expanded = True
+        self._expanded = expanded
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        self._toggle_btn = QPushButton(f"▾  {title}")
+        arrow = "▾" if expanded else "▸"
+        self._toggle_btn = QPushButton(f"{arrow}  {title}")
         self._toggle_btn.setCheckable(True)
-        self._toggle_btn.setChecked(True)
+        self._toggle_btn.setChecked(expanded)
         self._toggle_btn.setStyleSheet(
             "text-align: left; font-weight: bold; padding: 5px 10px;"
         )
@@ -56,6 +61,7 @@ class _CollapsibleSection(QWidget):
         self._body_layout = QVBoxLayout(self._body)
         self._body_layout.setContentsMargins(8, 6, 8, 8)
         self._body_layout.setSpacing(4)
+        self._body.setVisible(expanded)
         root.addWidget(self._body, stretch=1 if expandable else 0)
 
     def body_layout(self) -> QVBoxLayout:

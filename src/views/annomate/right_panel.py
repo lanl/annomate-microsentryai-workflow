@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSettings
 from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QScrollArea, QSizePolicy
 
 from views.annomate._splitter import StyledSplitter
@@ -50,9 +50,10 @@ class RightPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # Microsentry — sits above the splitter, hidden until toggled on
-        ms_sec = _CollapsibleSection("Microsentry")
-        ms_sec.setVisible(False)
+        # Microsentry — always visible above the splitter, collapsed by default
+        _ms_settings = QSettings("LANL", "AnnoMateMicroSentryAI")
+        _ms_expanded = _ms_settings.value("ui/microsentry_expanded", False, type=bool)
+        ms_sec = _CollapsibleSection("Microsentry", expanded=_ms_expanded)
         self._ms_section = MicrosentrySection()
         self._ms_section.load_model_requested.connect(self.load_model_requested)
         self._ms_section.load_previous_model_requested.connect(
@@ -63,6 +64,11 @@ class RightPanel(QWidget):
             self.accept_polygons_requested
         )
         ms_sec.body_layout().addWidget(self._ms_section)
+        ms_sec.toggled.connect(
+            lambda checked: QSettings("LANL", "AnnoMateMicroSentryAI").setValue(
+                "ui/microsentry_expanded", checked
+            )
+        )
         outer.addWidget(ms_sec)
         self._ms_collapsible = ms_sec
 
@@ -73,6 +79,7 @@ class RightPanel(QWidget):
 
         nav_sec = _CollapsibleSection("Dataset Navigator", expandable=True)
         self.navigator = DataNavigatorSection(dataset_model, inference_model)
+        self.navigator.set_microsentry_mode(True)
         self.navigator.image_selected.connect(self.image_selected)
         self.navigator.prev_requested.connect(self.prev_requested)
         self.navigator.next_requested.connect(self.next_requested)
@@ -173,16 +180,6 @@ class RightPanel(QWidget):
 
     def get_microsentry_settings(self) -> dict:
         return self._ms_section.get_settings()
-
-    def show_microsentry_section(self) -> None:
-        """Make the Microsentry section visible and expanded."""
-        self._ms_collapsible.setVisible(True)
-        self._ms_collapsible._on_toggle(True)
-        self._ms_collapsible._toggle_btn.setChecked(True)
-
-    def hide_microsentry_section(self) -> None:
-        """Fully hide the Microsentry section."""
-        self._ms_collapsible.setVisible(False)
 
     def navigator_set_inference(self, row: int, score: float, label: str) -> None:
         self.navigator.set_row_inference(row, score, label)

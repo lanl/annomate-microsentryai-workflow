@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QFileDialog,
     QMessageBox,
-    QToolButton,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
@@ -145,13 +144,6 @@ class AppWindow(QMainWindow):
         add(data_menu, "Export CSV…", "", self._export_csv)
         add(data_menu, "Export Train Structure…", "", self._export_train_structure)
 
-        self._btn_ms = QToolButton()
-        self._btn_ms.setText("Enable Microsentry")
-        self._btn_ms.setCheckable(True)
-        self._btn_ms.setToolTip("Toggle MicroSentryAI heatmap and segmentation")
-        self._btn_ms.setStyleSheet("QToolButton { margin: 3px 4px; padding: 1px 6px; }")
-        self._btn_ms.toggled.connect(self._on_ms_btn_toggled)
-        self.menuBar().setCornerWidget(self._btn_ms)
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
@@ -473,7 +465,4 @@ class AppWindow(QMainWindow):
         self.annomate_view.shutdown()
         super().closeEvent(event)
 
-    def _on_ms_btn_toggled(self, checked: bool) -> None:
-        self._btn_ms.setText("Disable Microsentry" if checked else "Enable Microsentry")
-        self.annomate_view._on_microsentry_toggled(checked)
 

@@ -432,7 +432,7 @@ class AnnoMateWindow(QWidget):
         self._current_row: int = -1
         self._active_class: str = ""
         self._active_tool: str = ""
-        self._microsentry_enabled: bool = False
+        self._microsentry_enabled: bool = True
         self._current_bgr = None
         self._current_ai_contours: list = []
         self._selected_ai_idx: int = -1
@@ -1051,33 +1051,8 @@ class AnnoMateWindow(QWidget):
         self._saved_model_path = path
 
     # ------------------------------------------------------------------ #
-    # Microsentry toggle & rendering
+    # Microsentry rendering
     # ------------------------------------------------------------------ #
-
-    def _on_microsentry_toggled(self, checked: bool) -> None:
-        self._microsentry_enabled = checked
-        if checked:
-            if (
-                self.inference_controller is not None
-                and self.inference_controller.has_model()
-            ):
-                self.right_panel.set_model_loaded(
-                    self.inference_controller.get_model_name(),
-                    self.inference_controller.get_model_path(),
-                )
-                self._start_pending_inference()
-            self.right_panel.show_microsentry_section()
-        else:
-            self.right_panel.hide_microsentry_section()
-        self.right_panel.navigator_set_microsentry_mode(checked)
-        if checked:
-            for row in range(self.dataset_model.rowCount()):
-                path = self.dataset_model.get_image_path(row)
-                score = self.inference_model.get_score(path)
-                label = self.inference_model.get_label(path)
-                if score is not None:
-                    self.right_panel.navigator_set_inference(row, score, label)
-        self._refresh_canvas_render()
 
     def _on_load_previous_model_requested(self) -> None:
         if self.inference_controller is None:
