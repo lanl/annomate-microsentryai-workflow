@@ -28,8 +28,7 @@ def parse_ratio_string(s: str) -> tuple[float, float, str]:
     m = _RATIO_RE.match(s.strip())
     if not m:
         raise ValueError(
-            f"Invalid ratio format: {s!r}\n"
-            "Expected e.g. '500px:1cm' or '50px:1mm'"
+            f"Invalid ratio format: {s!r}\nExpected e.g. '500px:1cm' or '50px:1mm'"
         )
     px_count = float(m.group(1))
     world_val = float(m.group(2))
@@ -46,7 +45,9 @@ def format_ratio_string(px_count: float, world_val: float, unit: str) -> str:
     return f"{px_count:g}px:{world_val:g}{unit}"
 
 
-def write_calibration_ratio(path: str, px_count: float, world_val: float, unit: str) -> None:
+def write_calibration_ratio(
+    path: str, px_count: float, world_val: float, unit: str
+) -> None:
     """Write calibration ratio to a plain-text .txt file."""
     with open(path, "w", encoding="utf-8") as f:
         f.write(format_ratio_string(px_count, world_val, unit) + "\n")

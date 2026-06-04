@@ -9,7 +9,6 @@ Rules:
 
 import os
 import csv
-import json
 import logging
 import shutil
 from pathlib import Path
@@ -82,7 +81,6 @@ class IOController:
             logger.warning(f"Could not read image: {path}")
         return bgr
 
-
     def export_csv(self, out_path: str) -> str:
         """Write per-image metadata to a CSV file at *out_path*.
 
@@ -114,7 +112,9 @@ class IOController:
                 {
                     "tray": tray_name,
                     "image_name": name,
-                    "decision": state.review_decisions.get(name, "") if reviewed else "",
+                    "decision": state.review_decisions.get(name, "")
+                    if reviewed
+                    else "",
                     "inspector": state.inspectors.get(name, ""),
                     "note": state.notes.get(name, "") if reviewed else "",
                     "classes": (",".join(unique_classes) if unique_classes else "good")
@@ -126,7 +126,14 @@ class IOController:
         with open(out_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
                 f,
-                fieldnames=["tray", "image_name", "decision", "classes", "inspector", "note"],
+                fieldnames=[
+                    "tray",
+                    "image_name",
+                    "decision",
+                    "classes",
+                    "inspector",
+                    "note",
+                ],
             )
             writer.writeheader()
             writer.writerows(rows)
@@ -276,7 +283,11 @@ class IOController:
             f"  train/good:      {counts['train_good']} images\n"
             f"  test/*:          {counts['test']} images\n"
             f"  ground_truth/*:  {counts['masks']} masks"
-            + (f"\n  skipped:         {counts['skipped']} (file not found)" if counts["skipped"] else "")
+            + (
+                f"\n  skipped:         {counts['skipped']} (file not found)"
+                if counts["skipped"]
+                else ""
+            )
         )
 
     # ------------------------------------------------------------------ #
@@ -323,4 +334,3 @@ class IOController:
             self.model.endResetModel()
 
         return f"Imported {imported} class(es), skipped {skipped} duplicate(s)."
-

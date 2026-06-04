@@ -215,7 +215,9 @@ class ViewportActionsBar(QFrame):
         ratio_row.addWidget(QLabel(":"))
         self._ratio_val_edit = QLineEdit()
         self._ratio_val_edit.setPlaceholderText("0.05mm")
-        self._ratio_val_edit.setToolTip("Right side of ratio, e.g. 0.05mm, 100um, 1furlong")
+        self._ratio_val_edit.setToolTip(
+            "Right side of ratio, e.g. 0.05mm, 100um, 1furlong"
+        )
         ratio_row.addWidget(self._ratio_val_edit)
         self._btn_apply_ratio = QPushButton("Apply")
         self._btn_apply_ratio.setFixedWidth(50)
@@ -231,7 +233,9 @@ class ViewportActionsBar(QFrame):
         self._btn_import_ratio.clicked.connect(self._on_import_ratio_clicked)
         ratio_file_row.addWidget(self._btn_import_ratio)
         self._btn_export_ratio = QPushButton("Export")
-        self._btn_export_ratio.setToolTip("Save the current ratio to a plain-text .txt file")
+        self._btn_export_ratio.setToolTip(
+            "Save the current ratio to a plain-text .txt file"
+        )
         self._btn_export_ratio.clicked.connect(self._on_export_ratio_clicked)
         ratio_file_row.addWidget(self._btn_export_ratio)
         layout.addLayout(ratio_file_row)
@@ -261,7 +265,9 @@ class ViewportActionsBar(QFrame):
         layout.addLayout(meas_row)
 
         self._btn_reset_calibration = QPushButton("Reset to pixels")
-        self._btn_reset_calibration.setToolTip("Remove calibration and return to pixel units")
+        self._btn_reset_calibration.setToolTip(
+            "Remove calibration and return to pixel units"
+        )
         self._btn_reset_calibration.clicked.connect(self._on_reset_calibration_clicked)
         layout.addWidget(self._btn_reset_calibration)
 
@@ -449,7 +455,9 @@ class ViewportActionsBar(QFrame):
 
         # Reset at the bottom
         self._btn_reset_crop = QPushButton("Reset Defaults")
-        self._btn_reset_crop.setToolTip("Reset crop shape, size, and opacity to defaults")
+        self._btn_reset_crop.setToolTip(
+            "Reset crop shape, size, and opacity to defaults"
+        )
         self._btn_reset_crop.clicked.connect(self._on_reset_crop_clicked)
         panel_layout.addWidget(self._btn_reset_crop)
 
@@ -519,6 +527,7 @@ class ViewportActionsBar(QFrame):
         if not px_text or not val_text:
             return
         from core.persistence.calibration_io import parse_ratio_string
+
         try:
             px_count, world_val, unit = parse_ratio_string(f"{px_text}:{val_text}")
             self._model.apply_scale_direct(px_count, world_val, unit)
@@ -535,9 +544,12 @@ class ViewportActionsBar(QFrame):
         if not path:
             return
         from core.persistence.calibration_io import read_calibration_ratio
+
         try:
             data = read_calibration_ratio(path)
-            self._model.apply_scale_direct(data["px_count"], data["world_val"], data["unit"])
+            self._model.apply_scale_direct(
+                data["px_count"], data["world_val"], data["unit"]
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Import Error", str(exc))
 
@@ -554,9 +566,17 @@ class ViewportActionsBar(QFrame):
         if not path:
             return
         from core.persistence.calibration_io import write_calibration_ratio
+
         try:
-            write_calibration_ratio(path, self._model.px_count(), self._model.world_val(), self._model.unit())
-            QMessageBox.information(self, "Export Calibration Ratio", f"Saved to:\n{path}")
+            write_calibration_ratio(
+                path,
+                self._model.px_count(),
+                self._model.world_val(),
+                self._model.unit(),
+            )
+            QMessageBox.information(
+                self, "Export Calibration Ratio", f"Saved to:\n{path}"
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 
@@ -729,6 +749,7 @@ class ViewportActionsBar(QFrame):
                 self._ratio_val_edit.clear()
             return
         from core.persistence.calibration_io import format_ratio_string
+
         px_count = self._model.px_count()
         world_val = self._model.world_val()
         unit = self._model.unit()
@@ -869,9 +890,7 @@ class ViewportActionsBar(QFrame):
         self._crop_center_dot_chk.setEnabled(self._has_image)
         self._btn_reset_crop.setEnabled(self._has_image)
         self._btn_calibrate_center.setEnabled(self._has_image)
-        self._btn_accept_center.setEnabled(
-            self._has_image and self._center_calibrating
-        )
+        self._btn_accept_center.setEnabled(self._has_image and self._center_calibrating)
         self._btn_clear_template.setEnabled(
             self._center_template_model is not None
             and self._center_template_model.has_template()
@@ -882,9 +901,7 @@ class ViewportActionsBar(QFrame):
         self._color_btn.setEnabled(scale_available)
         self._radio_auto.setEnabled(scale_available)
         self._radio_fixed.setEnabled(scale_available)
-        self._spacing_edit.setEnabled(
-            scale_available and self._radio_fixed.isChecked()
-        )
+        self._spacing_edit.setEnabled(scale_available and self._radio_fixed.isChecked())
         self._btn_clear_measurement.setEnabled(scale_available)
         self._btn_reset_calibration.setEnabled(scale_available)
         if not scale_available and self._active_tool == "measure":

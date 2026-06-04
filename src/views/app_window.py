@@ -144,7 +144,6 @@ class AppWindow(QMainWindow):
         add(data_menu, "Export CSV…", "", self._export_csv)
         add(data_menu, "Export Train Structure…", "", self._export_train_structure)
 
-
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
         self.annomate_view.set_project_start_state(
@@ -376,14 +375,19 @@ class AppWindow(QMainWindow):
         if not chosen:
             return
         try:
-            msg = self.io_controller.export_binary_masks(os.path.join(chosen, "binary_masks"))
+            msg = self.io_controller.export_binary_masks(
+                os.path.join(chosen, "binary_masks")
+            )
             QMessageBox.information(self, "Export Binary Masks", msg)
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 
     def _export_csv(self) -> None:
         out_path, _ = QFileDialog.getSaveFileName(
-            self, "Save CSV", os.path.join(self._export_start_dir(), "metadata.csv"), "CSV (*.csv)"
+            self,
+            "Save CSV",
+            os.path.join(self._export_start_dir(), "metadata.csv"),
+            "CSV (*.csv)",
         )
         if not out_path:
             return
@@ -392,7 +396,6 @@ class AppWindow(QMainWindow):
             QMessageBox.information(self, "Export", msg)
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
-
 
     def _export_train_structure(self) -> None:
         parent_dir = QFileDialog.getExistingDirectory(
@@ -464,5 +467,3 @@ class AppWindow(QMainWindow):
         self.inference_controller.shutdown()
         self.annomate_view.shutdown()
         super().closeEvent(event)
-
-

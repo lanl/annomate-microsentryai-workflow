@@ -72,7 +72,9 @@ class MetadataSection(QWidget):
             saved = self.dataset_model.get_inspector(self._current_row)
             if not saved and self._session_inspector:
                 self._inspector_edit.setText(self._session_inspector)
-                self.dataset_model.set_inspector(self._current_row, self._session_inspector)
+                self.dataset_model.set_inspector(
+                    self._current_row, self._session_inspector
+                )
             else:
                 self._inspector_edit.setText(saved)
             self._note_edit.setPlainText(self.dataset_model.get_note(self._current_row))

@@ -86,7 +86,11 @@ class ProjectIO:
         logger.info("save_project [export_coco]:      %.3fs", _t2 - _t1)
 
         score_maps_file = ""
-        if save_score_maps and inference_state.score_maps and inference_state.score_maps_dirty:
+        if (
+            save_score_maps
+            and inference_state.score_maps
+            and inference_state.score_maps_dirty
+        ):
             npz_path = os.path.join(project_dir, _SCOREMAPS_FILENAME)
             try:
                 np.savez_compressed(
@@ -103,7 +107,11 @@ class ProjectIO:
         elif inference_state.score_maps:
             score_maps_file = _SCOREMAPS_FILENAME
         _t3 = time.perf_counter()
-        logger.info("save_project [score_maps npz]:   %.3fs (dirty=%s)", _t3 - _t2, inference_state.score_maps_dirty)
+        logger.info(
+            "save_project [score_maps npz]:   %.3fs (dirty=%s)",
+            _t3 - _t2,
+            inference_state.score_maps_dirty,
+        )
 
         scores_by_fname = {
             os.path.basename(k): v for k, v in inference_state.scores.items()
@@ -113,9 +121,7 @@ class ProjectIO:
         }
         per_image = {}
         all_fnames = (
-            set(dataset_state.image_files)
-            | set(scores_by_fname)
-            | set(labels_by_fname)
+            set(dataset_state.image_files) | set(scores_by_fname) | set(labels_by_fname)
         )
         for fname in all_fnames:
             entry = {}
@@ -404,9 +410,7 @@ class ProjectIO:
             )
             calibration_state.real_distance = cdata.get("real_distance", 1.0)
             calibration_state.grid_visible = (
-                True
-                if using_default_pixel_scale
-                else cdata.get("grid_visible", True)
+                True if using_default_pixel_scale else cdata.get("grid_visible", True)
             )
             color = cdata.get("grid_color", [58, 90, 122])
             calibration_state.grid_color = tuple(color)
@@ -518,7 +522,9 @@ class ProjectIO:
                 )
                 ann_id += 1
 
-        _cache_hits = sum(1 for f in dataset_state.image_files if f in dataset_state.image_sizes)
+        _cache_hits = sum(
+            1 for f in dataset_state.image_files if f in dataset_state.image_sizes
+        )
         logger.info(
             "export_coco: %d images, %d size-cache hits, %d PIL reads",
             len(dataset_state.image_files),

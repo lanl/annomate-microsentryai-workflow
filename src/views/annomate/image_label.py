@@ -1124,7 +1124,9 @@ class ImageLabel(QLabel):
             painter.drawLine(QPointF(0, y), QPointF(w, y))
             y += step_screen
 
-        self._paint_grid_watermark(painter, step_world, m.px_count(), m.world_val(), m.unit(), w, h)
+        self._paint_grid_watermark(
+            painter, step_world, m.px_count(), m.world_val(), m.unit(), w, h
+        )
 
     def _paint_grid_watermark(
         self,

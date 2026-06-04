@@ -36,11 +36,14 @@ class CenterCropWorker(QThread):
                 img_h, img_w = image.shape[:2]
                 if tpl_w > img_w or tpl_h > img_h:
                     logger.warning(
-                        "CenterCropWorker: template larger than image %s, skipping", path
+                        "CenterCropWorker: template larger than image %s, skipping",
+                        path,
                     )
                     self.progress.emit(i + 1)
                     continue
-                cx, cy, score = locate_center(image, self._template, self._anchor_x, self._anchor_y)
+                cx, cy, score = locate_center(
+                    image, self._template, self._anchor_x, self._anchor_y
+                )
                 self.result_ready.emit(path, float(cx), float(cy), float(score))
             except Exception as e:
                 logger.error("CenterCropWorker: failed for %s: %s", path, e)
@@ -62,9 +65,9 @@ class CenterTemplateController(QObject):
     def __init__(self, center_template_model, parent=None) -> None:
         super().__init__(parent)
         self._model = center_template_model
-        self._loaded_template = None   # np.ndarray | None — in-memory template cache
-        self._match_cache: dict = {}   # path -> (cx, cy, score)
-        self._worker = None            # CenterCropWorker | None
+        self._loaded_template = None  # np.ndarray | None — in-memory template cache
+        self._match_cache: dict = {}  # path -> (cx, cy, score)
+        self._worker = None  # CenterCropWorker | None
         center_template_model.template_changed.connect(self.invalidate_cache)
 
     def save_template(
@@ -146,7 +149,9 @@ class CenterTemplateController(QObject):
         self._loaded_template = None
         self._match_cache.clear()
 
-    def match_image(self, image_bgr, image_path: str = "") -> tuple[float, float, float] | None:
+    def match_image(
+        self, image_bgr, image_path: str = ""
+    ) -> tuple[float, float, float] | None:
         if image_path and image_path in self._match_cache:
             logger.debug("Center template cache hit for %s", image_path)
             cx, cy, score = self._match_cache[image_path]
@@ -165,7 +170,9 @@ class CenterTemplateController(QObject):
         template = self._loaded_template
         if template is None:
             template_path = self._model.template_path()
-            logger.debug("Loading center template for match from disk: %s", template_path)
+            logger.debug(
+                "Loading center template for match from disk: %s", template_path
+            )
             template = cv2.imread(template_path, cv2.IMREAD_COLOR)
             if template is not None:
                 self._loaded_template = template
@@ -222,7 +229,9 @@ class CenterTemplateController(QObject):
             template_path = self._model.template_path()
             template = cv2.imread(template_path, cv2.IMREAD_COLOR)
             if template is None:
-                logger.warning("start_batch_preload: template not found at %s", template_path)
+                logger.warning(
+                    "start_batch_preload: template not found at %s", template_path
+                )
                 return
             self._loaded_template = template
         if not file_paths:

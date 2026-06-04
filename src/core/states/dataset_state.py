@@ -228,7 +228,9 @@ class DatasetState:
             self.decision_timestamps.pop(image_name, None)
         else:
             self.review_decisions[image_name] = decision
-            self.decision_timestamps[image_name] = datetime.now(timezone.utc).isoformat()
+            self.decision_timestamps[image_name] = datetime.now(
+                timezone.utc
+            ).isoformat()
 
     def get_review_decision(self, image_name: str):
         """Return the image-level review decision, or None if not set."""

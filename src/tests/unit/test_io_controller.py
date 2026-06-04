@@ -110,5 +110,3 @@ class TestAnnotationClassFiles:
         class_file = out_dir / "annotation_classes.txt"
         assert class_file.exists()
         assert str(class_file) in msg
-
-

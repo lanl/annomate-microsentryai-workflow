@@ -154,9 +154,7 @@ class _IconButtonDelegate(QStyledItemDelegate):
                 painter, QRectF(button.rect).adjusted(9, 7, -9, -7), opt
             )
 
-    def _paint_eye_icon(
-        self, painter: QPainter, rect: QRectF, opt, index
-    ) -> None:
+    def _paint_eye_icon(self, painter: QPainter, rect: QRectF, opt, index) -> None:
         center = rect.center()
         eye = QPainterPath()
         eye.moveTo(rect.left(), center.y())
@@ -203,9 +201,7 @@ class _IconButtonDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setPen(QPen(opt.palette.buttonText().color(), 1.4))
         painter.setBrush(Qt.NoBrush)
-        painter.drawLine(
-            rect.left() + w * 0.12, lid_y, rect.right() - w * 0.12, lid_y
-        )
+        painter.drawLine(rect.left() + w * 0.12, lid_y, rect.right() - w * 0.12, lid_y)
         painter.drawLine(
             rect.left() + w * 0.38,
             rect.top() + h * 0.08,

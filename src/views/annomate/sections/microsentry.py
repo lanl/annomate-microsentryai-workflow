@@ -148,7 +148,10 @@ class MicrosentrySection(QWidget):
         self._thresh.setRange(0, 1000)
         self._thresh.setValue(950)
         self._thresh.valueChanged.connect(
-            lambda v: (self._thresh_val.setText(f"{v / 10:.1f}"), self._debounce.start())
+            lambda v: (
+                self._thresh_val.setText(f"{v / 10:.1f}"),
+                self._debounce.start(),
+            )
         )
         self._thresh_dec = QPushButton("<")
         self._thresh_dec.setFixedWidth(20)

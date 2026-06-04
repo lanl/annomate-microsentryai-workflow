@@ -21,9 +21,7 @@ def _make_model():
     dataset_model.load_folder("/fake", ["one.jpg"])
     dataset_model.add_annotation(0, "Beta", [(0, 0), (1, 0), (1, 1)])
     dataset_model.add_annotation(0, "alpha", [(0, 0), (2, 0), (2, 2), (0, 2)])
-    dataset_model.add_annotation(
-        0, "Gamma", [(0, 0), (3, 0), (3, 3), (1, 4), (0, 3)]
-    )
+    dataset_model.add_annotation(0, "Gamma", [(0, 0), (3, 0), (3, 3), (1, 4), (0, 3)])
     return dataset_model
 
 
@@ -57,8 +55,7 @@ def test_visibility_column_reflects_annotation_state():
     dataset_model.set_annotation_visible(0, 0, False)
 
     assert (
-        table_model.index(0, AnnotationColumns.VISIBILITY).data(VISIBLE_ROLE)
-        is False
+        table_model.index(0, AnnotationColumns.VISIBILITY).data(VISIBLE_ROLE) is False
     )
     assert (
         table_model.index(0, AnnotationColumns.VISIBILITY).data(Qt.DisplayRole)
@@ -129,9 +126,7 @@ def test_area_rounds_to_whole_numbers_before_scientific_notation():
     dataset_model = DatasetTableModel(DatasetState())
     dataset_model.add_class("Beta", (20, 20, 20))
     dataset_model.load_folder("/fake", ["one.jpg"])
-    dataset_model.add_annotation(
-        0, "Beta", [(0, 0), (123456, 0), (123456, 1), (0, 1)]
-    )
+    dataset_model.add_annotation(0, "Beta", [(0, 0), (123456, 0), (123456, 1), (0, 1)])
     table_model = AnnotationTableModel(dataset_model)
     table_model.set_current_row(0)
 

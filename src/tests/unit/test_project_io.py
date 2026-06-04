@@ -198,9 +198,7 @@ class TestProjectRoundTrip:
     def test_round_trip_restores_class_names(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(
-            proj_dir, "myproject", ds, InferenceState()
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
 
         data = pio.load_project(path)
         ds2 = DatasetState()
@@ -214,9 +212,7 @@ class TestProjectRoundTrip:
     def test_round_trip_restores_annotations(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(
-            proj_dir, "myproject", ds, InferenceState()
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
 
         data = pio.load_project(path)
         ds2 = DatasetState()
@@ -230,9 +226,7 @@ class TestProjectRoundTrip:
     def test_round_trip_restores_inspector_and_note(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(
-            proj_dir, "myproject", ds, InferenceState()
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
 
         data = pio.load_project(path)
         ds2 = DatasetState()
@@ -270,9 +264,7 @@ class TestProjectRoundTrip:
         inf.inference_cache["img001.jpg"] = float(arr.max())
 
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(
-            proj_dir, "myproject", ds, inf, save_score_maps=True
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=True)
         assert (tmp_path / "proj" / "scoremaps.npz").exists()
 
         data = pio.load_project(path)
@@ -289,18 +281,14 @@ class TestProjectRoundTrip:
         inf.score_maps_dirty = True
 
         proj_dir = str(tmp_path / "proj")
-        pio.save_project(
-            proj_dir, "myproject", ds, inf, save_score_maps=False
-        )
+        pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=False)
 
         assert not (tmp_path / "proj" / "scoremaps.npz").exists()
 
     def test_missing_coco_file_does_not_crash(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(
-            proj_dir, "myproject", ds, InferenceState()
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
 
         # Remove the COCO file to simulate a corrupted/moved project
         (tmp_path / "proj" / "annotations.coco.json").unlink()
@@ -316,9 +304,7 @@ class TestProjectRoundTrip:
     def test_relative_path_resolution(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(
-            proj_dir, "myproject", ds, InferenceState()
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
 
         # Manually strip the absolute key to force relative-path fallback
         data = pio.load_project(path)
@@ -332,9 +318,7 @@ class TestProjectRoundTrip:
         proj_dir = str(tmp_path / "proj")
 
         # 1. Capture the returned path
-        path = pio.save_project(
-            proj_dir, "myproject", ds, InferenceState()
-        )
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
 
         # 2. Use the returned path to read the file!
         # (Wrapping in Path() just in case pio.save_project returns a string instead of a pathlib.Path object)
@@ -508,9 +492,9 @@ class TestProjectRoundTrip:
 
         raw = json.loads(Path(path).read_text())
         assert "img001.jpg" in raw["per_image"]
-        assert all(
-            not key.startswith("/") for key in raw["per_image"]
-        ), "per_image keys must be basenames, not absolute paths"
+        assert all(not key.startswith("/") for key in raw["per_image"]), (
+            "per_image keys must be basenames, not absolute paths"
+        )
 
     def test_per_image_round_trip_review_decision(self, pio, tmp_path):
         ds = _make_dataset(tmp_path)
@@ -550,12 +534,9 @@ class TestProjectRoundTrip:
         assert inf2.labels.get(abs_img) == "NORMAL"
 
     def test_legacy_format_loads_review_status_and_decisions(self, pio, tmp_path):
-        ds = _make_dataset(tmp_path)
         legacy_data = {
             "dataset": {"image_dir": str(tmp_path / "images")},
-            "review_status": {
-                "img001.jpg": {"inspector": "Bob", "note": "looks fine"}
-            },
+            "review_status": {"img001.jpg": {"inspector": "Bob", "note": "looks fine"}},
             "review_decisions": {"img001.jpg": "accept"},
         }
 
@@ -593,6 +574,7 @@ class TestProjectRoundTrip:
         img_dir = tmp_path / "images"
         img_dir.mkdir()
         from PIL import Image as PILImage
+
         PILImage.new("RGB", (10, 10)).save(img_dir / "img001.jpg")
 
         ds = DatasetState()

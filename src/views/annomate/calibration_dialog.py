@@ -50,7 +50,9 @@ class CalibrationDialog(QDialog):
         m = _VALUE_UNIT_RE.match(self._edit.text())
         if not m or float(m.group(1)) <= 0:
             QMessageBox.warning(
-                self, "Invalid Input", "Enter a positive value with a unit, e.g. 5mm or 100um."
+                self,
+                "Invalid Input",
+                "Enter a positive value with a unit, e.g. 5mm or 100um.",
             )
             return
         self.accept()

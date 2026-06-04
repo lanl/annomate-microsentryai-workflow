@@ -907,7 +907,10 @@ class AnnoMateWindow(QWidget):
         image_path = self.dataset_model.get_image_path(self._current_row)
         result = self._center_template_controller.match_image(bgr, image_path)
         if result is None:
-            logger.debug("Center template match produced no result for row %d.", self._current_row)
+            logger.debug(
+                "Center template match produced no result for row %d.",
+                self._current_row,
+            )
             self.canvas.set_center_crop(enabled=False)
             return
         center_x, center_y, _score = result
@@ -1204,7 +1207,9 @@ class AnnoMateWindow(QWidget):
     # Inference signal slots
     # ------------------------------------------------------------------ #
 
-    def _on_center_crop_preload_result(self, path: str, cx: float, cy: float, score: float) -> None:
+    def _on_center_crop_preload_result(
+        self, path: str, cx: float, cy: float, score: float
+    ) -> None:
         if self._current_row < 0 or self._center_template_model is None:
             return
         if path != self.dataset_model.get_image_path(self._current_row):
@@ -1367,7 +1372,9 @@ class AnnoMateWindow(QWidget):
             "color: green; font-style: normal;"
         )
         if self._active_tool == "sam_bbox":
-            self.status_bar.set_sam_hint(f"Ready: {display_name}  ·  draw bbox to segment")
+            self.status_bar.set_sam_hint(
+                f"Ready: {display_name}  ·  draw bbox to segment"
+            )
 
     def _on_sam_loading_failed(self, msg: str) -> None:
         self._sam_loading = False

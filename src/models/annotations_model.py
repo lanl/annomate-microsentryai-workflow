@@ -100,7 +100,9 @@ class AnnotationTableModel(QAbstractTableModel):
 
         return None
 
-    def setData(self, index: QModelIndex, value: object, role: int = Qt.EditRole) -> bool:
+    def setData(
+        self, index: QModelIndex, value: object, role: int = Qt.EditRole
+    ) -> bool:
         if (
             role != Qt.EditRole
             or not index.isValid()
@@ -115,7 +117,9 @@ class AnnotationTableModel(QAbstractTableModel):
             return False
         if self._annotations[annotation_idx]["category_name"] == name:
             return False
-        self._dataset_model.update_annotation_class(self._current_row, annotation_idx, name)
+        self._dataset_model.update_annotation_class(
+            self._current_row, annotation_idx, name
+        )
         return True
 
     def set_current_row(self, row: int) -> None:
@@ -141,7 +145,9 @@ class AnnotationTableModel(QAbstractTableModel):
             return None
         annotation = self._annotations[row]
         if col == AnnotationColumns.COLOR:
-            return tuple(self._dataset_model.get_class_color(annotation["category_name"]))
+            return tuple(
+                self._dataset_model.get_class_color(annotation["category_name"])
+            )
         if col == AnnotationColumns.CLASS:
             return annotation["category_name"].casefold()
         if col == AnnotationColumns.VERTICES:

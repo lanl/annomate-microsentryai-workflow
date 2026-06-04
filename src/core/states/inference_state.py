@@ -26,7 +26,9 @@ class InferenceState:
             str, float
         ] = {}  # { "img.jpg": float }  actual pred_score [0,1]
         self.labels: dict[str, str] = {}  # { "img.jpg": "ANOMALY" | "NORMAL" }
-        self.score_maps_dirty: bool = False  # True when score_maps changed since last NPZ write
+        self.score_maps_dirty: bool = (
+            False  # True when score_maps changed since last NPZ write
+        )
 
     def clear(self) -> None:
         """Clear all stored score maps and cached anomaly scores."""
