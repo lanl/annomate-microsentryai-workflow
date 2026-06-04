@@ -642,9 +642,7 @@ class ProjectIO:
     def _filename_to_npz_key(self, fname: str) -> str:
         """Sanitize a filename to a valid NPZ array key."""
         return (
-            fname.replace("\\", "/")
-            .replace(".", "__dot__")
-            .replace("/", "__slash__")
+            fname.replace("\\", "/").replace(".", "__dot__").replace("/", "__slash__")
         )
 
     def _npz_key_to_filename(self, key: str) -> str:
