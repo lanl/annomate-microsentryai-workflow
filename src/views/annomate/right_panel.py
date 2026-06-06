@@ -175,6 +175,9 @@ class RightPanel(QWidget):
     def set_model_loaded(self, name: str, path: str = "") -> None:
         self._ms_section.set_model_loaded(name, path)
 
+    def set_scoremaps_loaded(self) -> None:
+        self._ms_section.set_scoremaps_loaded()
+
     def set_no_model(self) -> None:
         self._ms_section.set_no_model()
 

@@ -518,6 +518,12 @@ class AnnoMateWindow(QWidget):
             self._sam_loading = True
             logger.info("AnnoMateWindow startup: SAM autoload initiated")
 
+        # Project lifecycle
+        if self._project_controller is not None:
+            self._project_controller.project_opened.connect(
+                lambda _: self.refresh_inference_panel()
+            )
+
         # Inference controller signals
         if self.inference_controller is not None:
             self.inference_controller.result_ready.connect(self._on_inference_result)
@@ -1053,6 +1059,17 @@ class AnnoMateWindow(QWidget):
         """Called by AppWindow after opening a project to record the saved model path."""
         self._saved_model_path = path
 
+    def refresh_inference_panel(self) -> None:
+        """Called by AppWindow after opening a project to sync the inference panel.
+
+        Shows the inference controls when scoremaps were restored from disk even
+        though no model is currently loaded.
+        """
+        if self.inference_controller and self.inference_controller.has_model():
+            return
+        if self.inference_model and self.inference_model.get_processed_count() > 0:
+            self.right_panel.set_scoremaps_loaded()
+
     # ------------------------------------------------------------------ #
     # Microsentry rendering
     # ------------------------------------------------------------------ #
@@ -1149,10 +1166,12 @@ class AnnoMateWindow(QWidget):
         if self._current_row < 0 or self._current_bgr is None:
             return
 
-        ms_active = (
-            self._microsentry_enabled
-            and self.inference_controller is not None
-            and self.inference_controller.has_model()
+        path = self.dataset_model.get_image_path(self._current_row)
+        has_results = self.inference_model.is_processed(path)
+
+        ms_active = self._microsentry_enabled and (
+            (self.inference_controller is not None and self.inference_controller.has_model())
+            or has_results
         )
 
         if not ms_active:
@@ -1160,8 +1179,7 @@ class AnnoMateWindow(QWidget):
             self._refresh_overlays()
             return
 
-        path = self.dataset_model.get_image_path(self._current_row)
-        if not self.inference_model.is_processed(path):
+        if not has_results:
             self.canvas.clear_heatmap_layer()
             self._refresh_overlays()
             return
@@ -1190,7 +1208,7 @@ class AnnoMateWindow(QWidget):
         ]
 
         # AI segmentation overlays — computed fresh, stored for per-polygon accept/reject
-        if ms["seg_enabled"]:
+        if ms["seg_enabled"] and self.inference_controller is not None:
             orig_h, orig_w = self._current_bgr.shape[:2]
             self._current_ai_contours = self.inference_controller.compute_segmentation(
                 s, ms["seg_pct"], ms["epsilon"], orig_w, orig_h
