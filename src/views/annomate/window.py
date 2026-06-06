@@ -1069,6 +1069,7 @@ class AnnoMateWindow(QWidget):
             return
         if self.inference_model and self.inference_model.get_processed_count() > 0:
             self.right_panel.set_scoremaps_loaded()
+            self.right_panel.navigator_enable_inference_columns()
 
     # ------------------------------------------------------------------ #
     # Microsentry rendering
@@ -1261,6 +1262,7 @@ class AnnoMateWindow(QWidget):
 
     def _on_inference_batch_done(self) -> None:
         self.status_bar.clear_inference_progress()
+        self.right_panel.navigator_enable_inference_columns()
 
     def _on_ai_polygon_clicked(self, idx: int, view_pos: QPointF) -> None:
         self._selected_ai_idx = idx

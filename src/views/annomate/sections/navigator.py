@@ -42,6 +42,7 @@ _OPTIONAL_COLUMNS = (
     (NavigatorColumns.SCORE, "Score"),
     (NavigatorColumns.CLASS, "Class"),
 )
+_INFERENCE_COLUMNS = {NavigatorColumns.SCORE, NavigatorColumns.CLASS}
 
 
 class _StatusDotDelegate(QStyledItemDelegate):
@@ -209,7 +210,7 @@ class DataNavigatorSection(QWidget):
         for column, label in _OPTIONAL_COLUMNS:
             action = QAction(label, self)
             action.setCheckable(True)
-            action.setChecked(True)
+            action.setChecked(column not in _INFERENCE_COLUMNS)
             action.toggled.connect(
                 lambda checked, col=column: self._on_column_toggled(col, checked)
             )
@@ -345,6 +346,13 @@ class DataNavigatorSection(QWidget):
         self._table_model.refresh_inference()
         if self._selected_row >= 0:
             self.select_row(self._selected_row)
+
+    def enable_inference_columns(self) -> None:
+        """Check and show Score and Class columns if not already visible."""
+        for col in _INFERENCE_COLUMNS:
+            action = self._column_actions.get(col)
+            if action and not action.isChecked():
+                action.setChecked(True)
 
     def adjacent_source_row(self, current_source_row: int, step: int) -> int:
         """Return the source row adjacent in the current visible sort order."""

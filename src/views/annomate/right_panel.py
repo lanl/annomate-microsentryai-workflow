@@ -189,3 +189,6 @@ class RightPanel(QWidget):
 
     def navigator_set_microsentry_mode(self, enabled: bool) -> None:
         self.navigator.set_microsentry_mode(enabled)
+
+    def navigator_enable_inference_columns(self) -> None:
+        self.navigator.enable_inference_columns()
