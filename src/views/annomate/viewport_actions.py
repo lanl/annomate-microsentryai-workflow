@@ -357,44 +357,56 @@ class ViewportActionsBar(QFrame):
         header.setStyleSheet("font-weight: bold;")
         panel_layout.addWidget(header)
 
-        # Enable + Shape on one row
-        enable_shape_row = QHBoxLayout()
-        enable_shape_row.setSpacing(8)
+        # Enable
         self._crop_chk = QCheckBox("Enable")
         self._crop_chk.toggled.connect(self._on_crop_toggled)
-        enable_shape_row.addWidget(self._crop_chk)
-        enable_shape_row.addStretch()
-        enable_shape_row.addWidget(QLabel("Shape"))
+        panel_layout.addWidget(self._crop_chk)
+
+        # Shape
+        shape_row = QHBoxLayout()
+        shape_row.setSpacing(8)
+        shape_lbl = QLabel("Shape")
+        shape_lbl.setFixedWidth(58)
+        shape_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        shape_row.addWidget(shape_lbl)
         self._crop_shape_combo = QComboBox()
         self._crop_shape_combo.addItems(["Rectangle", "Circle"])
+        self._crop_shape_combo.setMaximumWidth(90)
         self._crop_shape_combo.currentTextChanged.connect(self._on_crop_shape_changed)
-        enable_shape_row.addWidget(self._crop_shape_combo)
-        panel_layout.addLayout(enable_shape_row)
+        shape_row.addWidget(self._crop_shape_combo)
+        shape_row.addStretch()
+        panel_layout.addLayout(shape_row)
 
-        # Width
+        # Width / Diameter
         width_row = QHBoxLayout()
         width_row.setSpacing(8)
         self._crop_primary_lbl = QLabel("Width")
-        self._crop_primary_lbl.setFixedWidth(44)
+        self._crop_primary_lbl.setFixedWidth(58)
+        self._crop_primary_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         width_row.addWidget(self._crop_primary_lbl)
         self._crop_width_spin = QSpinBox()
         self._crop_width_spin.setRange(1, 999999)
         self._crop_width_spin.setSuffix(" px")
+        self._crop_width_spin.setMaximumWidth(90)
         self._crop_width_spin.valueChanged.connect(self._on_crop_primary_changed)
         width_row.addWidget(self._crop_width_spin)
+        width_row.addStretch()
         panel_layout.addLayout(width_row)
 
-        # Height
+        # Height / Radius
         height_row = QHBoxLayout()
         height_row.setSpacing(8)
         self._crop_secondary_lbl = QLabel("Height")
-        self._crop_secondary_lbl.setFixedWidth(44)
+        self._crop_secondary_lbl.setFixedWidth(58)
+        self._crop_secondary_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         height_row.addWidget(self._crop_secondary_lbl)
         self._crop_height_spin = QSpinBox()
         self._crop_height_spin.setRange(1, 999999)
         self._crop_height_spin.setSuffix(" px")
+        self._crop_height_spin.setMaximumWidth(90)
         self._crop_height_spin.valueChanged.connect(self._on_crop_secondary_changed)
         height_row.addWidget(self._crop_height_spin)
+        height_row.addStretch()
         panel_layout.addLayout(height_row)
 
         # Outside opacity
