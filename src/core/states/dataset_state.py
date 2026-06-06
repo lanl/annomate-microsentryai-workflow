@@ -67,13 +67,12 @@ class DatasetState:
             img_name (str): Image filename to check.
 
         Returns:
-            bool: ``True`` if the image has any annotation, inspector
-                assignment, or note; ``False`` otherwise.
+            bool: ``True`` if the image has any annotation or review decision;
+                ``False`` otherwise.
         """
         has_anno = bool(self.annotations.get(img_name))
-        has_note = bool(self.notes.get(img_name))
         has_decision = img_name in self.review_decisions
-        return has_anno or has_note or has_decision
+        return has_anno or has_decision
 
     # --- Annotation CRUD ---
 
