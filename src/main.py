@@ -5,7 +5,17 @@ Creates all layers in dependency order (states → models → controllers → vi
 and starts the Qt event loop. Contains no UI code.
 """
 
+import os
 import sys
+
+# PyInstaller --windowed sets sys.stdout/stderr to None (no console).
+# Any library that calls .write() on them (e.g. tqdm in huggingface_hub) will
+# crash with 'NoneType has no attribute write'. Redirect to devnull early.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
