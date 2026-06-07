@@ -9,6 +9,7 @@ runs load from disk with no network access.
 
 import logging
 import pathlib
+import sys
 from typing import List, Tuple
 
 import cv2
@@ -19,9 +20,13 @@ from core.utils.geometry import simplify_polygon
 
 logger = logging.getLogger(__name__)
 
-# sam_weights/ sits at the project root (three levels up from this file:
-#   src/ai_strategies/sam_strategy.py → src/ai_strategies/ → src/ → project root)
-_SAM_WEIGHTS_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "sam_weights"
+# When frozen by PyInstaller (--onefile), __file__ resolves into the ephemeral
+# _MEIPASS temp dir that is deleted on exit. Use the exe's own directory instead
+# so weights persist between runs.
+if getattr(sys, "frozen", False):
+    _SAM_WEIGHTS_DIR = pathlib.Path(sys.executable).parent / "sam_weights"
+else:
+    _SAM_WEIGHTS_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "sam_weights"
 
 VARIANTS: List[str] = [
     "sam2_t.pt",
