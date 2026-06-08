@@ -12,9 +12,9 @@ import sys
 # Any library that calls .write() on them (e.g. tqdm in huggingface_hub) will
 # crash with 'NoneType has no attribute write'. Redirect to devnull early.
 if sys.stdout is None:
-    sys.stdout = open(os.devnull, "w")
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
 if sys.stderr is None:
-    sys.stderr = open(os.devnull, "w")
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
