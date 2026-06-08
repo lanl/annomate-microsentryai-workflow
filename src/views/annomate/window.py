@@ -1172,7 +1172,10 @@ class AnnoMateWindow(QWidget):
         has_results = self.inference_model.is_processed(path)
 
         ms_active = self._microsentry_enabled and (
-            (self.inference_controller is not None and self.inference_controller.has_model())
+            (
+                self.inference_controller is not None
+                and self.inference_controller.has_model()
+            )
             or has_results
         )
 
