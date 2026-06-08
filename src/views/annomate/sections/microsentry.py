@@ -4,10 +4,10 @@ MicrosentrySection — unified Microsentry controls panel for the AnnoMate right
 Layout (when model loaded):
   Load Model button
   Model name label
-  [Heatmap] toggle  +  Overlay opacity slider
-  [Segmentation] toggle  +  Detection sensitivity slider
+  [Heatmap] toggle  +  opacity slider
+  [Segmentation] toggle  +  sensitivity slider
   [Accept AI Polygons] button
-  ▸ Advanced Settings (collapsible) + Help button
+  ▸ Advanced Settings (collapsible)
       Mask smoothness slider
       Boundary simplification slider
       Heatmap floor slider
@@ -20,12 +20,10 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QDialog,
     QLabel,
     QPushButton,
     QSizePolicy,
     QSlider,
-    QTextBrowser,
     QToolButton,
 )
 
@@ -116,7 +114,7 @@ class MicrosentrySection(QWidget):
 
         lw.addSpacing(4)
 
-        # Heatmap toggle + overlay opacity slider inline
+        # Heatmap toggle + opacity slider inline
         self._btn_heatmap = QToolButton()
         self._btn_heatmap.setText("Heatmap")
         self._btn_heatmap.setCheckable(True)
@@ -134,18 +132,15 @@ class MicrosentrySection(QWidget):
         self._alpha.valueChanged.connect(
             lambda v: (self._alpha_val.setText(f"{v}%"), self._debounce.start())
         )
-        alpha_label = QLabel("Overlay opacity")
-        alpha_label.setStyleSheet("font-size: 11px;")
         heatmap_row = QHBoxLayout()
         heatmap_row.setContentsMargins(0, 0, 0, 0)
         heatmap_row.setSpacing(4)
         heatmap_row.addWidget(self._btn_heatmap)
-        heatmap_row.addWidget(alpha_label)
         heatmap_row.addWidget(self._alpha, stretch=1)
         heatmap_row.addWidget(self._alpha_val)
         lw.addLayout(heatmap_row)
 
-        # Segmentation toggle + detection sensitivity slider inline
+        # Segmentation toggle + sensitivity slider inline
         self._btn_seg = QToolButton()
         self._btn_seg.setText("Segmentation")
         self._btn_seg.setCheckable(True)
@@ -177,13 +172,10 @@ class MicrosentrySection(QWidget):
         self._thresh_inc.clicked.connect(
             lambda: self._thresh.setValue(self._thresh.value() + 1)
         )
-        threshold_label = QLabel("Detection sensitivity")
-        threshold_label.setStyleSheet("font-size: 11px;")
         seg_row = QHBoxLayout()
         seg_row.setContentsMargins(0, 0, 0, 0)
         seg_row.setSpacing(4)
         seg_row.addWidget(self._btn_seg)
-        seg_row.addWidget(threshold_label)
         seg_row.addWidget(self._thresh, stretch=1)
         seg_row.addWidget(self._thresh_dec)
         seg_row.addWidget(self._thresh_inc)
@@ -214,36 +206,7 @@ class MicrosentrySection(QWidget):
         )
         self._btn_advanced.toggled.connect(self._on_advanced_toggled)
 
-        self._btn_advanced_help = QToolButton()
-        self._btn_advanced_help.setText("i")
-        self._btn_advanced_help.setToolTip(
-            "Explain what the advanced MicroSentryAI settings do"
-        )
-        self._btn_advanced_help.setFixedSize(20, 20)
-        self._btn_advanced_help.setStyleSheet(
-            """
-            QToolButton {
-                color: #1f6feb;
-                border: 1px solid #1f6feb;
-                border-radius: 10px;
-                font-size: 11px;
-                font-weight: bold;
-                padding: 0px;
-            }
-            QToolButton:hover {
-                background: rgba(31, 111, 235, 24);
-            }
-            """
-        )
-        self._btn_advanced_help.clicked.connect(self._show_advanced_help)
-
-        advanced_header = QHBoxLayout()
-        advanced_header.setContentsMargins(0, 0, 0, 0)
-        advanced_header.setSpacing(4)
-        advanced_header.addWidget(self._btn_advanced)
-        advanced_header.addWidget(self._btn_advanced_help)
-        advanced_header.addStretch()
-        lw.addLayout(advanced_header)
+        lw.addWidget(self._btn_advanced)
 
         self._advanced_widget = QWidget()
         aw = QVBoxLayout(self._advanced_widget)
@@ -312,67 +275,9 @@ class MicrosentrySection(QWidget):
         self._advanced_widget.setVisible(checked)
         self._btn_advanced.setText(f"{'▾' if checked else '▸'}  Advanced Settings")
 
-    def _show_advanced_help(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("MicroSentryAI Advanced Settings")
-        dialog.resize(560, 420)
-
-        layout = QVBoxLayout(dialog)
-
-        help_view = QTextBrowser()
-        help_view.setOpenExternalLinks(False)
-        help_view.setHtml(
-            """
-            <h2>Advanced Settings Help</h2>
-            <p>
-              These controls tune how MicroSentryAI turns model heatmaps into
-              visual overlays and editable segmentation polygons.
-            </p>
-
-            <h3>Mask smoothness</h3>
-            <p>
-              Controls Gaussian smoothing before mask generation. Increase it
-              when the heatmap is noisy or produces speckled polygons. Lower it
-              when small defects are being blurred or missed.
-            </p>
-            <p><b>Tradeoff:</b> higher values reduce noise but can merge nearby
-              regions or soften small anomalies.</p>
-
-            <h3>Boundary simplification</h3>
-            <p>
-              Controls how aggressively AI-generated polygon boundaries are
-              simplified after segmentation. Increase it when polygons have too
-              many jagged points. Lower it when the boundary shape needs to stay
-              closer to the original mask.
-            </p>
-            <p><b>Tradeoff:</b> higher values create cleaner, simpler polygons
-              but may lose fine shape detail.</p>
-
-            <h3>Heatmap floor</h3>
-            <p>
-              Hides lower-intensity heatmap values below the selected percentile
-              so weak background signal does not dominate the overlay. Increase
-              it when the heatmap looks cluttered. Lower it when you want to see
-              weaker model responses.
-            </p>
-            <p><b>Tradeoff:</b> higher values make the overlay cleaner but can
-              hide subtle anomalies.</p>
-            """
-        )
-        layout.addWidget(help_view)
-
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dialog.accept)
-        close_row = QHBoxLayout()
-        close_row.addStretch()
-        close_row.addWidget(close_btn)
-        layout.addLayout(close_row)
-
-        dialog.exec()
-
     def _refresh_value_labels(self) -> None:
         self._alpha_val.setText(f"{self._alpha.value()}%")
-        self._thresh_val.setText(str(self._thresh.value()))
+        self._thresh_val.setText(f"{self._thresh.value() / 10:.1f}")
         self._sigma_val.setText(str(self._sigma.value()))
         self._epsilon_val.setText(str(self._epsilon.value()))
         self._heat_min_val.setText(f"{self._heat_min.value()}%")
