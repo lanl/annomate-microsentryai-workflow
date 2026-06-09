@@ -210,7 +210,7 @@ class DataNavigatorSection(QWidget):
         for column, label in _OPTIONAL_COLUMNS:
             action = QAction(label, self)
             action.setCheckable(True)
-            action.setChecked(column not in _INFERENCE_COLUMNS)
+            action.setChecked(True)
             action.toggled.connect(
                 lambda checked, col=column: self._on_column_toggled(col, checked)
             )

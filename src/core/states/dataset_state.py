@@ -61,7 +61,7 @@ class DatasetState:
         self.class_visibility = {name: True for name in self.class_names}
 
     def is_reviewed(self, img_name: str) -> bool:
-        """Return whether an image has at least one annotation or metadata entry.
+        """Return whether an image has at least one annotation or review decision.
 
         Args:
             img_name (str): Image filename to check.

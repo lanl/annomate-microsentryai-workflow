@@ -409,9 +409,7 @@ class ProjectIO:
                 tuple(p2) if p2 and not using_default_pixel_scale else None
             )
             calibration_state.real_distance = cdata.get("real_distance", 1.0)
-            calibration_state.grid_visible = (
-                True if using_default_pixel_scale else cdata.get("grid_visible", True)
-            )
+            calibration_state.grid_visible = cdata.get("grid_visible", False)
             color = cdata.get("grid_color", [58, 90, 122])
             calibration_state.grid_color = tuple(color)
             calibration_state.grid_opacity = cdata.get("grid_opacity", 0.5)
