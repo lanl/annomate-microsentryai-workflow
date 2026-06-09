@@ -39,17 +39,26 @@ jobs:
 
   # -------------------------------------------------------------------------
   # TESTING JOB
-  # Uses environment-cpu.yml via Conda (Python 3.10)
+  # Uses per-OS Conda environment (environment-mac.yml on macOS, environment-cpu.yml on Linux/Windows)
   # -------------------------------------------------------------------------
   test:
-    name: Test on ${{ matrix.os }} with Python 3.10
+    name: Test on ${{ matrix.os }} (${{ matrix.env_name }}) with Python 3.10
     needs: lint
     if: always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            env_file: environment-cpu.yml
+            env_name: annomate-cpu
+          - os: macos-latest
+            env_file: environment-mac.yml
+            env_name: annomate-mac
+          - os: windows-latest
+            env_file: environment-cpu.yml
+            env_name: annomate-cpu
 
     # This ensures that Conda is properly activated in every step that runs a bash script
     defaults:
@@ -63,14 +72,14 @@ jobs:
       - name: Set up Conda & Environment
         uses: conda-incubator/setup-miniconda@v3
         with:
-          activate-environment: annomate-mac
-          environment-file: environment-mac.yml
+          activate-environment: ${{ matrix.env_name }}
+          environment-file: ${{ matrix.env_file }}
           auto-activate-base: false
           # Caching Conda packages speeds up subsequent workflow runs
           use-only-tar-bz2: true 
 
       - name: Install Testing Dependencies
-        # pytest and pytest-qt aren't in your environment-cpu.yml, so we add them here
+        # pytest and pytest-qt aren't in the conda environment files, so we add them here
         run: pip install pytest pytest-qt
 
 
