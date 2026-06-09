@@ -109,6 +109,7 @@ class ImageLabel(QLabel):
         self._center_crop_center_y: Optional[float] = None
         self._center_crop_calibrating: bool = False
         self._dragging_center_crop: bool = False
+        self._center_crop_color: Optional[tuple] = None  # None = auto-contrast
 
         self._base_scale = 1.0
         self._zoom = 1.0
@@ -332,6 +333,8 @@ class ImageLabel(QLabel):
         self._line_thickness = thickness
         self.update()
 
+    _UNSET = object()
+
     def set_center_crop(
         self,
         enabled: Optional[bool] = None,
@@ -343,6 +346,7 @@ class ImageLabel(QLabel):
         center_x: Optional[float] = None,
         center_y: Optional[float] = None,
         calibrating: Optional[bool] = None,
+        border_color=_UNSET,
     ) -> None:
         """Set the centered crop preview mask drawn over the image.
 
@@ -378,8 +382,11 @@ class ImageLabel(QLabel):
             self._dragging_center_crop = False
             if self._center_crop_calibrating:
                 self.setCursor(Qt.SizeAllCursor)
+                self.setFocus()
             elif self.current_tool is None:
                 self.setCursor(Qt.ArrowCursor)
+        if border_color is not self._UNSET:
+            self._center_crop_color = border_color  # None resets to auto
         self.update()
         self.centerCropChanged.emit(self.center_crop_settings())
 
@@ -395,6 +402,7 @@ class ImageLabel(QLabel):
             "center_x": self._center_crop_center_x,
             "center_y": self._center_crop_center_y,
             "calibrating": self._center_crop_calibrating,
+            "border_color": self._center_crop_color,
         }
 
     def _ensure_center_crop_defaults(self, img_w: int, img_h: int) -> None:
@@ -426,6 +434,17 @@ class ImageLabel(QLabel):
         x, y = self.display_to_original(self.view_to_display(pos_view))
         self._center_crop_center_x = max(0.0, min(float(x), float(img_w)))
         self._center_crop_center_y = max(0.0, min(float(y), float(img_h)))
+        self.update()
+        self.centerCropChanged.emit(self.center_crop_settings())
+
+    def _nudge_center_crop(self, dx: float, dy: float) -> None:
+        if self._orig_image_bgr is None:
+            return
+        img_h, img_w = self._orig_image_bgr.shape[:2]
+        cx = (self._center_crop_center_x if self._center_crop_center_x is not None else img_w / 2.0) + dx
+        cy = (self._center_crop_center_y if self._center_crop_center_y is not None else img_h / 2.0) + dy
+        self._center_crop_center_x = max(0.0, min(cx, float(img_w)))
+        self._center_crop_center_y = max(0.0, min(cy, float(img_h)))
         self.update()
         self.centerCropChanged.emit(self.center_crop_settings())
 
@@ -665,6 +684,19 @@ class ImageLabel(QLabel):
         Args:
             event (QKeyEvent): The key press event.
         """
+        if self._center_crop_calibrating:
+            step = 10.0 if event.modifiers() & Qt.ShiftModifier else 1.0
+            _arrow_delta = {
+                Qt.Key_Left: (-step, 0.0),
+                Qt.Key_Right: (step, 0.0),
+                Qt.Key_Up: (0.0, -step),
+                Qt.Key_Down: (0.0, step),
+            }
+            if event.key() in _arrow_delta:
+                dx, dy = _arrow_delta[event.key()]
+                self._nudge_center_crop(dx, dy)
+                return
+
         if self.current_tool == SAM_BBOX:
             if event.key() in (Qt.Key_Return, Qt.Key_Enter):
                 self.accept_sam_ghost()
@@ -1012,7 +1044,7 @@ class ImageLabel(QLabel):
         point_in_disp = self.view_to_display(cursor_pos)
 
         old_zoom = self._zoom
-        self._zoom = max(0.2, min(8.0, old_zoom * factor))
+        self._zoom = max(0.2, min(12.0, old_zoom * factor))
         self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
@@ -1041,7 +1073,7 @@ class ImageLabel(QLabel):
         """Apply a zoom *factor* anchored at the center of the widget.
 
         Adjusts :attr:`_pan` so the center point stays fixed after the zoom.
-        Clamps zoom to the range ``[0.2, 8.0]``.
+        Clamps zoom to the range ``[0.2, 12.0]``.
 
         Args:
             factor (float): Multiplicative zoom change (e.g. ``1.15`` to
@@ -1053,7 +1085,7 @@ class ImageLabel(QLabel):
         center = QPointF(self.width() / 2, self.height() / 2)
         point_in_disp = self.view_to_display(center)
 
-        self._zoom = max(0.2, min(8.0, self._zoom * factor))
+        self._zoom = max(0.2, min(12.0, self._zoom * factor))
         self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
@@ -1387,6 +1419,33 @@ class ImageLabel(QLabel):
         painter.resetTransform()
         self._paint_grid(painter)
 
+    def _crop_border_qcolor(self) -> QColor:
+        """Return the border color: user-set color or auto-contrast from the crop region."""
+        if self._center_crop_color is not None:
+            r, g, b = self._center_crop_color
+            return QColor(r, g, b)
+        img = self._orig_image_bgr
+        if img is None:
+            return QColor(255, 255, 255)
+        img_h, img_w = img.shape[:2]
+        crop_w = self._center_crop_width or img_w
+        crop_h = self._center_crop_height or img_h
+        if self._center_crop_shape == "circle":
+            d = min(crop_w, crop_h)
+            crop_w = crop_h = d
+        cx = self._center_crop_center_x if self._center_crop_center_x is not None else img_w / 2.0
+        cy = self._center_crop_center_y if self._center_crop_center_y is not None else img_h / 2.0
+        x1 = max(0, int(cx - crop_w / 2))
+        y1 = max(0, int(cy - crop_h / 2))
+        x2 = min(img_w, int(cx + crop_w / 2))
+        y2 = min(img_h, int(cy + crop_h / 2))
+        if x1 >= x2 or y1 >= y2:
+            return QColor(255, 255, 255)
+        region = img[y1:y2:4, x1:x2:4]
+        mean = region.mean(axis=(0, 1))
+        avg_b, avg_g, avg_r = float(mean[0]), float(mean[1]), float(mean[2])
+        return QColor(int(255 - avg_r), int(255 - avg_g), int(255 - avg_b))
+
     def _paint_center_crop(self, painter: QPainter) -> None:
         """Dim everything outside the configured center crop preview."""
         if (
@@ -1430,15 +1489,16 @@ class ImageLabel(QLabel):
         else:
             outside.addRect(crop_rect)
 
+        border_color = self._crop_border_qcolor()
         painter.save()
         painter.fillPath(outside, QColor(0, 0, 0, int(self._center_crop_opacity * 255)))
-        pen = QPen(QColor(255, 255, 255), 1.5 / self._zoom, Qt.SolidLine)
+        pen = QPen(border_color, 1.5 / self._zoom, Qt.SolidLine)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         if self._center_crop_shape == "circle":
             painter.drawEllipse(crop_rect)
             if self._center_crop_calibrating:
-                self._paint_center_calibration_grid(painter, crop_rect)
+                self._paint_center_calibration_grid(painter, crop_rect, border_color)
         else:
             painter.drawRect(crop_rect)
         if self._center_crop_dot_visible:
@@ -1451,7 +1511,7 @@ class ImageLabel(QLabel):
         painter.restore()
 
     def _paint_center_calibration_grid(
-        self, painter: QPainter, crop_rect: QRectF
+        self, painter: QPainter, crop_rect: QRectF, border_color: QColor
     ) -> None:
         """Draw a reference grid clipped to the active circular center crop."""
         diameter_px = crop_rect.width() / max(self._base_scale, 0.0001)
@@ -1472,7 +1532,8 @@ class ImageLabel(QLabel):
             is_center_line = abs(i - center_index) < 0.001
             alpha = 150 if is_center_line else 85
             width = (1.25 if is_center_line else 0.75) / self._zoom
-            pen = QPen(QColor(255, 255, 255, alpha), width, Qt.SolidLine)
+            c = QColor(border_color.red(), border_color.green(), border_color.blue(), alpha)
+            pen = QPen(c, width, Qt.SolidLine)
             painter.setPen(pen)
 
             x = crop_rect.left() + i * spacing_x

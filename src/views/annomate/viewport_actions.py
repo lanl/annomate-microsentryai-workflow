@@ -205,7 +205,7 @@ class ViewportActionsBar(QFrame):
         self._calib_status_lbl = QLabel("Current Calibration: None")
         layout.addWidget(self._calib_status_lbl)
 
-        # Ratio input: [ 1px ] : [ 0.05mm ] [ Apply ]
+        # Ratio input: [ 1px ] : [ 0.05 ] [ mm▾ ] [ Apply ]
         ratio_row = QHBoxLayout()
         ratio_row.setSpacing(4)
         self._ratio_px_edit = QLineEdit()
@@ -213,12 +213,15 @@ class ViewportActionsBar(QFrame):
         self._ratio_px_edit.setToolTip("Left side of ratio, e.g. 1px or 50px")
         ratio_row.addWidget(self._ratio_px_edit)
         ratio_row.addWidget(QLabel(":"))
-        self._ratio_val_edit = QLineEdit()
-        self._ratio_val_edit.setPlaceholderText("0.05mm")
-        self._ratio_val_edit.setToolTip(
-            "Right side of ratio, e.g. 0.05mm, 100um, 1furlong"
-        )
-        ratio_row.addWidget(self._ratio_val_edit)
+        self._ratio_val_num_edit = QLineEdit()
+        self._ratio_val_num_edit.setPlaceholderText("0.05")
+        self._ratio_val_num_edit.setToolTip("Numeric value for the right side of the ratio")
+        ratio_row.addWidget(self._ratio_val_num_edit)
+        self._ratio_unit_combo = QComboBox()
+        for _u in ("mm", "um", "nm", "pm", "fm", "cm", "dm", "m", "km"):
+            self._ratio_unit_combo.addItem(_u)
+        self._ratio_unit_combo.setFixedWidth(52)
+        ratio_row.addWidget(self._ratio_unit_combo)
         self._btn_apply_ratio = QPushButton("Apply")
         self._btn_apply_ratio.setFixedWidth(50)
         self._btn_apply_ratio.clicked.connect(self._on_apply_ratio_clicked)
@@ -357,44 +360,56 @@ class ViewportActionsBar(QFrame):
         header.setStyleSheet("font-weight: bold;")
         panel_layout.addWidget(header)
 
-        # Enable + Shape on one row
-        enable_shape_row = QHBoxLayout()
-        enable_shape_row.setSpacing(8)
+        # Enable
         self._crop_chk = QCheckBox("Enable")
         self._crop_chk.toggled.connect(self._on_crop_toggled)
-        enable_shape_row.addWidget(self._crop_chk)
-        enable_shape_row.addStretch()
-        enable_shape_row.addWidget(QLabel("Shape"))
+        panel_layout.addWidget(self._crop_chk)
+
+        # Shape
+        shape_row = QHBoxLayout()
+        shape_row.setSpacing(8)
+        shape_lbl = QLabel("Shape")
+        shape_lbl.setFixedWidth(58)
+        shape_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        shape_row.addWidget(shape_lbl)
         self._crop_shape_combo = QComboBox()
         self._crop_shape_combo.addItems(["Rectangle", "Circle"])
+        self._crop_shape_combo.setMaximumWidth(90)
         self._crop_shape_combo.currentTextChanged.connect(self._on_crop_shape_changed)
-        enable_shape_row.addWidget(self._crop_shape_combo)
-        panel_layout.addLayout(enable_shape_row)
+        shape_row.addWidget(self._crop_shape_combo)
+        shape_row.addStretch()
+        panel_layout.addLayout(shape_row)
 
-        # Width
+        # Width / Diameter
         width_row = QHBoxLayout()
         width_row.setSpacing(8)
         self._crop_primary_lbl = QLabel("Width")
-        self._crop_primary_lbl.setFixedWidth(44)
+        self._crop_primary_lbl.setFixedWidth(58)
+        self._crop_primary_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         width_row.addWidget(self._crop_primary_lbl)
         self._crop_width_spin = QSpinBox()
         self._crop_width_spin.setRange(1, 999999)
         self._crop_width_spin.setSuffix(" px")
+        self._crop_width_spin.setMaximumWidth(90)
         self._crop_width_spin.valueChanged.connect(self._on_crop_primary_changed)
         width_row.addWidget(self._crop_width_spin)
+        width_row.addStretch()
         panel_layout.addLayout(width_row)
 
-        # Height
+        # Height / Radius
         height_row = QHBoxLayout()
         height_row.setSpacing(8)
         self._crop_secondary_lbl = QLabel("Height")
-        self._crop_secondary_lbl.setFixedWidth(44)
+        self._crop_secondary_lbl.setFixedWidth(58)
+        self._crop_secondary_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         height_row.addWidget(self._crop_secondary_lbl)
         self._crop_height_spin = QSpinBox()
         self._crop_height_spin.setRange(1, 999999)
         self._crop_height_spin.setSuffix(" px")
+        self._crop_height_spin.setMaximumWidth(90)
         self._crop_height_spin.valueChanged.connect(self._on_crop_secondary_changed)
         height_row.addWidget(self._crop_height_spin)
+        height_row.addStretch()
         panel_layout.addLayout(height_row)
 
         # Outside opacity
@@ -409,6 +424,27 @@ class ViewportActionsBar(QFrame):
         self._crop_opacity_lbl.setFixedWidth(34)
         opacity_row.addWidget(self._crop_opacity_lbl)
         panel_layout.addLayout(opacity_row)
+
+        # Border color
+        border_row = QHBoxLayout()
+        border_row.setSpacing(8)
+        border_lbl = QLabel("Border")
+        border_lbl.setFixedWidth(58)
+        border_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        border_row.addWidget(border_lbl)
+        self._crop_color_btn = QPushButton()
+        self._crop_color_btn.setFixedSize(32, 20)
+        self._crop_color_btn.setToolTip("Click to set a custom border color")
+        self._crop_color_btn.clicked.connect(self._on_crop_color_clicked)
+        border_row.addWidget(self._crop_color_btn)
+        self._crop_color_auto_btn = QPushButton("Auto")
+        self._crop_color_auto_btn.setFixedHeight(20)
+        self._crop_color_auto_btn.setToolTip("Reset to auto-contrast color")
+        self._crop_color_auto_btn.clicked.connect(self._on_crop_color_auto)
+        border_row.addWidget(self._crop_color_auto_btn)
+        border_row.addStretch()
+        panel_layout.addLayout(border_row)
+        self._update_crop_color_swatch(None)
 
         # Center dot
         self._crop_center_dot_chk = QCheckBox("Show center dot")
@@ -523,8 +559,9 @@ class ViewportActionsBar(QFrame):
         if self._model is None:
             return
         px_text = self._ratio_px_edit.text().strip()
-        val_text = self._ratio_val_edit.text().strip()
-        if not px_text or not val_text:
+        val_num = self._ratio_val_num_edit.text().strip()
+        val_text = val_num + self._ratio_unit_combo.currentText()
+        if not px_text or not val_num:
             return
         from core.persistence.calibration_io import parse_ratio_string
 
@@ -666,6 +703,34 @@ class ViewportActionsBar(QFrame):
             return
         self._canvas.set_center_crop(center_dot=checked)
 
+    def _on_crop_color_clicked(self) -> None:
+        current = self._canvas.center_crop_settings().get("border_color")
+        initial = QColor(*current) if current else QColor(255, 255, 255)
+        color = QColorDialog.getColor(initial, self, "Border Color")
+        if color.isValid():
+            rgb = (color.red(), color.green(), color.blue())
+            self._canvas.set_center_crop(border_color=rgb)
+            self._update_crop_color_swatch(rgb)
+
+    def _on_crop_color_auto(self) -> None:
+        self._canvas.set_center_crop(border_color=None)
+        self._update_crop_color_swatch(None)
+
+    def _update_crop_color_swatch(self, rgb) -> None:
+        if rgb is None:
+            self._crop_color_btn.setStyleSheet(
+                "background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                "stop:0 #ffffff,stop:0.49 #ffffff,stop:0.5 #000000,stop:1 #000000);"
+                "border: 1px solid #888;"
+            )
+            self._crop_color_btn.setToolTip("Auto-contrast (click to override)")
+        else:
+            r, g, b = rgb
+            self._crop_color_btn.setStyleSheet(
+                f"background-color: rgb({r},{g},{b}); border: 1px solid #888;"
+            )
+            self._crop_color_btn.setToolTip(f"Border color: rgb({r},{g},{b}) — click to change")
+
     def _on_reset_crop_clicked(self) -> None:
         if self._refreshing:
             return
@@ -745,8 +810,8 @@ class ViewportActionsBar(QFrame):
             self._calib_status_lbl.setText("Current Calibration: None")
             if not self._ratio_px_edit.hasFocus():
                 self._ratio_px_edit.clear()
-            if not self._ratio_val_edit.hasFocus():
-                self._ratio_val_edit.clear()
+            if not self._ratio_val_num_edit.hasFocus():
+                self._ratio_val_num_edit.clear()
             return
         from core.persistence.calibration_io import format_ratio_string
 
@@ -755,11 +820,17 @@ class ViewportActionsBar(QFrame):
         unit = self._model.unit()
         ratio_str = format_ratio_string(px_count, world_val, unit)
         self._calib_status_lbl.setText(f"Current Calibration: {ratio_str}")
-        left, right = ratio_str.split(":", 1)
+        left, _ = ratio_str.split(":", 1)
         if not self._ratio_px_edit.hasFocus():
             self._ratio_px_edit.setText(left)
-        if not self._ratio_val_edit.hasFocus():
-            self._ratio_val_edit.setText(right)
+        if not self._ratio_val_num_edit.hasFocus():
+            self._ratio_val_num_edit.setText(f"{world_val:g}")
+            idx = self._ratio_unit_combo.findText(unit)
+            if idx >= 0:
+                self._ratio_unit_combo.setCurrentIndex(idx)
+            else:
+                self._ratio_unit_combo.addItem(unit)
+                self._ratio_unit_combo.setCurrentText(unit)
 
     def _refresh_controls(self) -> None:
         if self._model is None:
@@ -861,6 +932,7 @@ class ViewportActionsBar(QFrame):
         self._crop_opacity_slider.setValue(opacity_pct)
         self._crop_opacity_lbl.setText(f"{opacity_pct}%")
         self._crop_center_dot_chk.setChecked(center_dot)
+        self._update_crop_color_swatch(settings.get("border_color"))
         if settings.get("calibrating") != self._center_calibrating:
             self._center_calibrating = bool(settings.get("calibrating"))
         self._crop_hint_lbl.setText(
