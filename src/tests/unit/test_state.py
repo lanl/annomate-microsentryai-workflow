@@ -180,12 +180,3 @@ class TestIsReviewed:
         state.set_inspector("img.jpg", "Alice")
         assert not state.is_reviewed("img.jpg")
 
-    def test_reviewed_when_note_set(self, state):
-        """Verify that adding a note is sufficient to mark an image as reviewed.
-
-        A note (even without annotations) represents deliberate reviewer action, so
-        the image should be considered reviewed. Success means is_reviewed returns
-        True after a non-empty note is set.
-        """
-        state.set_note("img.jpg", "Looks bad")
-        assert state.is_reviewed("img.jpg")

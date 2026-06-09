@@ -494,7 +494,7 @@ class TestProjectRoundTrip:
         assert restored.scale == pytest.approx(1.0)
         assert restored.unit == "px"
         assert restored.user_calibrated is False
-        assert restored.grid_visible is True
+        assert restored.grid_visible is False
 
     def test_legacy_calibration_without_mode_loads_as_user_calibrated(self, pio):
         """Verify that a legacy project dict with scale but no 'mode' key is treated as user-calibrated.
@@ -522,7 +522,7 @@ class TestProjectRoundTrip:
 
         If no 'calibration' key is present in the project data, any previously loaded
         calibration values should be overwritten with pixel defaults. Success means
-        scale=1.0, unit='px', user_calibrated=False, and grid_visible=True after loading.
+        scale=1.0, unit='px', user_calibrated=False, and grid_visible=False after loading.
         """
         restored = CalibrationState()
         restored.scale = 0.05
@@ -539,7 +539,7 @@ class TestProjectRoundTrip:
         assert restored.scale == pytest.approx(1.0)
         assert restored.unit == "px"
         assert restored.user_calibrated is False
-        assert restored.grid_visible is True
+        assert restored.grid_visible is False
 
     def test_center_template_metadata_round_trips(self, pio, tmp_path):
         """Verify that all CenterTemplateState fields survive a project save/load round-trip.

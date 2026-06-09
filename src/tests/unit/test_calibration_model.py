@@ -28,7 +28,7 @@ class TestApplyCalibration:
         assert not model.is_calibrated()
         assert model.scale() == pytest.approx(1.0)
         assert model.unit() == "px"
-        assert model.grid_visible() is True
+        assert model.grid_visible() is False
         assert model.grid_spacing_world() == pytest.approx(100.0)
 
     def test_sets_scale(self, model):
@@ -238,15 +238,15 @@ class TestSerialization:
         """Verify that a legacy dict with scale=None resets the model to pixel defaults.
 
         If the legacy dict explicitly stored scale as None (uncalibrated), the model
-        should reset to pixel defaults and ignore other stale values like unit and
-        grid_visible=False. Success means scale=1.0, unit='px', and grid remains visible.
+        should reset to pixel defaults. The saved grid_visible value is preserved.
+        Success means scale=1.0, unit='px', and grid_visible matches the stored value.
         """
         model.from_dict({"scale": None, "unit": "mm", "grid_visible": False})
         assert not model.is_calibrated()
         assert model.has_scale()
         assert model.scale() == pytest.approx(1.0)
         assert model.unit() == "px"
-        assert model.grid_visible() is True
+        assert model.grid_visible() is False
 
     def test_null_points_roundtrip(self, model):
         """Verify that None calibration points serialize to null and restore correctly.

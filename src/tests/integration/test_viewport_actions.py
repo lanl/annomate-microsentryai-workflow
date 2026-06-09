@@ -146,8 +146,8 @@ def test_measure_and_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
     assert bar._btn_calibrate_points.isEnabled()
     assert bar._btn_measure.isEnabled()
     assert bar._grid_chk.isEnabled()
-    assert model.grid_visible() is True
-    assert bar._grid_chk.isChecked()
+    assert model.grid_visible() is False
+    assert not bar._grid_chk.isChecked()
     assert "1px:1px" in bar._calib_status_lbl.text()
 
     model.set_calib_points((0.0, 0.0), (100.0, 0.0))
