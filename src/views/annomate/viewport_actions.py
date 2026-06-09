@@ -205,7 +205,7 @@ class ViewportActionsBar(QFrame):
         self._calib_status_lbl = QLabel("Current Calibration: None")
         layout.addWidget(self._calib_status_lbl)
 
-        # Ratio input: [ 1px ] : [ 0.05 ] [ mm▾ ] [ Apply ]
+        # Ratio input: [ 1px ] : [ 0.05mm ] [ Apply ]
         ratio_row = QHBoxLayout()
         ratio_row.setSpacing(4)
         self._ratio_px_edit = QLineEdit()
@@ -213,15 +213,12 @@ class ViewportActionsBar(QFrame):
         self._ratio_px_edit.setToolTip("Left side of ratio, e.g. 1px or 50px")
         ratio_row.addWidget(self._ratio_px_edit)
         ratio_row.addWidget(QLabel(":"))
-        self._ratio_val_num_edit = QLineEdit()
-        self._ratio_val_num_edit.setPlaceholderText("0.05")
-        self._ratio_val_num_edit.setToolTip("Numeric value for the right side of the ratio")
-        ratio_row.addWidget(self._ratio_val_num_edit)
-        self._ratio_unit_combo = QComboBox()
-        for _u in ("mm", "um", "nm", "pm", "fm", "cm", "dm", "m", "km"):
-            self._ratio_unit_combo.addItem(_u)
-        self._ratio_unit_combo.setFixedWidth(52)
-        ratio_row.addWidget(self._ratio_unit_combo)
+        self._ratio_val_edit = QLineEdit()
+        self._ratio_val_edit.setPlaceholderText("0.05mm")
+        self._ratio_val_edit.setToolTip(
+            "Right side of ratio, e.g. 0.05mm, 100um, 1furlong"
+        )
+        ratio_row.addWidget(self._ratio_val_edit)
         self._btn_apply_ratio = QPushButton("Apply")
         self._btn_apply_ratio.setFixedWidth(50)
         self._btn_apply_ratio.clicked.connect(self._on_apply_ratio_clicked)
@@ -559,9 +556,8 @@ class ViewportActionsBar(QFrame):
         if self._model is None:
             return
         px_text = self._ratio_px_edit.text().strip()
-        val_num = self._ratio_val_num_edit.text().strip()
-        val_text = val_num + self._ratio_unit_combo.currentText()
-        if not px_text or not val_num:
+        val_text = self._ratio_val_edit.text().strip()
+        if not px_text or not val_text:
             return
         from core.persistence.calibration_io import parse_ratio_string
 
@@ -810,8 +806,8 @@ class ViewportActionsBar(QFrame):
             self._calib_status_lbl.setText("Current Calibration: None")
             if not self._ratio_px_edit.hasFocus():
                 self._ratio_px_edit.clear()
-            if not self._ratio_val_num_edit.hasFocus():
-                self._ratio_val_num_edit.clear()
+            if not self._ratio_val_edit.hasFocus():
+                self._ratio_val_edit.clear()
             return
         from core.persistence.calibration_io import format_ratio_string
 
@@ -820,17 +816,11 @@ class ViewportActionsBar(QFrame):
         unit = self._model.unit()
         ratio_str = format_ratio_string(px_count, world_val, unit)
         self._calib_status_lbl.setText(f"Current Calibration: {ratio_str}")
-        left, _ = ratio_str.split(":", 1)
+        left, right = ratio_str.split(":", 1)
         if not self._ratio_px_edit.hasFocus():
             self._ratio_px_edit.setText(left)
-        if not self._ratio_val_num_edit.hasFocus():
-            self._ratio_val_num_edit.setText(f"{world_val:g}")
-            idx = self._ratio_unit_combo.findText(unit)
-            if idx >= 0:
-                self._ratio_unit_combo.setCurrentIndex(idx)
-            else:
-                self._ratio_unit_combo.addItem(unit)
-                self._ratio_unit_combo.setCurrentText(unit)
+        if not self._ratio_val_edit.hasFocus():
+            self._ratio_val_edit.setText(right)
 
     def _refresh_controls(self) -> None:
         if self._model is None:
