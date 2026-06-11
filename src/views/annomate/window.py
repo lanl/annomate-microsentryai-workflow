@@ -1179,6 +1179,7 @@ class AnnoMateWindow(QWidget):
         self.inference_model.clear()
         self._refresh_canvas_render()
         self.right_panel.set_model_loaded(name, path)
+        self.right_panel.navigator_enable_inference_columns()
         self._start_pending_inference()
 
     def _start_pending_inference(self) -> None:

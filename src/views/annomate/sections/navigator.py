@@ -348,11 +348,13 @@ class DataNavigatorSection(QWidget):
             self.select_row(self._selected_row)
 
     def enable_inference_columns(self) -> None:
-        """Check and show Score and Class columns if not already visible."""
+        """Reveal Score and Class columns; called once inference data is available."""
+        self._microsentry_mode = True
         for col in _INFERENCE_COLUMNS:
             action = self._column_actions.get(col)
             if action and not action.isChecked():
                 action.setChecked(True)
+        self._sync_visible_columns()
 
     def adjacent_source_row(self, current_source_row: int, step: int) -> int:
         """Return the source row adjacent in the current visible sort order."""

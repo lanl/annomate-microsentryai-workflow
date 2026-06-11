@@ -79,7 +79,6 @@ class RightPanel(QWidget):
 
         nav_sec = _CollapsibleSection("Dataset Navigator", expandable=True)
         self.navigator = DataNavigatorSection(dataset_model, inference_model)
-        self.navigator.set_microsentry_mode(True)
         self.navigator.image_selected.connect(self.image_selected)
         self.navigator.prev_requested.connect(self.prev_requested)
         self.navigator.next_requested.connect(self.next_requested)
