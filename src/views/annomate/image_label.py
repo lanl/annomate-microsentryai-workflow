@@ -495,6 +495,10 @@ class ImageLabel(QLabel):
 
         self.update()
 
+    def is_image_loaded(self) -> bool:
+        """Return True if a displayable image is currently set."""
+        return self._display_qpix is not None
+
     def set_violation_highlights(
         self,
         area_violations: set,

@@ -167,7 +167,8 @@ class ViewportActionsBar(QFrame):
         layout.addWidget(self._btn_crop)
 
         self.adjustSize()
-        self.set_image_loaded(False)
+        already_loaded = hasattr(canvas, "is_image_loaded") and canvas.is_image_loaded()
+        self.set_image_loaded(already_loaded)
         if hasattr(canvas, "image_loaded"):
             canvas.image_loaded.connect(self.set_image_dimensions)
         if hasattr(canvas, "centerCropChanged"):
@@ -1205,6 +1206,11 @@ class ViewportActionsBar(QFrame):
 
     def _refresh_action_availability(self) -> None:
         scale_available = self._model is not None and self._model.has_scale()
+        self._btn_zoom_in.setEnabled(self._has_image)
+        self._btn_zoom_out.setEnabled(self._has_image)
+        self._btn_reset.setEnabled(self._has_image)
+        self._btn_settings.setEnabled(self._has_image)
+        self._btn_anomaly.setEnabled(self._has_image)
         self._btn_calibrate_points.setEnabled(self._has_image)
         self._btn_import_ratio.setEnabled(True)
         self._btn_export_ratio.setEnabled(scale_available)
