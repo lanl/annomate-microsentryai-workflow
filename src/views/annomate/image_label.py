@@ -1082,7 +1082,7 @@ class ImageLabel(QLabel):
         point_in_disp = self.view_to_display(cursor_pos)
 
         old_zoom = self._zoom
-        self._zoom = max(0.2, min(8.0, old_zoom * factor))
+        self._zoom = max(0.2, min(12.0, old_zoom * factor))
         self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
@@ -1111,7 +1111,7 @@ class ImageLabel(QLabel):
         """Apply a zoom *factor* anchored at the center of the widget.
 
         Adjusts :attr:`_pan` so the center point stays fixed after the zoom.
-        Clamps zoom to the range ``[0.2, 8.0]``.
+        Clamps zoom to the range ``[0.2, 12.0]``.
 
         Args:
             factor (float): Multiplicative zoom change (e.g. ``1.15`` to
@@ -1123,7 +1123,7 @@ class ImageLabel(QLabel):
         center = QPointF(self.width() / 2, self.height() / 2)
         point_in_disp = self.view_to_display(center)
 
-        self._zoom = max(0.2, min(8.0, self._zoom * factor))
+        self._zoom = max(0.2, min(12.0, self._zoom * factor))
         self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
