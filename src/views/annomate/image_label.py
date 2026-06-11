@@ -1241,13 +1241,24 @@ class ImageLabel(QLabel):
 
         if self._anomaly_area_violations:
             ar, ag, ab = self._anomaly_area_color
-            area_pen = QPen(QColor(ar, ag, ab), 3.0 / self._zoom)
-            painter.setPen(area_pen)
+            color = QColor(ar, ag, ab)
+            f = painter.font()
+            f.setBold(True)
+            f.setPointSizeF(max(6.0, 20.0 / self._zoom))
+            painter.setFont(f)
+            painter.setPen(QPen(color))
+            half = 15.0 / self._zoom
             for idx in self._anomaly_area_violations:
                 if idx < len(self._overlays):
                     pts, _color, _thick, visible = self._overlays[idx]
-                    if visible and len(pts) >= 2:
-                        painter.drawPolygon(QPolygonF(pts + [pts[0]]))
+                    if visible and pts:
+                        cx = sum(p.x() for p in pts) / len(pts)
+                        cy = sum(p.y() for p in pts) / len(pts)
+                        painter.drawText(
+                            QRectF(cx - half, cy - half, half * 2, half * 2),
+                            Qt.AlignCenter,
+                            "!",
+                        )
 
         if self._anomaly_distance_pairs:
             dr, dg, db = self._anomaly_dist_color
