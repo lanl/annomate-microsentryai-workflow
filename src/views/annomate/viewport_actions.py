@@ -152,7 +152,10 @@ class ViewportActionsBar(QFrame):
         layout.addWidget(self._btn_settings)
 
         self._btn_anomaly = self._make_popup_button("⊿", "Anomaly Constraints")
-        self._btn_anomaly.setFont(font_large)
+        font_anomaly = QFont()
+        font_anomaly.setPointSize(13)
+        font_anomaly.setBold(True)
+        self._btn_anomaly.setFont(font_anomaly)
         self._btn_anomaly.setMenu(self._build_anomaly_menu())
         layout.addWidget(self._btn_anomaly)
 
