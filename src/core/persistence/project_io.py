@@ -54,6 +54,7 @@ class ProjectIO:
         model_path: str = "",
         calibration_state=None,
         center_template_state=None,
+        anomaly_constraint_state=None,
     ) -> str:
         """Write .annoproj + annotations.coco.json to project_dir.
 
@@ -217,6 +218,9 @@ class ProjectIO:
                 ts.center_y,
             )
 
+        if anomaly_constraint_state is not None:
+            proj["anomaly_constraints"] = anomaly_constraint_state.to_dict()
+
         annoproj_path = os.path.join(project_dir, f"{project_name}.annoproj")
         _t5 = time.perf_counter()
         with open(annoproj_path, "w", encoding="utf-8") as f:
@@ -286,6 +290,7 @@ class ProjectIO:
         inference_state,
         calibration_state=None,
         center_template_state=None,
+        anomaly_constraint_state=None,
     ) -> None:
         """Mutate state objects from load_project() output.
 
@@ -453,6 +458,18 @@ class ProjectIO:
                 center_template_state.center_x,
                 center_template_state.center_y,
             )
+
+        if anomaly_constraint_state is not None:
+            adata = project_data.get("anomaly_constraints", {})
+            if adata:
+                from core.states.anomaly_constraint_state import AnomalyConstraintState
+                loaded = AnomalyConstraintState.from_dict(adata)
+                anomaly_constraint_state.enabled = loaded.enabled
+                anomaly_constraint_state.area_check_enabled = loaded.area_check_enabled
+                anomaly_constraint_state.area_threshold = loaded.area_threshold
+                anomaly_constraint_state.distance_check_enabled = loaded.distance_check_enabled
+                anomaly_constraint_state.distance_threshold = loaded.distance_threshold
+                anomaly_constraint_state.distance_method = loaded.distance_method
 
     # ------------------------------------------------------------------ #
     # COCO export / import

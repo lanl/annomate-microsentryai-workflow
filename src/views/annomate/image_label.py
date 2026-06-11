@@ -123,6 +123,8 @@ class ImageLabel(QLabel):
         self.current_polygon_points: List[QPointF] = []
         self._overlays: List[Tuple[List[QPointF], QColor, float, bool]] = []
         self._ai_overlays: List[List[QPointF]] = []
+        self._anomaly_area_violations: set = set()
+        self._anomaly_distance_pairs: set = set()
 
         # --- UI State Trackers ---
         self.selected_polygon_idx: int = -1
@@ -186,6 +188,8 @@ class ImageLabel(QLabel):
         self.clear_current_polygon()
         self._overlays = []
         self._ai_overlays = []
+        self._anomaly_area_violations = set()
+        self._anomaly_distance_pairs = set()
         self._heatmap_pix = None
         self._heatmap_alpha = 0.0
         self.selected_polygon_idx = -1
@@ -484,6 +488,21 @@ class ImageLabel(QLabel):
             )
             self.selected_polygon_idx = -1
 
+        self.update()
+
+    def set_violation_highlights(
+        self,
+        area_violations: set,
+        distance_pairs: set,
+    ) -> None:
+        """Update which annotations to highlight as constraint violations.
+
+        Args:
+            area_violations: Set of annotation indices whose area exceeds the threshold.
+            distance_pairs: Set of frozensets ``{i, j}`` for pairs that are too close.
+        """
+        self._anomaly_area_violations = area_violations
+        self._anomaly_distance_pairs = distance_pairs
         self.update()
 
     def set_ai_overlays(self, contours: List[List[Tuple[float, float]]]) -> None:
@@ -1200,6 +1219,47 @@ class ImageLabel(QLabel):
         painter.drawText(QPointF(x1, baseline1), line1)
         painter.drawText(QPointF(x2, baseline2), line2)
 
+    def _paint_violation_highlights(self, painter: QPainter) -> None:
+        """Draw anomaly constraint violation highlights in display coords.
+
+        Called inside the pan/zoom-transformed painter so coordinates match
+        the normal overlay layer.  Area violations get an amber outline;
+        distance violations get a dashed red line connecting polygon centroids.
+        """
+        if not self._anomaly_area_violations and not self._anomaly_distance_pairs:
+            return
+
+        painter.setBrush(Qt.NoBrush)
+
+        if self._anomaly_area_violations:
+            area_pen = QPen(QColor(255, 165, 0), 3.0 / self._zoom)
+            painter.setPen(area_pen)
+            for idx in self._anomaly_area_violations:
+                if idx < len(self._overlays):
+                    pts, _color, _thick, visible = self._overlays[idx]
+                    if visible and len(pts) >= 2:
+                        painter.drawPolygon(QPolygonF(pts + [pts[0]]))
+
+        if self._anomaly_distance_pairs:
+            dist_pen = QPen(QColor(220, 50, 50, 200), 2.0 / self._zoom, Qt.DashLine)
+            painter.setPen(dist_pen)
+            for pair in self._anomaly_distance_pairs:
+                idxs = list(pair)
+                if len(idxs) != 2:
+                    continue
+                i, j = idxs[0], idxs[1]
+                if i >= len(self._overlays) or j >= len(self._overlays):
+                    continue
+                pts_i = self._overlays[i][0]
+                pts_j = self._overlays[j][0]
+                if not pts_i or not pts_j:
+                    continue
+                cx_i = sum(p.x() for p in pts_i) / len(pts_i)
+                cy_i = sum(p.y() for p in pts_i) / len(pts_i)
+                cx_j = sum(p.x() for p in pts_j) / len(pts_j)
+                cy_j = sum(p.y() for p in pts_j) / len(pts_j)
+                painter.drawLine(QPointF(cx_i, cy_i), QPointF(cx_j, cy_j))
+
     def _paint_calib_dots(self, painter: QPainter) -> None:
         """Draw calibration and measure dots in display coords (inside scaled painter)."""
         m = self._calib_model
@@ -1413,6 +1473,7 @@ class ImageLabel(QLabel):
                 painter.setPen(outline_pen)
                 painter.drawEllipse(pt, r, r)
 
+        self._paint_violation_highlights(painter)
         self._paint_calib_dots(painter)
 
         # Switch to screen coordinates for the viewport-fixed grid

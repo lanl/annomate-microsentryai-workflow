@@ -46,6 +46,7 @@ class AppWindow(QMainWindow):
         calibration_model=None,
         center_template_model=None,
         center_template_controller=None,
+        anomaly_constraint_model=None,
     ) -> None:
         super().__init__()
         self.setWindowTitle(_APP_TITLE)
@@ -71,6 +72,7 @@ class AppWindow(QMainWindow):
             center_template_model=center_template_model,
             center_template_controller=center_template_controller,
             project_controller=project_controller,
+            anomaly_constraint_model=anomaly_constraint_model,
         )
 
         self.annomate_view.new_project_requested.connect(self._new_project)

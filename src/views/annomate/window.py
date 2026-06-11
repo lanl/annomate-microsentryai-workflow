@@ -33,6 +33,8 @@ from views.annomate.tool_palette import ToolPalette
 from views.annomate.status_bar import AnnoMateStatusBar
 from views.annomate.viewport_actions import ViewportActionsBar
 from controllers.sam_controller import SAMController
+from controllers.anomaly_constraint_controller import AnomalyConstraintController
+from models.anomaly_constraint_model import AnomalyConstraintModel
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +420,7 @@ class AnnoMateWindow(QWidget):
         center_template_model=None,
         center_template_controller=None,
         project_controller=None,
+        anomaly_constraint_model=None,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
@@ -429,6 +432,9 @@ class AnnoMateWindow(QWidget):
         self._center_template_model = center_template_model
         self._center_template_controller = center_template_controller
         self._project_controller = project_controller
+        self._anomaly_model = anomaly_constraint_model or AnomalyConstraintModel()
+        self._anomaly_controller = AnomalyConstraintController(self._anomaly_model, parent=self)
+        self._prev_distance_method: str = self._anomaly_model.distance_method()
         self._current_row: int = -1
         self._active_class: str = ""
         self._active_tool: str = ""
@@ -497,6 +503,18 @@ class AnnoMateWindow(QWidget):
 
         # Route thickness signal directly to canvas setter
         self.tool_palette.thickness_changed.connect(self._on_thickness_changed)
+
+        # Anomaly constraint checks
+        self._anomaly_controller.violations_updated.connect(
+            self._on_anomaly_violations_updated
+        )
+        self._anomaly_model.constraints_changed.connect(
+            self._on_anomaly_constraints_changed
+        )
+        if calibration_model is not None:
+            calibration_model.calibration_changed.connect(
+                self._on_calibration_changed_for_anomaly
+            )
 
         # SAM tool
         self.canvas.samBboxDrawn.connect(self._on_sam_bbox_drawn)
@@ -574,6 +592,7 @@ class AnnoMateWindow(QWidget):
             self._calib_model,
             self.canvas,
             center_template_model=self._center_template_model,
+            anomaly_constraint_model=self._anomaly_model,
         )
         self.viewport_actions.raise_()
 
@@ -698,6 +717,8 @@ class AnnoMateWindow(QWidget):
         )  # always set the original; resets zoom (expected on new image)
         self._apply_center_template_match(bgr)
         self._refresh_canvas_render()  # apply heatmap / overlay layer without resetting zoom
+        self._anomaly_controller.invalidate_cache()
+        self._run_anomaly_checks()
         total = self.dataset_model.rowCount()
         self.right_panel.set_counter(row, total)
         self.right_panel.select_row(row)
@@ -954,6 +975,31 @@ class AnnoMateWindow(QWidget):
         self.canvas.set_active_color(QColor(r, g, b))
         self.status_bar.set_class(name)
 
+    def _on_anomaly_violations_updated(self, area_violations: set, distance_pairs: set) -> None:
+        self.canvas.set_violation_highlights(area_violations, distance_pairs)
+        self.viewport_actions.refresh_anomaly_violations(
+            len(area_violations), len(distance_pairs)
+        )
+
+    def _on_anomaly_constraints_changed(self) -> None:
+        new_method = self._anomaly_model.distance_method()
+        if new_method != self._prev_distance_method:
+            self._anomaly_controller.invalidate_cache()
+            self._prev_distance_method = new_method
+        self._run_anomaly_checks()
+
+    def _on_calibration_changed_for_anomaly(self) -> None:
+        if self._calib_model is not None:
+            self.viewport_actions.update_anomaly_units(self._calib_model.unit())
+        self._run_anomaly_checks()
+
+    def _run_anomaly_checks(self) -> None:
+        if self._current_row < 0:
+            return
+        annotations = self.dataset_model.get_annotations(self._current_row)
+        scale = self._calib_model.scale() if self._calib_model is not None else None
+        self._anomaly_controller.run_checks(annotations, scale)
+
     def _on_polygon_finished(self, pts: list) -> None:
         if self._current_row < 0 or not pts:
             return
@@ -980,6 +1026,8 @@ class AnnoMateWindow(QWidget):
                     self.dataset_model.get_review_decision(self._current_row)
                 )
             self._refresh_canvas_render()
+            self._anomaly_controller.invalidate_cache()
+            self._run_anomaly_checks()
 
     def _on_canvas_polygon_selected(self, idx: int) -> None:
         """Sync the right panel list and slider when a polygon is clicked on the canvas."""

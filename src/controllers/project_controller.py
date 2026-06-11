@@ -64,6 +64,7 @@ class ProjectController(QObject):
         inference_controller=None,
         calibration_model=None,
         center_template_model=None,
+        anomaly_constraint_model=None,
         parent: QObject = None,
     ) -> None:
         super().__init__(parent)
@@ -73,6 +74,7 @@ class ProjectController(QObject):
         self._inference_controller = inference_controller
         self._calibration_model = calibration_model
         self._center_template_model = center_template_model
+        self._anomaly_constraint_model = anomaly_constraint_model
 
         self._project_io = ProjectIO()
         self._autosave_manager = AutosaveManager(interval_minutes=5, parent=self)
@@ -224,15 +226,23 @@ class ProjectController(QObject):
                 if self._center_template_model
                 else None
             )
+            anomaly_constraint_state = (
+                self._anomaly_constraint_model._state
+                if self._anomaly_constraint_model
+                else None
+            )
             self._project_io.apply_project_to_states(
                 project_data,
                 ds,
                 self._inference_model.state,
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
+                anomaly_constraint_state=anomaly_constraint_state,
             )
             if self._calibration_model is not None:
                 self._calibration_model.calibration_changed.emit()
+            if self._anomaly_constraint_model is not None:
+                self._anomaly_constraint_model.constraints_changed.emit()
                 self._calibration_model.grid_changed.emit()
             if self._center_template_model is not None:
                 self._center_template_model.template_changed.emit()
@@ -321,6 +331,11 @@ class ProjectController(QObject):
         center_template_state = (
             self._center_template_model._state if self._center_template_model else None
         )
+        anomaly_constraint_state = (
+            self._anomaly_constraint_model._state
+            if self._anomaly_constraint_model
+            else None
+        )
         path = self._project_io.save_project(
             project_dir=project_dir,
             project_name=project_name,
@@ -331,6 +346,7 @@ class ProjectController(QObject):
             model_path=self._resolve_model_path(),
             calibration_state=calib_state,
             center_template_state=center_template_state,
+            anomaly_constraint_state=anomaly_constraint_state,
         )
         if self._created_at is None:
             self._created_at = datetime.now(timezone.utc).isoformat()
@@ -356,6 +372,11 @@ class ProjectController(QObject):
                 if self._center_template_model
                 else None
             )
+            anomaly_constraint_state = (
+                self._anomaly_constraint_model._state
+                if self._anomaly_constraint_model
+                else None
+            )
             path = self._project_io.save_project(
                 project_dir=autosave_dir,
                 project_name=f"{self._project_name}.autosave",
@@ -366,6 +387,7 @@ class ProjectController(QObject):
                 model_path=self._resolve_model_path(),
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
+                anomaly_constraint_state=anomaly_constraint_state,
             )
             self.autosave_written.emit(path)
         except Exception as exc:
