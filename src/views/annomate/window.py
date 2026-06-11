@@ -992,6 +992,7 @@ class AnnoMateWindow(QWidget):
             self._anomaly_model.area_color(),
             self._anomaly_model.distance_color(),
         )
+        self.canvas.set_violation_method(new_method)
         self._run_anomaly_checks()
 
     def _on_calibration_changed_for_anomaly(self) -> None:
@@ -1126,6 +1127,10 @@ class AnnoMateWindow(QWidget):
         if self.inference_model and self.inference_model.get_processed_count() > 0:
             self.right_panel.set_scoremaps_loaded()
             self.right_panel.navigator_enable_inference_columns()
+        # Sync anomaly canvas state from the loaded project (state was mutated directly,
+        # bypassing constraints_changed, so we push colors/method explicitly here).
+        if self._anomaly_model is not None:
+            self._on_anomaly_constraints_changed()
 
     # ------------------------------------------------------------------ #
     # Microsentry rendering

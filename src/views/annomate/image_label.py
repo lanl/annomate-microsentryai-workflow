@@ -129,6 +129,7 @@ class ImageLabel(QLabel):
         self._anomaly_dist_unit: str = "px"
         self._anomaly_area_color: tuple = (255, 165, 0)
         self._anomaly_dist_color: tuple = (220, 50, 50)
+        self._anomaly_dist_method: str = "centroid"
 
         # --- UI State Trackers ---
         self.selected_polygon_idx: int = -1
@@ -526,6 +527,11 @@ class ImageLabel(QLabel):
         """Update the colors used to render violation highlights."""
         self._anomaly_area_color = area_color
         self._anomaly_dist_color = distance_color
+        self.update()
+
+    def set_violation_method(self, method: str) -> None:
+        """Set distance method ('centroid' or 'edge') for violation line drawing."""
+        self._anomaly_dist_method = method
         self.update()
 
     def set_ai_overlays(self, contours: List[List[Tuple[float, float]]]) -> None:
@@ -1293,10 +1299,23 @@ class ImageLabel(QLabel):
                 pts_j = self._overlays[j][0]
                 if not pts_i or not pts_j:
                     continue
-                cx_i = sum(p.x() for p in pts_i) / len(pts_i)
-                cy_i = sum(p.y() for p in pts_i) / len(pts_i)
-                cx_j = sum(p.x() for p in pts_j) / len(pts_j)
-                cy_j = sum(p.y() for p in pts_j) / len(pts_j)
+                if self._anomaly_dist_method == "edge":
+                    best = float("inf")
+                    p_start = pts_i[0]
+                    p_end = pts_j[0]
+                    for pi in pts_i:
+                        for pj in pts_j:
+                            d2 = (pi.x() - pj.x()) ** 2 + (pi.y() - pj.y()) ** 2
+                            if d2 < best:
+                                best = d2
+                                p_start, p_end = pi, pj
+                    cx_i, cy_i = p_start.x(), p_start.y()
+                    cx_j, cy_j = p_end.x(), p_end.y()
+                else:
+                    cx_i = sum(p.x() for p in pts_i) / len(pts_i)
+                    cy_i = sum(p.y() for p in pts_i) / len(pts_i)
+                    cx_j = sum(p.x() for p in pts_j) / len(pts_j)
+                    cy_j = sum(p.y() for p in pts_j) / len(pts_j)
                 painter.drawLine(QPointF(cx_i, cy_i), QPointF(cx_j, cy_j))
 
                 dist_val = self._anomaly_dist_values.get(pair)
