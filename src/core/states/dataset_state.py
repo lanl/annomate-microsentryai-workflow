@@ -61,18 +61,23 @@ class DatasetState:
         self.class_visibility = {name: True for name in self.class_names}
 
     def is_reviewed(self, img_name: str) -> bool:
-        """Return whether an image has at least one annotation or review decision.
+        """Return whether an image has been fully reviewed.
+
+        Accept decisions are reviewed unconditionally. Reject decisions require
+        at least one annotation to be considered reviewed.
 
         Args:
             img_name (str): Image filename to check.
 
         Returns:
-            bool: ``True`` if the image has any annotation or review decision;
-                ``False`` otherwise.
+            bool: ``True`` if the image is reviewed; ``False`` otherwise.
         """
-        has_anno = bool(self.annotations.get(img_name))
-        has_decision = img_name in self.review_decisions
-        return has_anno or has_decision
+        decision = self.review_decisions.get(img_name)
+        if decision == "accept":
+            return True
+        if decision == "reject":
+            return bool(self.annotations.get(img_name))
+        return False
 
     # --- Annotation CRUD ---
 

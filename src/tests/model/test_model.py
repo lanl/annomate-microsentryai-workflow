@@ -65,25 +65,57 @@ class TestStatusColumn:
         model.load_folder("/fake", ["img.jpg"])
         assert model.data(model.index(0, 1)) == "Pending"
 
-    def test_status_becomes_reviewed_after_annotation(self, model):
-        """Verify that adding an annotation changes an image's status to 'Reviewed'.
+    def test_annotation_alone_does_not_mark_reviewed(self, model):
+        """Verify that adding an annotation alone does not change status to 'Reviewed'.
 
-        Once any annotation is added to an image, it should be considered reviewed.
-        Success means the status column shows 'Reviewed' after add_annotation is called.
+        A review decision is required to be considered reviewed. Annotations alone
+        without an Accept or Reject decision should leave status as 'Pending'.
         """
         model.load_folder("/fake", ["img.jpg"])
         model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])
+        assert model.data(model.index(0, 1)) == "Pending"
+
+    def test_status_becomes_reviewed_after_accept(self, model):
+        """Verify that an Accept decision marks an image as 'Reviewed' without annotations.
+
+        An Accept decision alone is sufficient. Success means the status column shows
+        'Reviewed' after set_review_decision is called with 'accept'.
+        """
+        model.load_folder("/fake", ["img.jpg"])
+        model.set_review_decision(0, "accept")
         assert model.data(model.index(0, 1)) == "Reviewed"
 
-    def test_status_reverts_to_pending_after_last_delete(self, model):
-        """Verify that deleting the last annotation reverts an image's status to 'Pending'.
+    def test_status_becomes_reviewed_after_reject_with_annotation(self, model):
+        """Verify that a Reject decision with an annotation marks an image as 'Reviewed'.
 
-        When all annotations are removed from an image, it should revert to 'Pending'
-        status. Success means the status column shows 'Pending' after the last
-        annotation is deleted.
+        A Reject decision requires at least one annotation to be considered reviewed.
+        Success means the status column shows 'Reviewed' when both are present.
+        """
+        model.load_folder("/fake", ["img.jpg"])
+        model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])
+        model.set_review_decision(0, "reject")
+        assert model.data(model.index(0, 1)) == "Reviewed"
+
+    def test_status_pending_when_rejected_without_annotation(self, model):
+        """Verify that a Reject decision without annotations leaves status as 'Pending'.
+
+        A Reject decision alone is insufficient — annotations must also be present.
+        Success means the status column shows 'Pending' when only the decision is 'reject'.
+        """
+        model.load_folder("/fake", ["img.jpg"])
+        model.set_review_decision(0, "reject")
+        assert model.data(model.index(0, 1)) == "Pending"
+
+    def test_status_reverts_to_pending_after_last_annotation_deleted_on_reject(self, model):
+        """Verify that deleting the last annotation on a rejected image reverts status to 'Pending'.
+
+        When a rejected image loses all its annotations, it no longer meets the reviewed
+        criteria. Success means the status column shows 'Pending' after the last annotation
+        is deleted.
         """
         model.load_folder("/fake", ["img.jpg"])
         model.add_annotation(0, "Defect", [(0, 0)])
+        model.set_review_decision(0, "reject")
         model.delete_annotation(0, 0)
         assert model.data(model.index(0, 1)) == "Pending"
 

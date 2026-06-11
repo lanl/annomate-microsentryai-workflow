@@ -161,21 +161,57 @@ class TestIsReviewed:
         """
         assert not state.is_reviewed("img.jpg")
 
-    def test_reviewed_when_annotation_exists(self, state):
-        """Verify that an image with at least one annotation is considered reviewed.
+    def test_not_reviewed_when_only_annotation_exists(self, state):
+        """Verify that annotations alone do not mark an image as reviewed.
 
-        Adding any annotation to an image should mark it as reviewed. Success means
-        is_reviewed returns True after add_annotation is called.
+        An annotation without a review decision is not sufficient to be considered
+        reviewed. Success means is_reviewed returns False when only an annotation exists.
         """
         state.add_annotation("img.jpg", "Defect", [(0, 0)])
+        assert not state.is_reviewed("img.jpg")
+
+    def test_reviewed_when_accepted(self, state):
+        """Verify that an accepted image is reviewed regardless of annotations.
+
+        An Accept decision alone is sufficient to mark an image as reviewed.
+        Success means is_reviewed returns True after setting decision to 'accept'.
+        """
+        state.set_review_decision("img.jpg", "accept")
         assert state.is_reviewed("img.jpg")
+
+    def test_reviewed_when_accepted_with_annotation(self, state):
+        """Verify that an accepted image with annotations is reviewed.
+
+        Accept decisions are reviewed unconditionally whether or not annotations exist.
+        """
+        state.add_annotation("img.jpg", "Defect", [(0, 0)])
+        state.set_review_decision("img.jpg", "accept")
+        assert state.is_reviewed("img.jpg")
+
+    def test_reviewed_when_rejected_with_annotation(self, state):
+        """Verify that a rejected image is reviewed when it has at least one annotation.
+
+        A Reject decision requires annotations to be considered reviewed. Success
+        means is_reviewed returns True when decision is 'reject' and an annotation exists.
+        """
+        state.add_annotation("img.jpg", "Defect", [(0, 0)])
+        state.set_review_decision("img.jpg", "reject")
+        assert state.is_reviewed("img.jpg")
+
+    def test_not_reviewed_when_rejected_without_annotation(self, state):
+        """Verify that a rejected image without annotations is not reviewed.
+
+        A Reject decision alone is insufficient — annotations must also be present.
+        Success means is_reviewed returns False when decision is 'reject' but no annotations exist.
+        """
+        state.set_review_decision("img.jpg", "reject")
+        assert not state.is_reviewed("img.jpg")
 
     def test_not_reviewed_when_only_inspector_set(self, state):
         """Verify that setting an inspector alone does not mark an image as reviewed.
 
         An inspector field on its own is not sufficient to classify an image as
-        reviewed — actual annotations or a note must also be present. Success means
-        is_reviewed returns False when only the inspector is set.
+        reviewed. Success means is_reviewed returns False when only the inspector is set.
         """
         state.set_inspector("img.jpg", "Alice")
         assert not state.is_reviewed("img.jpg")
