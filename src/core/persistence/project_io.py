@@ -478,7 +478,7 @@ class ProjectIO:
             try:
                 npz = np.load(npz_path)
                 for key in npz.files:
-                    fname = self._npz_key_to_filename(key)
+                    fname = os.path.normpath(self._npz_key_to_filename(key))
                     inference_state.score_maps[fname] = npz[key]
                 inference_state.score_maps_dirty = False
             except Exception as exc:

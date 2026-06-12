@@ -383,6 +383,34 @@ class TestProjectRoundTrip:
         assert "img001.jpg" in inf2.score_maps
         np.testing.assert_array_almost_equal(inf2.score_maps["img001.jpg"], arr)
 
+    def test_score_maps_absolute_path_key_normalized_on_load(self, pio, tmp_path):
+        """Verify that absolute-path keys in scoremaps.npz round-trip via OS-native separators.
+
+        On Windows, inference stores score maps keyed by backslash paths.  The NPZ
+        encoding converts all separators to forward slashes, so without normalization
+        the restored key would not match what dataset_model.get_image_path() returns.
+        Success means the loaded key matches os.path.normpath of the original.
+        """
+        import os
+
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        arr = np.array([[0.2, 0.8]], dtype=np.float32)
+        abs_key = str(tmp_path / "images" / "img001.jpg")
+        inf.score_maps[abs_key] = arr
+        inf.score_maps_dirty = True
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=True)
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), inf2)
+
+        expected_key = os.path.normpath(abs_key)
+        assert expected_key in inf2.score_maps
+        np.testing.assert_array_almost_equal(inf2.score_maps[expected_key], arr)
+
     def test_skip_score_maps_flag(self, pio, tmp_path):
         """Verify that save_score_maps=False prevents writing the scoremaps.npz file.
 
