@@ -98,6 +98,8 @@ class ProjectController(QObject):
             self._calibration_model.grid_changed.connect(self._on_model_changed)
         if self._center_template_model is not None:
             self._center_template_model.template_changed.connect(self._on_model_changed)
+        if self._anomaly_constraint_model is not None:
+            self._anomaly_constraint_model.constraints_changed.connect(self._on_model_changed)
 
     # ------------------------------------------------------------------ #
     # Properties (read-only for AppWindow)
