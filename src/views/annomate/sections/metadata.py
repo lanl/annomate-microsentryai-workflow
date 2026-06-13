@@ -46,6 +46,14 @@ class MetadataSection(QWidget):
         self._set_inspector_btn.setFixedWidth(95)
         self._set_inspector_btn.clicked.connect(self._on_set_inspector)
         inspector_row.addWidget(self._set_inspector_btn)
+
+        self._set_all_btn = QPushButton("Set All")
+        self._set_all_btn.setFixedWidth(60)
+        self._set_all_btn.setToolTip(
+            "Apply session inspector to all reviewed images with no inspector set"
+        )
+        self._set_all_btn.clicked.connect(self._on_set_all_inspectors)
+        inspector_row.addWidget(self._set_all_btn)
         layout.addLayout(inspector_row)
 
         self._session_lbl = QLabel("Session Inspector: —")
@@ -101,6 +109,15 @@ class MetadataSection(QWidget):
         )
         if self._current_row >= 0:
             self.dataset_model.set_inspector(self._current_row, name)
+
+    def _on_set_all_inspectors(self) -> None:
+        name = self._inspector_edit.text().strip() or self._session_inspector
+        if not name:
+            return
+        for row in range(self.dataset_model.rowCount()):
+            if self.dataset_model.is_reviewed(row) and not self.dataset_model.get_inspector(row):
+                self.dataset_model.set_inspector(row, name)
+        self._load_fields()
 
     def _store_inspector(self) -> None:
         if self._current_row < 0:
