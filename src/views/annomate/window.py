@@ -442,6 +442,7 @@ class AnnoMateWindow(QWidget):
         self._current_bgr = None
         self._current_ai_contours: list = []
         self._selected_ai_idx: int = -1
+        self._accepting_ai: bool = False
         self._saved_model_path: str = ""
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
@@ -1073,7 +1074,8 @@ class AnnoMateWindow(QWidget):
                 self._review_bar.set_decision(
                     self.dataset_model.get_review_decision(self._current_row)
                 )
-            self._refresh_canvas_render()
+            if not self._accepting_ai:
+                self._refresh_canvas_render()
             self._anomaly_controller.invalidate_cache()
             self._run_anomaly_checks()
 
@@ -1373,6 +1375,11 @@ class AnnoMateWindow(QWidget):
         class_names = self.dataset_model.get_class_names()
         if not class_names:
             self._ai_popup.setVisible(False)
+            QMessageBox.warning(
+                self,
+                "No Classes Defined",
+                "Add an annotation class before accepting AI segmentation polygons.",
+            )
             return
         self._ai_popup.set_classes(class_names, self._active_class)
         bbox = self.canvas.get_ai_polygon_view_rect(idx)
@@ -1393,7 +1400,11 @@ class AnnoMateWindow(QWidget):
                     else (class_names[0] if class_names else "")
                 )
             if target:
-                self.dataset_model.add_annotation(self._current_row, target, pts)
+                self._accepting_ai = True
+                try:
+                    self.dataset_model.add_annotation(self._current_row, target, pts)
+                finally:
+                    self._accepting_ai = False
         del self._current_ai_contours[idx]
         self._selected_ai_idx = -1
         self._ai_popup.setVisible(False)
@@ -1422,17 +1433,27 @@ class AnnoMateWindow(QWidget):
             return
         class_names = self.dataset_model.get_class_names()
         if not class_names:
+            QMessageBox.warning(
+                self,
+                "No Classes Defined",
+                "Add an annotation class before accepting AI segmentation polygons.",
+            )
             return
         target = (
             self._active_class if self._active_class in class_names else class_names[0]
         )
-        for pts in self._current_ai_contours:
-            if len(pts) >= 3:
-                self.dataset_model.add_annotation(self._current_row, target, pts)
+        contours_to_accept = list(self._current_ai_contours)
+        self._accepting_ai = True
+        try:
+            for pts in contours_to_accept:
+                if len(pts) >= 3:
+                    self.dataset_model.add_annotation(self._current_row, target, pts)
+        finally:
+            self._accepting_ai = False
         self._current_ai_contours = []
         self._selected_ai_idx = -1
         self._ai_popup.setVisible(False)
-        self._refresh_canvas_render()
+        self._push_overlays_after_edit()
 
     def _row_for_path(self, path: str) -> int:
         for i in range(self.dataset_model.rowCount()):
