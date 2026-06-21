@@ -144,10 +144,15 @@ class InferenceController(QObject):
     # ------------------------------------------------------------------ #
 
     def load_model(self, model_path: str, device: str = "auto") -> str:
-        """Load a ``.pt`` or ``.ckpt`` model file and prepare the strategy.
+        """Load a model file and prepare the strategy.
+
+        Supports ``.onnx`` (via OnnxStrategy) and ``.pt``/``.ckpt``
+        (via AnomalibStrategy). The correct strategy is chosen automatically
+        from the file extension unless *strategy_class* was supplied at
+        construction time.
 
         Args:
-            model_path (str): Absolute path to the model checkpoint file.
+            model_path (str): Absolute path to the model file.
             device (str): Target device — ``"auto"`` (default) detects CUDA →
                 MPS → CPU in that order; or pass ``"cpu"``/``"cuda"``/``"mps"``.
 
@@ -158,9 +163,17 @@ class InferenceController(QObject):
             RuntimeError: If the strategy fails to load the model file.
         """
         if self._strategy_class is None:
-            from ai_strategies.anomalib_strategy import AnomalibStrategy
+            from pathlib import Path
 
-            strategy_class = AnomalibStrategy
+            ext = Path(model_path).suffix.lower()
+            if ext == ".onnx":
+                from ai_strategies.onnx_strategy import OnnxStrategy
+
+                strategy_class = OnnxStrategy
+            else:
+                from ai_strategies.anomalib_strategy import AnomalibStrategy
+
+                strategy_class = AnomalibStrategy
         else:
             strategy_class = self._strategy_class
         strategy = strategy_class()

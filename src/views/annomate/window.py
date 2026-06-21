@@ -1204,7 +1204,7 @@ class AnnoMateWindow(QWidget):
             self,
             "Load AI Model",
             os.getcwd(),
-            "PyTorch Model (*.pt *.pth);;All Files (*)",
+            "AI Model (*.onnx *.pt *.pth *.ckpt);;ONNX Model (*.onnx);;PyTorch Model (*.pt *.pth *.ckpt);;All Files (*)",
         )
         if not path:
             return

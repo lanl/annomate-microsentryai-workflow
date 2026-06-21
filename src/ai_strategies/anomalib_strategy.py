@@ -17,9 +17,16 @@ from pathlib import Path
 from typing import Tuple, Optional
 
 import numpy as np
-import torch
-from anomalib.deploy import TorchInferencer
 import cv2
+
+try:
+    import torch
+    from anomalib.deploy import TorchInferencer
+    _TORCH_AVAILABLE = True
+except ImportError:
+    torch = None  # type: ignore[assignment]
+    TorchInferencer = None  # type: ignore[assignment]
+    _TORCH_AVAILABLE = False
 
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
@@ -352,6 +359,13 @@ class AnomalibStrategy:
             RuntimeError: If both loading attempts fail, wrapping the
                 underlying exception message.
         """
+        if not _TORCH_AVAILABLE:
+            raise RuntimeError(
+                "PyTorch is not installed in this environment. "
+                "Load a .onnx model file instead, or use the PyTorch environment "
+                "(environment-cpu.yml / environment-cuda.yml)."
+            )
+
         path = Path(model_path)
         self._device_verified = False
         self.torch_inferencer = None

@@ -1,9 +1,10 @@
-"""Unit tests for SAMStrategy — no ultralytics or Qt required."""
+"""Unit tests for SAMStrategy and SAMOnnxStrategy — no ultralytics or Qt required."""
 
 import numpy as np
 import pytest
 
 from ai_strategies.sam_strategy import SAMStrategy
+from ai_strategies.sam_onnx_strategy import SAMOnnxStrategy
 
 
 # ---------------------------------------------------------------------------
@@ -102,3 +103,76 @@ def test_mask_to_polygon_tiny_contour_returns_empty():
     pts, conf = strategy._mask_to_polygon(mask, epsilon=0.0)
     assert pts == []
     assert conf == 0.0
+
+
+# ---------------------------------------------------------------------------
+# SAMOnnxStrategy tests — covers the copied _mask_to_polygon and load guard
+# ---------------------------------------------------------------------------
+
+
+class TestSAMOnnxStrategy:
+    """SAMOnnxStrategy shares the same mask-to-polygon logic and load guard."""
+
+    def test_mask_to_polygon_round_trip(self):
+        """Polygon from a filled rect should have pts within the rect bounds."""
+        strategy = SAMOnnxStrategy()
+        mask = _filled_rect_mask(100, 100, 20, 20, 80, 80)
+        pts, conf = strategy._mask_to_polygon(mask, epsilon=1.0)
+        assert len(pts) >= 4
+        for x, y in pts:
+            assert 20 <= x <= 80, f"x={x} outside [20, 80]"
+            assert 20 <= y <= 80, f"y={y} outside [20, 80]"
+        assert 0.0 < conf < 1.0
+
+    def test_simplify_reduces_point_count(self):
+        """Douglas-Peucker simplification should reduce a dense circular contour."""
+        strategy = SAMOnnxStrategy()
+        mask = _circle_mask(200, 200, 80)
+        pts_loose, _ = strategy._mask_to_polygon(mask, epsilon=0.5)
+        pts_tight, _ = strategy._mask_to_polygon(mask, epsilon=5.0)
+        assert len(pts_tight) < len(pts_loose)
+
+    def test_load_guard_raises_before_load(self):
+        """predict_bbox must raise RuntimeError if load() was never called."""
+        strategy = SAMOnnxStrategy()
+        dummy = np.zeros((100, 100, 3), dtype=np.uint8)
+        with pytest.raises(RuntimeError, match="not loaded"):
+            strategy.predict_bbox(dummy, (0, 0, 50, 50))
+
+    def test_set_variant_resets_loaded_state(self):
+        """Changing the variant should mark the strategy as not loaded."""
+        strategy = SAMOnnxStrategy("sam2_t.pt")
+        strategy.is_loaded = True
+        strategy._enc_session = object()
+        strategy._dec_session = object()
+
+        strategy.set_variant("sam2_b.pt")
+
+        assert not strategy.is_loaded
+        assert strategy._enc_session is None
+        assert strategy._dec_session is None
+        assert strategy._variant == "sam2_b.pt"
+
+    def test_set_variant_same_variant_no_reset(self):
+        """Setting the same variant should not reset loaded state."""
+        strategy = SAMOnnxStrategy("sam2_t.pt")
+        strategy.is_loaded = True
+        strategy.set_variant("sam2_t.pt")
+        assert strategy.is_loaded
+
+    def test_mask_to_polygon_empty_mask_returns_empty(self):
+        """An all-zeros mask should return an empty polygon and zero confidence."""
+        strategy = SAMOnnxStrategy()
+        mask = np.zeros((100, 100), dtype=np.float32)
+        pts, conf = strategy._mask_to_polygon(mask, epsilon=2.0)
+        assert pts == []
+        assert conf == 0.0
+
+    def test_mask_to_polygon_tiny_contour_returns_empty(self):
+        """A contour with area < 10 px should be filtered out."""
+        strategy = SAMOnnxStrategy()
+        mask = np.zeros((100, 100), dtype=np.float32)
+        mask[50, 50] = 1.0
+        pts, conf = strategy._mask_to_polygon(mask, epsilon=0.0)
+        assert pts == []
+        assert conf == 0.0

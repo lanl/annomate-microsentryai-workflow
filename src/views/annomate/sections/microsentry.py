@@ -78,7 +78,7 @@ class MicrosentrySection(QWidget):
         self._btn_load_prev.setToolTip("Reload the model saved with this project")
         self._btn_load_prev.clicked.connect(self.load_previous_model_requested)
         self._btn_load_new = QPushButton("Load New")
-        self._btn_load_new.setToolTip("Browse for a new .pt model file")
+        self._btn_load_new.setToolTip("Browse for a model file (.onnx, .pt, .ckpt)")
         self._btn_load_new.clicked.connect(self.load_model_requested)
         btn_row.addWidget(self._btn_load_prev)
         btn_row.addWidget(self._btn_load_new)

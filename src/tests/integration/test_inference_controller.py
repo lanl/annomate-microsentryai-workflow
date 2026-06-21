@@ -12,7 +12,7 @@ from models.inference_model import InferenceModel
 from core.states.dataset_state import DatasetState
 from core.states.inference_state import InferenceState
 from controllers.inference_controller import InferenceController, InferenceWorker
-from ai_strategies.anomalib_strategy import AnomalibStrategy
+from ai_strategies.onnx_strategy import OnnxStrategy
 
 
 class MockStrategy:
@@ -80,45 +80,31 @@ class TestInferenceController:
 
 
 class TestDeviceResolution:
-    """Test the AnomalibStrategy device fallback logic for cross-platform ML."""
+    """Test OnnxStrategy provider selection across device configurations."""
 
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_resolve_device_cuda(self, mock_cuda):
-        """Verify that CUDA is selected when available."""
-        # Arrange
-        strategy = AnomalibStrategy()
-        strategy.device = "auto"
+    @patch("onnxruntime.get_available_providers", return_value=["CUDAExecutionProvider", "CPUExecutionProvider"])
+    def test_resolve_providers_cuda(self, mock_providers):
+        """Verify CUDAExecutionProvider is chosen first when available."""
+        strategy = OnnxStrategy()
+        strategy.set_device("auto")
+        providers = strategy._resolve_providers()
+        assert providers[0] == "CUDAExecutionProvider", "Should prefer CUDA when available."
+        assert "CPUExecutionProvider" in providers, "CPU must always be present as fallback."
 
-        # Act
-        resolved = strategy._resolve_device()
+    @patch("onnxruntime.get_available_providers", return_value=["CPUExecutionProvider"])
+    def test_resolve_providers_cpu_when_no_cuda(self, mock_providers):
+        """Verify CPU-only providers when CUDA is unavailable."""
+        strategy = OnnxStrategy()
+        strategy.set_device("auto")
+        providers = strategy._resolve_providers()
+        assert providers == ["CPUExecutionProvider"], "Should use CPU only when CUDA unavailable."
 
-        # Assert
-        assert resolved == "cuda", "Should resolve to CUDA when available."
-
-    @patch("torch.cuda.is_available", return_value=False)
-    @patch("torch.backends.mps.is_available", return_value=True, create=True)
-    def test_resolve_device_mps(self, mock_mps, mock_cuda):
-        """Verify that Apple Silicon MPS is selected when available and CUDA is not."""
-        # Arrange
-        strategy = AnomalibStrategy()
-        strategy.device = "auto"
-
-        # Act
-        resolved = strategy._resolve_device()
-
-        # Assert
-        assert resolved == "mps", "Should resolve to MPS on Apple Silicon."
-
-    @patch("torch.cuda.is_available", return_value=False)
-    @patch("torch.backends.mps.is_available", return_value=False, create=True)
-    def test_resolve_device_cpu_fallback(self, mock_mps, mock_cuda):
-        """Verify CPU is the ultimate fallback."""
-        # Arrange
-        strategy = AnomalibStrategy()
-        strategy.device = "auto"
-
-        # Act
-        resolved = strategy._resolve_device()
-
-        # Assert
-        assert resolved == "cpu", "Should fallback to CPU if no accelerators exist."
+    def test_resolve_providers_mps_falls_back_to_cpu(self):
+        """Verify MPS device request is silently downgraded to CPU (no MPS provider in onnxruntime)."""
+        strategy = OnnxStrategy()
+        strategy.set_device("mps")
+        # set_device should have already normalised mps → cpu
+        assert strategy.device == "cpu", "MPS should be remapped to CPU."
+        providers = strategy._resolve_providers()
+        assert "CPUExecutionProvider" in providers
+        assert "CUDAExecutionProvider" not in providers

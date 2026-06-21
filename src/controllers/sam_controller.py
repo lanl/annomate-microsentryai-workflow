@@ -16,7 +16,7 @@ from typing import Optional, Tuple
 import numpy as np
 from PySide6.QtCore import QObject, QThread, Signal
 
-from ai_strategies.sam_strategy import SAMStrategy, weights_cached
+from ai_strategies.sam_onnx_strategy import SAMOnnxStrategy as SAMStrategy, weights_cached
 
 logger = logging.getLogger(__name__)
 
