@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve-tag.outputs.tag }}
+          ref: refs/tags/${{ needs.resolve-tag.outputs.tag }}
       - uses: conda-incubator/setup-miniconda@v3
         with:
           activate-environment: annomate-cpu
@@ -117,7 +117,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.resolve-tag.outputs.tag }}
+          ref: refs/tags/${{ needs.resolve-tag.outputs.tag }}
       - uses: conda-incubator/setup-miniconda@v3
         with:
           activate-environment: annomate-mac
