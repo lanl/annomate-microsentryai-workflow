@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release (e.g. v1.0.0). Used for the one-time bootstrap / manual re-runs."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    name: Compute next version and tag
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      skipped: ${{ steps.tag.outputs.skipped }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install commitizen
+      - name: Bump version and push tag
+        id: tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          set +e
+          cz bump --yes 2>err.log
+          STATUS=$?
+          set -e
+          # 3 = NoCommitsFoundError (no commits since last tag)
+          # 21 = NoneIncrementExit (commits exist, none are feat/fix/breaking)
+          if [ $STATUS -eq 3 ] || [ $STATUS -eq 21 ]; then
+            echo "No version-bump-worthy commits since the last tag. Skipping release."
+            cat err.log
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif [ $STATUS -ne 0 ]; then
+            echo "Unexpected commitizen failure:"
+            cat err.log
+            exit $STATUS
+          fi
+          TAG=$(git describe --tags --abbrev=0)
+          git push origin "$TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "skipped=false" >> "$GITHUB_OUTPUT"
+
+  resolve-tag:
+    name: Resolve target tag
+    runs-on: ubuntu-latest
+    needs: [bump]
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.bump.outputs.skipped == 'false')
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ needs.bump.outputs.tag }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build-windows:
+    name: Build Windows executable
+    runs-on: windows-latest
+    needs: [resolve-tag]
+    if: always() && needs.resolve-tag.result == 'success'
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: annomate-cpu
+          environment-file: environment-cpu.yml
+          auto-activate-base: false
+          use-only-tar-bz2: true
+      - name: Build with PyInstaller
+        run: |
+          conda run -n annomate-cpu pyinstaller --name "AnnoMate-CPU" --onefile --windowed \
+            --exclude-module pytest --exclude-module _pytest --exclude-module pytest_qt \
+            --exclude-module ruff --exclude-module tkinter src/main.py
+      - name: Package artifact
+        run: |
+          mkdir -p out
+          cp "dist/AnnoMate-CPU.exe" "out/AnnoMate-CPU-${{ needs.resolve-tag.outputs.tag }}-windows-x64.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnnoMate-CPU-windows-x64
+          path: out/AnnoMate-CPU-${{ needs.resolve-tag.outputs.tag }}-windows-x64.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS (arm64) app bundle
+    runs-on: macos-latest
+    needs: [resolve-tag]
+    if: always() && needs.resolve-tag.result == 'success'
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          activate-environment: annomate-mac
+          environment-file: environment-mac.yml
+          auto-activate-base: false
+          use-only-tar-bz2: true
+      - name: Build with PyInstaller
+        run: |
+          conda run -n annomate-mac pyinstaller --name "AnnoMate-CPU" --onefile --windowed \
+            --exclude-module pytest --exclude-module _pytest --exclude-module pytest_qt \
+            --exclude-module ruff --exclude-module tkinter src/main.py
+      - name: Zip .app bundle
+        run: |
+          mkdir -p out
+          ditto -c -k --keepParent "dist/AnnoMate-CPU.app" "out/AnnoMate-CPU-${{ needs.resolve-tag.outputs.tag }}-macos-arm64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AnnoMate-CPU-macos-arm64
+          path: out/AnnoMate-CPU-${{ needs.resolve-tag.outputs.tag }}-macos-arm64.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [resolve-tag, build-windows, build-macos]
+    if: always() && needs.build-windows.result == 'success' && needs.build-macos.result == 'success'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.resolve-tag.outputs.tag }}"
+          gh release create "$TAG" \
+            artifacts/AnnoMate-CPU-windows-x64/* \
+            artifacts/AnnoMate-CPU-macos-arm64/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --generate-notes \
+            --make-latest true
