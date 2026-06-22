@@ -22,6 +22,7 @@ This guide is written for someone who has completed a college-level Python cours
 14. [Running the Tests](#14-running-the-tests)
 15. [How to Add a New Feature](#15-how-to-add-a-new-feature)
 16. [Common Pitfalls and Rules to Remember](#16-common-pitfalls-and-rules-to-remember)
+17. [Contributing to the Repository](#17-contributing-to-the-repository)
 
 ---
 
@@ -993,3 +994,137 @@ The `ImageLabel` canvas displays images at a zoom factor. When the user clicks o
 Qt is single-threaded for all UI operations. If you try to update a label from a `QThread.run()` method, you will get crashes or undefined behavior.
 
 The correct pattern is: the background thread emits a signal, and the signal handler (which runs on the main thread) updates the GUI. This is exactly how `InferenceWorker` and `SAMWorker` are designed — they emit signals, and `AnnoMateWindow` or the controllers have the connected slots that do the actual widget updates.
+
+---
+
+## 17. Contributing to the Repository
+
+### Branching Workflow
+
+This repository uses a **main** and **staging** branch model protected by automated CI/CD pipelines:
+
+- **`main`** — production-ready code. Every push triggers automatic linting and, if the commit history warrants it, a new versioned release.
+- **`staging`** — integration branch. Changes are tested here before being promoted to `main`.
+
+Contributors should never push directly to `main` or `staging` on the central repository. Instead, follow this workflow:
+
+1. **Fork** the repository to your own GitHub account using the **Fork** button on the repository page.
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/<your-username>/annomate-microsentryai-workflow.git
+   cd annomate-microsentryai-workflow
+   ```
+3. Add the central repository as an upstream remote so you can keep your fork up to date:
+   ```bash
+   git remote add upstream https://github.com/<org>/annomate-microsentryai-workflow.git
+   ```
+4. Create a feature branch off your fork's `staging` branch:
+   ```bash
+   git checkout staging
+   git pull upstream staging
+   git checkout -b feat/my-new-feature
+   ```
+5. Make your changes on the feature branch, committing with conventional commit messages (see below).
+6. Push the branch to your fork and open a **Pull Request** from your fork's feature branch to the **central repository's `staging` branch** — not `main`.
+7. Once the PR passes automated tests and lint checks, a maintainer will review and merge it into `staging`.
+8. After enough features and fixes accumulate on `staging`, a maintainer will open a PR from `staging` → `main`, which triggers an automated release.
+
+### Conventional Commits
+
+This project uses the **Conventional Commits** specification for all commit messages. The format is:
+
+```
+<type>(<optional scope>): <short description>
+```
+
+The commit type determines how the version number is bumped automatically when code is merged into `main`:
+
+| Type | When to use | Version impact |
+|---|---|---|
+| `fix` | A bug fix | Patch bump (`1.0.0` → `1.0.1`) |
+| `feat` | A new feature | Minor bump (`1.0.0` → `1.1.0`) |
+| `feat!` or `BREAKING CHANGE` footer | A change that breaks backward compatibility | Major bump (`1.0.0` → `2.0.0`) |
+| `chore` | Maintenance — deps, tooling, config | No release |
+| `docs` | Documentation only | No release |
+| `style` | Code formatting, no logic change | No release |
+| `refactor` | Code restructure, no behavior change | No release |
+| `test` | Adding or updating tests | No release |
+
+**Examples:**
+```
+fix: prevent crash when loading an empty image folder
+feat: add CSV export for annotation summary
+feat!: remove legacy JSON import format
+chore: update conda environment dependencies
+docs: add SAM2 setup instructions to developer guide
+test: add unit tests for polygon geometry helpers
+```
+
+For a breaking change you can use either the `!` shorthand or a `BREAKING CHANGE:` footer in the commit body:
+```
+feat: redesign project file format
+
+BREAKING CHANGE: .annoproj files from v0.x are not compatible with v1.x
+```
+
+### Setting Up Commitizen
+
+Commitizen is a command-line tool that guides you through writing conventional commit messages interactively, so you never have to remember the format. Install it into your active conda environment:
+
+```bash
+pip install commitizen
+```
+
+Verify the installation:
+```bash
+cz --version
+```
+
+The `cz.toml` file at the root of the repository already configures commitizen for this project — no additional setup is needed beyond the install.
+
+### Using Commitizen
+
+Instead of running `git commit`, use the `cz commit` command (or the shorthand `cz c`):
+
+```bash
+# Stage your changes as normal:
+git add src/controllers/io_controller.py
+
+# Then use commitizen instead of git commit:
+cz commit
+# or the shorthand:
+cz c
+```
+
+Commitizen walks you through a series of prompts:
+
+```
+? Select the type of change you are committing:
+❯ fix      - A bug fix
+  feat     - A new feature
+  chore    - Changes that don't modify src or test files
+  docs     - Documentation only changes
+  style    - Code style (formatting, missing semi-colons, etc)
+  refactor - A code change that neither fixes a bug nor adds a feature
+  test     - Adding or correcting tests
+
+? What is the scope of this change? (press enter to skip):
+  io_controller
+
+? Write a short, imperative description of the change:
+  prevent crash when loading an empty image folder
+
+? Is this a breaking change? (y/N): n
+```
+
+It constructs and commits the message for you: `fix(io_controller): prevent crash when loading an empty image folder`.
+
+### Previewing the Version Impact of Your Commits
+
+Before opening a PR, you can preview whether your commits would trigger a version bump when they reach `main`:
+
+```bash
+cz bump --dry-run
+```
+
+This shows what the next version would be without creating a tag or making any changes. If the output says no commits were found that warrant a bump, that is expected for `docs:`, `chore:`, `test:`, and `style:` commits — they are intentionally excluded from releases.
