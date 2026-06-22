@@ -1,4 +1,4 @@
-name: Auto-fix lint
+name: Auto-Lint
 
 on:
   push:
