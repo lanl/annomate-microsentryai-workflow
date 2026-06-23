@@ -4,12 +4,13 @@ MicrosentrySection — unified Microsentry controls panel for the AnnoMate right
 Layout (when model loaded):
   Load Model button
   Model name label
-  [Heatmap] toggle  +  Transparency slider
-  [Segmentation] toggle  +  Threshold slider
+  [Heatmap] toggle  +  opacity slider
+  [Segmentation] toggle  +  sensitivity slider
   [Accept AI Polygons] button
   ▸ Advanced Settings (collapsible)
-      Simplify Tolerance slider
-      Heatmap Minimum slider
+      Mask smoothness slider
+      Boundary simplification slider
+      Heatmap floor slider
 """
 
 import os
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QToolButton,
 )
@@ -112,7 +114,7 @@ class MicrosentrySection(QWidget):
 
         lw.addSpacing(4)
 
-        # Heatmap toggle + transparency slider inline
+        # Heatmap toggle + opacity slider inline
         self._btn_heatmap = QToolButton()
         self._btn_heatmap.setText("Heatmap")
         self._btn_heatmap.setCheckable(True)
@@ -124,6 +126,9 @@ class MicrosentrySection(QWidget):
         self._alpha = QSlider(Qt.Horizontal)
         self._alpha.setRange(0, 100)
         self._alpha.setValue(45)
+        self._alpha.setToolTip(
+            "Controls how visible the heatmap overlay is on top of the image."
+        )
         self._alpha.valueChanged.connect(
             lambda v: (self._alpha_val.setText(f"{v}%"), self._debounce.start())
         )
@@ -135,7 +140,7 @@ class MicrosentrySection(QWidget):
         heatmap_row.addWidget(self._alpha_val)
         lw.addLayout(heatmap_row)
 
-        # Segmentation toggle + threshold slider inline
+        # Segmentation toggle + sensitivity slider inline
         self._btn_seg = QToolButton()
         self._btn_seg.setText("Segmentation")
         self._btn_seg.setCheckable(True)
@@ -147,6 +152,10 @@ class MicrosentrySection(QWidget):
         self._thresh = QSlider(Qt.Horizontal)
         self._thresh.setRange(0, 1000)
         self._thresh.setValue(950)
+        self._thresh.setToolTip(
+            "Controls the percentile cutoff used to generate anomaly masks; "
+            "higher values keep only stronger anomaly regions."
+        )
         self._thresh.valueChanged.connect(
             lambda v: (
                 self._thresh_val.setText(f"{v / 10:.1f}"),
@@ -192,10 +201,11 @@ class MicrosentrySection(QWidget):
         )
         self._btn_advanced.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self._btn_advanced.setSizePolicy(
-            self._btn_advanced.sizePolicy().horizontalPolicy(),
+            QSizePolicy.Fixed,
             self._btn_advanced.sizePolicy().verticalPolicy(),
         )
         self._btn_advanced.toggled.connect(self._on_advanced_toggled)
+
         lw.addWidget(self._btn_advanced)
 
         self._advanced_widget = QWidget()
@@ -203,17 +213,34 @@ class MicrosentrySection(QWidget):
         aw.setContentsMargins(8, 0, 0, 0)
         aw.setSpacing(4)
 
+        self._sigma_val = QLabel("4")
+        self._sigma_val.setStyleSheet("font-size: 11px;")
+        self._sigma_val.setFixedWidth(30)
+        self._sigma = QSlider(Qt.Horizontal)
+        self._sigma.setRange(0, 16)
+        self._sigma.setValue(4)
+        self._sigma.setToolTip(
+            "Controls how much Gaussian smoothing is applied before mask generation."
+        )
+        self._sigma.valueChanged.connect(
+            lambda v: (self._sigma_val.setText(str(v)), self._debounce.start())
+        )
+        aw.addWidget(_slider_row("Mask smoothness", self._sigma_val, self._sigma))
+
         self._epsilon_val = QLabel("12")
         self._epsilon_val.setStyleSheet("font-size: 11px;")
         self._epsilon_val.setFixedWidth(30)
         self._epsilon = QSlider(Qt.Horizontal)
         self._epsilon.setRange(0, 20)
         self._epsilon.setValue(12)
+        self._epsilon.setToolTip(
+            "Controls polygon simplification; higher values create simpler boundaries."
+        )
         self._epsilon.valueChanged.connect(
             lambda v: (self._epsilon_val.setText(str(v)), self._debounce.start())
         )
         aw.addWidget(
-            _slider_row("Simplify Tolerance", self._epsilon_val, self._epsilon)
+            _slider_row("Boundary simplification", self._epsilon_val, self._epsilon)
         )
 
         self._heat_min_val = QLabel("0%")
@@ -222,10 +249,13 @@ class MicrosentrySection(QWidget):
         self._heat_min = QSlider(Qt.Horizontal)
         self._heat_min.setRange(0, 100)
         self._heat_min.setValue(0)
+        self._heat_min.setToolTip(
+            "Hides lower-intensity heatmap values below this percentile."
+        )
         self._heat_min.valueChanged.connect(
             lambda v: (self._heat_min_val.setText(f"{v}%"), self._debounce.start())
         )
-        aw.addWidget(_slider_row("Heatmap Minimum", self._heat_min_val, self._heat_min))
+        aw.addWidget(_slider_row("Heatmap floor", self._heat_min_val, self._heat_min))
 
         self._advanced_widget.setVisible(False)
         lw.addWidget(self._advanced_widget)
@@ -244,6 +274,13 @@ class MicrosentrySection(QWidget):
     def _on_advanced_toggled(self, checked: bool) -> None:
         self._advanced_widget.setVisible(checked)
         self._btn_advanced.setText(f"{'▾' if checked else '▸'}  Advanced Settings")
+
+    def _refresh_value_labels(self) -> None:
+        self._alpha_val.setText(f"{self._alpha.value()}%")
+        self._thresh_val.setText(f"{self._thresh.value() / 10:.1f}")
+        self._sigma_val.setText(str(self._sigma.value()))
+        self._epsilon_val.setText(str(self._epsilon.value()))
+        self._heat_min_val.setText(f"{self._heat_min.value()}%")
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -274,6 +311,7 @@ class MicrosentrySection(QWidget):
             "seg_enabled": self._btn_seg.isChecked(),
             "seg_pct": self._thresh.value() / 10.0,
             "alpha": self._alpha.value() / 100.0,
+            "sigma": self._sigma.value(),
             "epsilon": self._epsilon.value(),
             "heat_min": self._heat_min.value(),
         }

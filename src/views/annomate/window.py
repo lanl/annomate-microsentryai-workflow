@@ -7,6 +7,7 @@ Color scheme: no explicit stylesheet colors — Qt platform palette only.
 import logging
 import os
 
+import cv2
 import numpy as np
 from PySide6.QtCore import Qt, QEvent, QPoint, QPointF, QTimer, Signal
 from PySide6.QtGui import QColor
@@ -1274,7 +1275,10 @@ class AnnoMateWindow(QWidget):
         has_results = self.inference_model.is_processed(path)
 
         ms_active = self._microsentry_enabled and (
-            (self.inference_controller is not None and self.inference_controller.has_model())
+            (
+                self.inference_controller is not None
+                and self.inference_controller.has_model()
+            )
             or has_results
         )
 
@@ -1291,6 +1295,10 @@ class AnnoMateWindow(QWidget):
         ms = self.right_panel.get_microsentry_settings()
         score_map = self.inference_model.get_score_map(path)
         s = score_map.astype(np.float32)
+        sigma = ms["sigma"]
+        if sigma > 0:
+            kernel_size = int(sigma * 6 + 1) | 1
+            s = cv2.GaussianBlur(s, (kernel_size, kernel_size), sigma)
 
         # Heatmap layer — drawn as a semi-transparent QPixmap over the original
         if ms["heatmap_enabled"]:
