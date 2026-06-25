@@ -27,7 +27,13 @@ from models.navigator_model import (
     STATUS_OMIT_ROLE,
 )
 
-from ._shared import _COLOR_IN_REVIEW, _COLOR_OMITTED, _COLOR_REVIEWED, _dot, _omit_badge
+from ._shared import (
+    _COLOR_IN_REVIEW,
+    _COLOR_OMITTED,
+    _COLOR_REVIEWED,
+    _dot,
+    _omit_badge,
+)
 
 
 _STATUS_COL_W = 34

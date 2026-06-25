@@ -327,11 +327,15 @@ class ViewportActionsBar(QFrame):
         self._anomaly_enable_chk.toggled.connect(self._on_anomaly_enable_toggled)
         self._anomaly_area_chk.toggled.connect(self._on_anomaly_area_check_toggled)
         self._anomaly_area_spin.valueChanged.connect(self._on_anomaly_area_changed)
-        self._anomaly_area_color_btn.clicked.connect(self._on_anomaly_area_color_clicked)
+        self._anomaly_area_color_btn.clicked.connect(
+            self._on_anomaly_area_color_clicked
+        )
         self._anomaly_dist_chk.toggled.connect(self._on_anomaly_dist_check_toggled)
         self._anomaly_dist_spin.valueChanged.connect(self._on_anomaly_dist_changed)
         self._anomaly_centroid_radio.toggled.connect(self._on_anomaly_method_changed)
-        self._anomaly_dist_color_btn.clicked.connect(self._on_anomaly_dist_color_clicked)
+        self._anomaly_dist_color_btn.clicked.connect(
+            self._on_anomaly_dist_color_clicked
+        )
 
         action.setDefaultWidget(panel)
         menu.addAction(action)
@@ -368,7 +372,9 @@ class ViewportActionsBar(QFrame):
         r, g, b = self._anomaly_model.area_color()
         color = QColorDialog.getColor(QColor(r, g, b), self, "Area Violation Color")
         if color.isValid():
-            self._anomaly_model.set_area_color((color.red(), color.green(), color.blue()))
+            self._anomaly_model.set_area_color(
+                (color.red(), color.green(), color.blue())
+            )
 
     def _on_anomaly_dist_color_clicked(self) -> None:
         if self._anomaly_model is None:
@@ -444,7 +450,9 @@ class ViewportActionsBar(QFrame):
         self._ratio_val_num_spin.setRange(0.0, 999999.0)
         self._ratio_val_num_spin.setDecimals(2)
         self._ratio_val_num_spin.setSingleStep(0.1)
-        self._ratio_val_num_spin.setToolTip("Real-world value for the right side of the ratio")
+        self._ratio_val_num_spin.setToolTip(
+            "Real-world value for the right side of the ratio"
+        )
         ratio_row.addWidget(self._ratio_val_num_spin)
         self._ratio_unit_combo = QComboBox()
         for _u in ("mm", "um", "nm", "pm", "fm", "cm", "dm", "m", "km"):
@@ -758,9 +766,7 @@ class ViewportActionsBar(QFrame):
             t = self._anomaly_model.area_threshold()
             unit = self._anomaly_area_unit_lbl.text()
             label = "defect" if area_count == 1 else "defects"
-            self._anomaly_area_count_lbl.setText(
-                f"{area_count} {label} > {t:g}{unit}"
-            )
+            self._anomaly_area_count_lbl.setText(f"{area_count} {label} > {t:g}{unit}")
         else:
             self._anomaly_area_count_lbl.setText("")
 
@@ -828,7 +834,9 @@ class ViewportActionsBar(QFrame):
         world_val = self._ratio_val_num_spin.value()
         unit = self._ratio_unit_combo.currentText()
         if world_val <= 0:
-            QMessageBox.warning(self, "Invalid Ratio", "World value must be greater than zero.")
+            QMessageBox.warning(
+                self, "Invalid Ratio", "World value must be greater than zero."
+            )
             return
         self._model.apply_scale_direct(px_count, world_val, unit)
 
@@ -990,7 +998,9 @@ class ViewportActionsBar(QFrame):
             self._crop_color_btn.setStyleSheet(
                 f"background-color: rgb({r},{g},{b}); border: 1px solid #888;"
             )
-            self._crop_color_btn.setToolTip(f"Border color: rgb({r},{g},{b}) — click to change")
+            self._crop_color_btn.setToolTip(
+                f"Border color: rgb({r},{g},{b}) — click to change"
+            )
 
     def _on_reset_crop_clicked(self) -> None:
         if self._refreshing:

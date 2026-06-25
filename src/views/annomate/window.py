@@ -433,7 +433,9 @@ class AnnoMateWindow(QWidget):
         self._center_template_controller = center_template_controller
         self._project_controller = project_controller
         self._anomaly_model = anomaly_constraint_model or AnomalyConstraintModel()
-        self._anomaly_controller = AnomalyConstraintController(self._anomaly_model, parent=self)
+        self._anomaly_controller = AnomalyConstraintController(
+            self._anomaly_model, parent=self
+        )
         self._prev_distance_method: str = self._anomaly_model.distance_method()
         self._current_row: int = -1
         self._active_class: str = ""
@@ -1018,7 +1020,9 @@ class AnnoMateWindow(QWidget):
     def _on_anomaly_violations_updated(
         self, area_violations: set, distance_pairs: set, dist_values: dict
     ) -> None:
-        self.canvas.set_violation_highlights(area_violations, distance_pairs, dist_values)
+        self.canvas.set_violation_highlights(
+            area_violations, distance_pairs, dist_values
+        )
         self.viewport_actions.refresh_anomaly_violations(
             len(area_violations), len(distance_pairs)
         )
@@ -1274,7 +1278,10 @@ class AnnoMateWindow(QWidget):
         has_results = self.inference_model.is_processed(path)
 
         ms_active = self._microsentry_enabled and (
-            (self.inference_controller is not None and self.inference_controller.has_model())
+            (
+                self.inference_controller is not None
+                and self.inference_controller.has_model()
+            )
             or has_results
         )
 

@@ -2,7 +2,6 @@
 
 All tests are pure Python — no QApplication required.
 """
-import math
 
 import pytest
 
@@ -225,9 +224,7 @@ class TestCheckDistanceViolations:
         """
         anns = [_centroid_ann(0.0, 0.0), _centroid_ann(10.0, 0.0)]
         cache: dict = {}
-        assert (
-            check_distance_violations(anns, 0.5, 0.1, "centroid", cache) == set()
-        )
+        assert check_distance_violations(anns, 0.5, 0.1, "centroid", cache) == set()
         cache.clear()
         result = check_distance_violations(anns, 2.0, 0.1, "centroid", cache)
         assert frozenset({0, 1}) in result

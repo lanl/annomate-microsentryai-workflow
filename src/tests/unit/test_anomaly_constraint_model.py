@@ -2,11 +2,10 @@
 
 Requires a QApplication (pytest-qt qtbot fixture).
 """
+
 import pytest
-from PySide6.QtCore import QObject
 
 from models.anomaly_constraint_model import AnomalyConstraintModel
-from core.states.anomaly_constraint_state import AnomalyConstraintState
 
 
 @pytest.fixture

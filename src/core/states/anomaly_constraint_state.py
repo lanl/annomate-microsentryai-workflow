@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 _DEFAULT_AREA_COLOR = (255, 165, 0)

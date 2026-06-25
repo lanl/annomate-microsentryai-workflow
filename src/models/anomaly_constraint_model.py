@@ -12,7 +12,9 @@ class AnomalyConstraintModel(QObject):
 
     constraints_changed = Signal()
 
-    def __init__(self, state: AnomalyConstraintState | None = None, parent=None) -> None:
+    def __init__(
+        self, state: AnomalyConstraintState | None = None, parent=None
+    ) -> None:
         super().__init__(parent)
         self._state = state if state is not None else AnomalyConstraintState()
 

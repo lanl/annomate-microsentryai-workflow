@@ -215,4 +215,3 @@ class TestIsReviewed:
         """
         state.set_inspector("img.jpg", "Alice")
         assert not state.is_reviewed("img.jpg")
-

@@ -1,6 +1,9 @@
 from PySide6.QtCore import QObject, Signal
 
-from core.logic.anomaly_constraints import check_area_violations, check_distance_violations
+from core.logic.anomaly_constraints import (
+    check_area_violations,
+    check_distance_violations,
+)
 from models.anomaly_constraint_model import AnomalyConstraintModel
 
 
@@ -48,7 +51,10 @@ class AnomalyConstraintController(QObject):
                 scale,
             )
 
-        if self._model.distance_check_enabled() and self._model.distance_threshold() > 0.0:
+        if (
+            self._model.distance_check_enabled()
+            and self._model.distance_threshold() > 0.0
+        ):
             distance_pairs = check_distance_violations(
                 annotations,
                 self._model.distance_threshold(),

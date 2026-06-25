@@ -561,12 +561,15 @@ class ProjectIO:
             adata = project_data.get("anomaly_constraints", {})
             if adata:
                 from core.states.anomaly_constraint_state import AnomalyConstraintState
+
                 loaded = AnomalyConstraintState.from_dict(adata)
                 anomaly_constraint_state.enabled = loaded.enabled
                 anomaly_constraint_state.area_check_enabled = loaded.area_check_enabled
                 anomaly_constraint_state.area_threshold = loaded.area_threshold
                 anomaly_constraint_state.area_color = loaded.area_color
-                anomaly_constraint_state.distance_check_enabled = loaded.distance_check_enabled
+                anomaly_constraint_state.distance_check_enabled = (
+                    loaded.distance_check_enabled
+                )
                 anomaly_constraint_state.distance_threshold = loaded.distance_threshold
                 anomaly_constraint_state.distance_method = loaded.distance_method
                 anomaly_constraint_state.distance_color = loaded.distance_color

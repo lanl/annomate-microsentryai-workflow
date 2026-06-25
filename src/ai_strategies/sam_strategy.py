@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 if getattr(sys, "frozen", False):
     _SAM_WEIGHTS_DIR = pathlib.Path(sys.executable).parent / "sam_weights"
 else:
-    _SAM_WEIGHTS_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / "sam_weights"
+    _SAM_WEIGHTS_DIR = (
+        pathlib.Path(__file__).resolve().parent.parent.parent / "sam_weights"
+    )
 
 VARIANTS: List[str] = [
     "sam2_t.pt",

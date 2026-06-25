@@ -456,8 +456,16 @@ class ImageLabel(QLabel):
         if self._orig_image_bgr is None:
             return
         img_h, img_w = self._orig_image_bgr.shape[:2]
-        cx = (self._center_crop_center_x if self._center_crop_center_x is not None else img_w / 2.0) + dx
-        cy = (self._center_crop_center_y if self._center_crop_center_y is not None else img_h / 2.0) + dy
+        cx = (
+            self._center_crop_center_x
+            if self._center_crop_center_x is not None
+            else img_w / 2.0
+        ) + dx
+        cy = (
+            self._center_crop_center_y
+            if self._center_crop_center_y is not None
+            else img_h / 2.0
+        ) + dy
         self._center_crop_center_x = max(0.0, min(cx, float(img_w)))
         self._center_crop_center_y = max(0.0, min(cy, float(img_h)))
         self.update()
@@ -1586,8 +1594,16 @@ class ImageLabel(QLabel):
         if self._center_crop_shape == "circle":
             d = min(crop_w, crop_h)
             crop_w = crop_h = d
-        cx = self._center_crop_center_x if self._center_crop_center_x is not None else img_w / 2.0
-        cy = self._center_crop_center_y if self._center_crop_center_y is not None else img_h / 2.0
+        cx = (
+            self._center_crop_center_x
+            if self._center_crop_center_x is not None
+            else img_w / 2.0
+        )
+        cy = (
+            self._center_crop_center_y
+            if self._center_crop_center_y is not None
+            else img_h / 2.0
+        )
         x1 = max(0, int(cx - crop_w / 2))
         y1 = max(0, int(cy - crop_h / 2))
         x2 = min(img_w, int(cx + crop_w / 2))
@@ -1685,7 +1701,9 @@ class ImageLabel(QLabel):
             is_center_line = abs(i - center_index) < 0.001
             alpha = 150 if is_center_line else 85
             width = (1.25 if is_center_line else 0.75) / self._zoom
-            c = QColor(border_color.red(), border_color.green(), border_color.blue(), alpha)
+            c = QColor(
+                border_color.red(), border_color.green(), border_color.blue(), alpha
+            )
             pen = QPen(c, width, Qt.SolidLine)
             painter.setPen(pen)
 

@@ -106,7 +106,9 @@ class TestStatusColumn:
         model.set_review_decision(0, "reject")
         assert model.data(model.index(0, 1)) == "Pending"
 
-    def test_status_reverts_to_pending_after_last_annotation_deleted_on_reject(self, model):
+    def test_status_reverts_to_pending_after_last_annotation_deleted_on_reject(
+        self, model
+    ):
         """Verify that deleting the last annotation on a rejected image reverts status to 'Pending'.
 
         When a rejected image loses all its annotations, it no longer meets the reviewed

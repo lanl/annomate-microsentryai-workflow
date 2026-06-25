@@ -17,7 +17,5 @@ def _omit_badge() -> QLabel:
     lbl = QLabel("!")
     lbl.setFixedSize(10, 10)
     lbl.setAlignment(Qt.AlignCenter)
-    lbl.setStyleSheet(
-        f"color: {_COLOR_OMITTED}; font-size: 10px; font-weight: bold;"
-    )
+    lbl.setStyleSheet(f"color: {_COLOR_OMITTED}; font-size: 10px; font-weight: bold;")
     return lbl

@@ -3,6 +3,7 @@
 Tests verify widget construction, public refresh methods, and that panel
 interactions update the AnomalyConstraintModel.
 """
+
 import numpy as np
 import pytest
 
