@@ -79,7 +79,6 @@ class RightPanel(QWidget):
 
         nav_sec = _CollapsibleSection("Dataset Navigator", expandable=True)
         self.navigator = DataNavigatorSection(dataset_model, inference_model)
-        self.navigator.set_microsentry_mode(True)
         self.navigator.image_selected.connect(self.image_selected)
         self.navigator.prev_requested.connect(self.prev_requested)
         self.navigator.next_requested.connect(self.next_requested)
@@ -175,6 +174,9 @@ class RightPanel(QWidget):
     def set_model_loaded(self, name: str, path: str = "") -> None:
         self._ms_section.set_model_loaded(name, path)
 
+    def set_scoremaps_loaded(self) -> None:
+        self._ms_section.set_scoremaps_loaded()
+
     def set_no_model(self) -> None:
         self._ms_section.set_no_model()
 
@@ -186,3 +188,6 @@ class RightPanel(QWidget):
 
     def navigator_set_microsentry_mode(self, enabled: bool) -> None:
         self.navigator.set_microsentry_mode(enabled)
+
+    def navigator_enable_inference_columns(self) -> None:
+        self.navigator.enable_inference_columns()

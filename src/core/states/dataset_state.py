@@ -34,8 +34,9 @@ class DatasetState:
         self.annotations = {}  # { "img.jpg": [ { "category_name": str, "polygon": [...] } ] }
         self.inspectors = {}  # { "img.jpg": "John Doe" }
         self.notes = {}  # { "img.jpg": "Needs review" }
-        self.review_decisions = {}  # { "img.jpg": "accept" | "reject" }
+        self.review_decisions = {}  # { "img.jpg": "accept" | "reject" | "omitted" }
         self.decision_timestamps = {}  # { "img.jpg": ISO-8601 UTC string }
+        self.omit_reasons = {}  # { "img.jpg": "no_decision" | "no_annotation" }
         self.image_sizes = {}  # { "img.jpg": (width, height) } — cached to avoid PIL reads on save
 
         # Class registry — initialized from defaults, NOT cleared on folder load
@@ -52,6 +53,7 @@ class DatasetState:
         self.notes.clear()
         self.review_decisions.clear()
         self.decision_timestamps.clear()
+        self.omit_reasons.clear()
         self.image_sizes.clear()
 
     def reset_classes(self) -> None:
@@ -61,19 +63,23 @@ class DatasetState:
         self.class_visibility = {name: True for name in self.class_names}
 
     def is_reviewed(self, img_name: str) -> bool:
-        """Return whether an image has at least one annotation or metadata entry.
+        """Return whether an image has been fully reviewed.
+
+        Accept decisions are reviewed unconditionally. Reject decisions require
+        at least one annotation to be considered reviewed.
 
         Args:
             img_name (str): Image filename to check.
 
         Returns:
-            bool: ``True`` if the image has any annotation, inspector
-                assignment, or note; ``False`` otherwise.
+            bool: ``True`` if the image is reviewed; ``False`` otherwise.
         """
-        has_anno = bool(self.annotations.get(img_name))
-        has_note = bool(self.notes.get(img_name))
-        has_decision = img_name in self.review_decisions
-        return has_anno or has_note or has_decision
+        decision = self.review_decisions.get(img_name)
+        if decision == "accept":
+            return True
+        if decision == "reject":
+            return bool(self.annotations.get(img_name))
+        return False
 
     # --- Annotation CRUD ---
 
@@ -216,22 +222,36 @@ class DatasetState:
         """
         self.notes[image_name] = value
 
-    def set_review_decision(self, image_name: str, decision) -> None:
+    def set_review_decision(
+        self, image_name: str, decision, omit_reason: str | None = None
+    ) -> None:
         """Set the image-level review decision.
 
         Args:
             image_name (str): Target image filename.
-            decision (str | None): ``"accept"``, ``"reject"``, or ``None`` to clear.
+            decision (str | None): ``"accept"``, ``"reject"``, ``"omitted"``, or
+                ``None`` to clear.
+            omit_reason (str | None): Reason key stored when decision is
+                ``"omitted"`` (``"no_decision"`` or ``"no_annotation"``).
         """
         if decision is None:
             self.review_decisions.pop(image_name, None)
             self.decision_timestamps.pop(image_name, None)
+            self.omit_reasons.pop(image_name, None)
         else:
             self.review_decisions[image_name] = decision
             self.decision_timestamps[image_name] = datetime.now(
                 timezone.utc
             ).isoformat()
+            if decision == "omitted" and omit_reason:
+                self.omit_reasons[image_name] = omit_reason
+            elif decision in ("accept", "reject"):
+                self.omit_reasons.pop(image_name, None)
 
     def get_review_decision(self, image_name: str):
         """Return the image-level review decision, or None if not set."""
         return self.review_decisions.get(image_name)
+
+    def get_omit_reason(self, image_name: str) -> str | None:
+        """Return the omit reason key for *image_name*, or None if not omitted."""
+        return self.omit_reasons.get(image_name)

@@ -15,7 +15,7 @@ class CalibrationState:
         self.real_distance: float = 1.0  # known real-world distance
 
         # Grid appearance
-        self.grid_visible: bool = True
+        self.grid_visible: bool = False
         self.grid_color: tuple = (58, 90, 122)  # (r, g, b)
         self.grid_opacity: float = 0.5  # 0.0–1.0
         self.grid_spacing_world: float = 100.0  # current units per grid step
@@ -40,7 +40,7 @@ class CalibrationState:
         self.calib_p1 = None
         self.calib_p2 = None
         self.real_distance = 1.0
-        self.grid_visible = True
+        self.grid_visible = False
         if self.grid_spacing_auto:
             self.grid_spacing_world = 100.0
         self.meas_p1 = None

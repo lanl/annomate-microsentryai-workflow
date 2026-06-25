@@ -256,6 +256,12 @@ class MicrosentrySection(QWidget):
         self._lbl_no_model.setVisible(False)
         self._loaded_widget.setVisible(True)
 
+    def set_scoremaps_loaded(self) -> None:
+        self._lbl_model_file.setText("Scoremaps loaded")
+        self._lbl_model_backend.setText("no model")
+        self._lbl_no_model.setVisible(False)
+        self._loaded_widget.setVisible(True)
+
     def set_no_model(self) -> None:
         self._lbl_model_file.setText("")
         self._lbl_model_backend.setText("")

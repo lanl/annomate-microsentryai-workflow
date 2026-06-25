@@ -142,7 +142,7 @@ class ToolPalette(QFrame):
         # SAM options popup
         # ------------------------------------------------------------------ #
         btn_sam_opts = QToolButton()
-        btn_sam_opts.setText("⚙")
+        btn_sam_opts.setText("⚙︎")
         btn_sam_opts.setToolTip("SAM Options")
         btn_sam_opts.setFixedSize(_BTN_W, _BTN_H)
         btn_sam_opts.setFont(font)

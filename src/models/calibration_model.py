@@ -216,9 +216,7 @@ class CalibrationModel(QObject):
         p2 = data.get("calib_p2")
         s.calib_p2 = tuple(p2) if p2 and not using_default_pixel_scale else None
         s.real_distance = data.get("real_distance", 1.0)
-        s.grid_visible = (
-            True if using_default_pixel_scale else data.get("grid_visible", True)
-        )
+        s.grid_visible = data.get("grid_visible", False)
         color = data.get("grid_color", [58, 90, 122])
         s.grid_color = tuple(color)
         s.grid_opacity = data.get("grid_opacity", 0.5)

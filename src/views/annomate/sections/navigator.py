@@ -1,4 +1,4 @@
-from PySide6.QtCore import QItemSelectionModel, Qt, Signal
+from PySide6.QtCore import QItemSelectionModel, QRect, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -24,9 +24,16 @@ from models.navigator_model import (
     NavigatorTableModel,
     SOURCE_ROW_ROLE,
     STATUS_COLOR_ROLE,
+    STATUS_OMIT_ROLE,
 )
 
-from ._shared import _COLOR_IN_REVIEW, _COLOR_REVIEWED, _dot
+from ._shared import (
+    _COLOR_IN_REVIEW,
+    _COLOR_OMITTED,
+    _COLOR_REVIEWED,
+    _dot,
+    _omit_badge,
+)
 
 
 _STATUS_COL_W = 34
@@ -42,6 +49,7 @@ _OPTIONAL_COLUMNS = (
     (NavigatorColumns.SCORE, "Score"),
     (NavigatorColumns.CLASS, "Class"),
 )
+_INFERENCE_COLUMNS = {NavigatorColumns.SCORE, NavigatorColumns.CLASS}
 
 
 class _StatusDotDelegate(QStyledItemDelegate):
@@ -64,9 +72,17 @@ class _StatusDotDelegate(QStyledItemDelegate):
         y = rect.y() + (rect.height() - _DOT_W) // 2
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(color))
-        painter.drawEllipse(x, y, _DOT_W, _DOT_W)
+        if index.data(STATUS_OMIT_ROLE):
+            painter.setPen(QColor(_COLOR_OMITTED))
+            f = painter.font()
+            f.setPixelSize(_DOT_W + 2)
+            f.setBold(True)
+            painter.setFont(f)
+            painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "!")
+        else:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(color))
+            painter.drawEllipse(x, y, _DOT_W, _DOT_W)
         painter.restore()
 
 
@@ -110,13 +126,13 @@ class DataNavigatorSection(QWidget):
         nav_h.setSpacing(4)
 
         self._btn_prev = QToolButton()
-        self._btn_prev.setText("‹ Prev")
+        self._btn_prev.setText("<(A) Prev")
         self._btn_prev.setToolTip("Previous image")
         self._btn_prev.clicked.connect(self.prev_requested)
         nav_h.addWidget(self._btn_prev)
 
         self._btn_next = QToolButton()
-        self._btn_next.setText("Next ›")
+        self._btn_next.setText("Next (D)>")
         self._btn_next.setToolTip("Next image")
         self._btn_next.clicked.connect(self.next_requested)
         nav_h.addWidget(self._btn_next)
@@ -129,6 +145,9 @@ class DataNavigatorSection(QWidget):
         nav_h.addSpacing(4)
         nav_h.addWidget(_dot(_COLOR_REVIEWED))
         nav_h.addWidget(QLabel("Reviewed"))
+        nav_h.addSpacing(4)
+        nav_h.addWidget(_omit_badge())
+        nav_h.addWidget(QLabel("Omitted"))
         nav_h.addSpacing(4)
 
         self._btn_columns = QToolButton()
@@ -345,6 +364,15 @@ class DataNavigatorSection(QWidget):
         self._table_model.refresh_inference()
         if self._selected_row >= 0:
             self.select_row(self._selected_row)
+
+    def enable_inference_columns(self) -> None:
+        """Reveal Score and Class columns; called once inference data is available."""
+        self._microsentry_mode = True
+        for col in _INFERENCE_COLUMNS:
+            action = self._column_actions.get(col)
+            if action and not action.isChecked():
+                action.setChecked(True)
+        self._sync_visible_columns()
 
     def adjacent_source_row(self, current_source_row: int, step: int) -> int:
         """Return the source row adjacent in the current visible sort order."""

@@ -46,6 +46,7 @@ class AppWindow(QMainWindow):
         calibration_model=None,
         center_template_model=None,
         center_template_controller=None,
+        anomaly_constraint_model=None,
     ) -> None:
         super().__init__()
         self.setWindowTitle(_APP_TITLE)
@@ -71,6 +72,7 @@ class AppWindow(QMainWindow):
             center_template_model=center_template_model,
             center_template_controller=center_template_controller,
             project_controller=project_controller,
+            anomaly_constraint_model=anomaly_constraint_model,
         )
 
         self.annomate_view.new_project_requested.connect(self._new_project)
@@ -92,6 +94,7 @@ class AppWindow(QMainWindow):
         self.project_controller.project_saved.connect(
             lambda path: self.statusBar().showMessage(f"Saved: {path}", 4000)
         )
+        self.project_controller.project_saved.connect(lambda _: self._update_title())
         self.project_controller.autosave_written.connect(
             lambda _: self.statusBar().showMessage("Autosaved", 3000)
         )
@@ -143,6 +146,8 @@ class AppWindow(QMainWindow):
         add(data_menu, "Export Binary Masks…", "", self._export_binary_masks)
         add(data_menu, "Export CSV…", "", self._export_csv)
         add(data_menu, "Export Train Structure…", "", self._export_train_structure)
+        data_menu.addSeparator()
+        add(data_menu, "Export Project Template…", "", self._export_project_template)
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
@@ -415,6 +420,21 @@ class AppWindow(QMainWindow):
         try:
             msg = self.io_controller.export_train_structure(out_dir)
             QMessageBox.information(self, "Export Train Structure", msg)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
+
+    def _export_project_template(self) -> None:
+        if not self.project_controller.has_project:
+            self._save_project_as()
+            if not self.project_controller.has_project:
+                return
+        try:
+            out_path = self.project_controller.export_template()
+            QMessageBox.information(
+                self,
+                "Export Project Template",
+                f"Template exported to:\n{out_path}",
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 

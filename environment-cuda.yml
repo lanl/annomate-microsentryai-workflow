@@ -5,9 +5,9 @@ dependencies:
   - python=3.10
   - pip
   - pip:
-      - --extra-index-url https://download.pytorch.org/whl/cu121
-      - torch==2.6.0+cu121
-      - torchvision==0.21.0+cu121
+      - --extra-index-url https://download.pytorch.org/whl/cu124
+      - torch==2.6.0+cu124
+      - torchvision==0.21.0+cu124
       - anomalib>=2.2.0
       - sam2
       - lightning>=2.0.0

@@ -9,6 +9,7 @@ so callers can inspect data before applying it.
 import json
 import logging
 import os
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +55,7 @@ class ProjectIO:
         model_path: str = "",
         calibration_state=None,
         center_template_state=None,
+        anomaly_constraint_state=None,
     ) -> str:
         """Write .annoproj + annotations.coco.json to project_dir.
 
@@ -131,6 +133,7 @@ class ProjectIO:
             decision_at = dataset_state.decision_timestamps.get(fname, "")
             inspector = dataset_state.inspectors.get(fname, "")
             note = dataset_state.notes.get(fname, "")
+            omit_reason = dataset_state.omit_reasons.get(fname, "")
             if score is not None:
                 entry["score"] = score
             if label is not None:
@@ -143,6 +146,8 @@ class ProjectIO:
                 entry["inspector"] = inspector
             if note:
                 entry["note"] = note
+            if omit_reason:
+                entry["omit_reason"] = omit_reason
             if entry:
                 per_image[fname] = entry
         _t4 = time.perf_counter()
@@ -217,6 +222,9 @@ class ProjectIO:
                 ts.center_y,
             )
 
+        if anomaly_constraint_state is not None:
+            proj["anomaly_constraints"] = anomaly_constraint_state.to_dict()
+
         annoproj_path = os.path.join(project_dir, f"{project_name}.annoproj")
         _t5 = time.perf_counter()
         with open(annoproj_path, "w", encoding="utf-8") as f:
@@ -227,6 +235,98 @@ class ProjectIO:
 
         logger.debug("Project saved to: %s", annoproj_path)
         return annoproj_path
+
+    def export_template(
+        self,
+        template_path: str,
+        project_name: str,
+        dataset_state,
+        calibration_state=None,
+        center_template_state=None,
+        anomaly_constraint_state=None,
+    ) -> str:
+        """Write a settings-only .annoproj template (no images, annotations, or inference).
+
+        The written file carries is_template=true and omits image_dir, annotations_file,
+        per_image, and inference sections. It can be opened with load_project/
+        apply_project_to_states — missing sections are handled gracefully by the loader.
+
+        Args:
+            template_path: Absolute path for the output .annoproj file.
+            project_name: Human-readable name embedded in the template.
+            dataset_state: DatasetState (only class_names/class_colors are used).
+            calibration_state: CalibrationState or None.
+            center_template_state: CenterTemplateState or None.
+            anomaly_constraint_state: AnomalyConstraintState or None.
+
+        Returns:
+            The absolute path to the written file.
+        """
+        template_path = str(Path(template_path).resolve())
+        template_dir = str(Path(template_path).parent)
+        os.makedirs(template_dir, exist_ok=True)
+
+        tmpl = {
+            "version": _SCHEMA_VERSION,
+            "is_template": True,
+            "project_name": project_name,
+            "dataset": {
+                "class_names": list(dataset_state.class_names),
+                "class_colors": {
+                    name: list(rgb) for name, rgb in dataset_state.class_colors.items()
+                },
+            },
+        }
+
+        if calibration_state is not None:
+            cs = calibration_state
+            tmpl["calibration"] = {
+                "scale": cs.scale,
+                "unit": cs.unit,
+                "px_count": cs.px_count,
+                "world_val": cs.world_val,
+                "user_calibrated": cs.user_calibrated,
+                "calib_p1": list(cs.calib_p1) if cs.calib_p1 else None,
+                "calib_p2": list(cs.calib_p2) if cs.calib_p2 else None,
+                "real_distance": cs.real_distance,
+                "grid_visible": cs.grid_visible,
+                "grid_color": list(cs.grid_color),
+                "grid_opacity": cs.grid_opacity,
+                "grid_spacing_world": cs.grid_spacing_world,
+                "grid_spacing_auto": cs.grid_spacing_auto,
+            }
+
+        if center_template_state is not None:
+            ts = center_template_state
+            src = ts.template_path or ts.template_file
+            if src and os.path.isfile(src):
+                img_filename = os.path.basename(src)
+                dst = os.path.join(template_dir, img_filename)
+                if os.path.abspath(src) != os.path.abspath(dst):
+                    shutil.copy2(src, dst)
+                stored_file = img_filename
+            else:
+                stored_file = self._as_relative_path(src, template_dir) if src else ""
+            tmpl["center_template"] = {
+                "enabled": ts.enabled,
+                "template_file": stored_file,
+                "anchor_x": ts.anchor_x,
+                "anchor_y": ts.anchor_y,
+                "crop_shape": ts.crop_shape,
+                "crop_width": ts.crop_width,
+                "crop_height": ts.crop_height,
+                "center_x": ts.center_x,
+                "center_y": ts.center_y,
+            }
+
+        if anomaly_constraint_state is not None:
+            tmpl["anomaly_constraints"] = anomaly_constraint_state.to_dict()
+
+        with open(template_path, "w", encoding="utf-8") as f:
+            json.dump(tmpl, f, indent=2)
+
+        logger.debug("Project template exported to: %s", template_path)
+        return template_path
 
     # ------------------------------------------------------------------ #
     # Load
@@ -286,6 +386,7 @@ class ProjectIO:
         inference_state,
         calibration_state=None,
         center_template_state=None,
+        anomaly_constraint_state=None,
     ) -> None:
         """Mutate state objects from load_project() output.
 
@@ -350,6 +451,8 @@ class ProjectIO:
                     dataset_state.review_decisions[fname] = info["decision"]
                 if info.get("decision_at"):
                     dataset_state.decision_timestamps[fname] = info["decision_at"]
+                if info.get("omit_reason"):
+                    dataset_state.omit_reasons[fname] = info["omit_reason"]
                 dataset_state.inspectors[fname] = info.get("inspector", "")
                 dataset_state.notes[fname] = info.get("note", "")
         else:
@@ -375,7 +478,7 @@ class ProjectIO:
             try:
                 npz = np.load(npz_path)
                 for key in npz.files:
-                    fname = self._npz_key_to_filename(key)
+                    fname = os.path.normpath(self._npz_key_to_filename(key))
                     inference_state.score_maps[fname] = npz[key]
                 inference_state.score_maps_dirty = False
             except Exception as exc:
@@ -409,9 +512,7 @@ class ProjectIO:
                 tuple(p2) if p2 and not using_default_pixel_scale else None
             )
             calibration_state.real_distance = cdata.get("real_distance", 1.0)
-            calibration_state.grid_visible = (
-                True if using_default_pixel_scale else cdata.get("grid_visible", True)
-            )
+            calibration_state.grid_visible = cdata.get("grid_visible", False)
             color = cdata.get("grid_color", [58, 90, 122])
             calibration_state.grid_color = tuple(color)
             calibration_state.grid_opacity = cdata.get("grid_opacity", 0.5)
@@ -455,6 +556,23 @@ class ProjectIO:
                 center_template_state.center_x,
                 center_template_state.center_y,
             )
+
+        if anomaly_constraint_state is not None:
+            adata = project_data.get("anomaly_constraints", {})
+            if adata:
+                from core.states.anomaly_constraint_state import AnomalyConstraintState
+
+                loaded = AnomalyConstraintState.from_dict(adata)
+                anomaly_constraint_state.enabled = loaded.enabled
+                anomaly_constraint_state.area_check_enabled = loaded.area_check_enabled
+                anomaly_constraint_state.area_threshold = loaded.area_threshold
+                anomaly_constraint_state.area_color = loaded.area_color
+                anomaly_constraint_state.distance_check_enabled = (
+                    loaded.distance_check_enabled
+                )
+                anomaly_constraint_state.distance_threshold = loaded.distance_threshold
+                anomaly_constraint_state.distance_method = loaded.distance_method
+                anomaly_constraint_state.distance_color = loaded.distance_color
 
     # ------------------------------------------------------------------ #
     # COCO export / import

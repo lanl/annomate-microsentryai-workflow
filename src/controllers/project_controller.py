@@ -64,6 +64,7 @@ class ProjectController(QObject):
         inference_controller=None,
         calibration_model=None,
         center_template_model=None,
+        anomaly_constraint_model=None,
         parent: QObject = None,
     ) -> None:
         super().__init__(parent)
@@ -73,6 +74,7 @@ class ProjectController(QObject):
         self._inference_controller = inference_controller
         self._calibration_model = calibration_model
         self._center_template_model = center_template_model
+        self._anomaly_constraint_model = anomaly_constraint_model
 
         self._project_io = ProjectIO()
         self._autosave_manager = AutosaveManager(interval_minutes=5, parent=self)
@@ -96,6 +98,10 @@ class ProjectController(QObject):
             self._calibration_model.grid_changed.connect(self._on_model_changed)
         if self._center_template_model is not None:
             self._center_template_model.template_changed.connect(self._on_model_changed)
+        if self._anomaly_constraint_model is not None:
+            self._anomaly_constraint_model.constraints_changed.connect(
+                self._on_model_changed
+            )
 
     # ------------------------------------------------------------------ #
     # Properties (read-only for AppWindow)
@@ -195,6 +201,7 @@ class ProjectController(QObject):
         """
         project_data = self._project_io.load_project(annoproj_path)
         image_dir = project_data.get("dataset", {}).get("image_dir", "")
+        is_template = project_data.get("is_template", False)
         warnings: List[str] = []
 
         self._loading = True
@@ -202,7 +209,11 @@ class ProjectController(QObject):
             ds = self._dataset_model.state
             ds.clear()
 
-            if image_dir and os.path.isdir(image_dir):
+            if is_template:
+                ds.image_dir = ""
+                ds.image_files = []
+                self._inference_model.state.clear()
+            elif image_dir and os.path.isdir(image_dir):
                 files = sorted(
                     f
                     for f in os.listdir(image_dir)
@@ -224,15 +235,23 @@ class ProjectController(QObject):
                 if self._center_template_model
                 else None
             )
+            anomaly_constraint_state = (
+                self._anomaly_constraint_model._state
+                if self._anomaly_constraint_model
+                else None
+            )
             self._project_io.apply_project_to_states(
                 project_data,
                 ds,
                 self._inference_model.state,
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
+                anomaly_constraint_state=anomaly_constraint_state,
             )
             if self._calibration_model is not None:
                 self._calibration_model.calibration_changed.emit()
+            if self._anomaly_constraint_model is not None:
+                self._anomaly_constraint_model.constraints_changed.emit()
                 self._calibration_model.grid_changed.emit()
             if self._center_template_model is not None:
                 self._center_template_model.template_changed.emit()
@@ -258,13 +277,17 @@ class ProjectController(QObject):
                 "They will be dropped on the next save."
             )
 
-        self._project_dir = str(Path(annoproj_path).parent)
+        if is_template:
+            self._project_dir = None
+            self._autosave_manager.stop()
+        else:
+            self._project_dir = str(Path(annoproj_path).parent)
+            self._autosave_manager.set_project_dir(self._project_dir)
         self._project_name = project_data.get("project_name", Path(annoproj_path).stem)
         self._created_at = project_data.get("created_at")
         self._last_project_model_path = project_data.get("inference", {}).get(
             "model_path", ""
         )
-        self._autosave_manager.set_project_dir(self._project_dir)
         self.clear_dirty()
         self.project_opened.emit(self._project_name)
 
@@ -321,6 +344,11 @@ class ProjectController(QObject):
         center_template_state = (
             self._center_template_model._state if self._center_template_model else None
         )
+        anomaly_constraint_state = (
+            self._anomaly_constraint_model._state
+            if self._anomaly_constraint_model
+            else None
+        )
         path = self._project_io.save_project(
             project_dir=project_dir,
             project_name=project_name,
@@ -331,6 +359,7 @@ class ProjectController(QObject):
             model_path=self._resolve_model_path(),
             calibration_state=calib_state,
             center_template_state=center_template_state,
+            anomaly_constraint_state=anomaly_constraint_state,
         )
         if self._created_at is None:
             self._created_at = datetime.now(timezone.utc).isoformat()
@@ -356,6 +385,11 @@ class ProjectController(QObject):
                 if self._center_template_model
                 else None
             )
+            anomaly_constraint_state = (
+                self._anomaly_constraint_model._state
+                if self._anomaly_constraint_model
+                else None
+            )
             path = self._project_io.save_project(
                 project_dir=autosave_dir,
                 project_name=f"{self._project_name}.autosave",
@@ -366,6 +400,7 @@ class ProjectController(QObject):
                 model_path=self._resolve_model_path(),
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
+                anomaly_constraint_state=anomaly_constraint_state,
             )
             self.autosave_written.emit(path)
         except Exception as exc:
@@ -407,6 +442,46 @@ class ProjectController(QObject):
             self._loading = False
 
         self.mark_dirty()
+
+    # ------------------------------------------------------------------ #
+    # Template export
+    # ------------------------------------------------------------------ #
+
+    def export_template(self) -> str:
+        """Export a settings-only .annoproj to <project_dir>/template/template.annoproj.
+
+        Also copies the center template image into the subfolder if one is set.
+        Returns the absolute path to the written .annoproj file.
+
+        Raises:
+            ValueError: If no project has been saved yet (no project directory).
+        """
+        if not self._project_dir:
+            raise ValueError(
+                "No project directory set. Save the project before exporting a template."
+            )
+        template_dir = os.path.join(self._project_dir, "template")
+        output_path = os.path.join(template_dir, "template.annoproj")
+        calib_state = (
+            self._calibration_model._state if self._calibration_model else None
+        )
+        center_template_state = (
+            self._center_template_model._state if self._center_template_model else None
+        )
+        anomaly_constraint_state = (
+            self._anomaly_constraint_model._state
+            if self._anomaly_constraint_model
+            else None
+        )
+        self._project_io.export_template(
+            template_path=output_path,
+            project_name=self._project_name or "template",
+            dataset_state=self._dataset_model.state,
+            calibration_state=calib_state,
+            center_template_state=center_template_state,
+            anomaly_constraint_state=anomaly_constraint_state,
+        )
+        return output_path
 
     # ------------------------------------------------------------------ #
     # COCO standalone export

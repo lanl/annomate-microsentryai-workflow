@@ -109,6 +109,7 @@ class ImageLabel(QLabel):
         self._center_crop_center_y: Optional[float] = None
         self._center_crop_calibrating: bool = False
         self._dragging_center_crop: bool = False
+        self._center_crop_color: Optional[tuple] = None  # None = auto-contrast
 
         self._base_scale = 1.0
         self._zoom = 1.0
@@ -122,6 +123,13 @@ class ImageLabel(QLabel):
         self.current_polygon_points: List[QPointF] = []
         self._overlays: List[Tuple[List[QPointF], QColor, float, bool]] = []
         self._ai_overlays: List[List[QPointF]] = []
+        self._anomaly_area_violations: set = set()
+        self._anomaly_distance_pairs: set = set()
+        self._anomaly_dist_values: dict = {}
+        self._anomaly_dist_unit: str = "px"
+        self._anomaly_area_color: tuple = (255, 165, 0)
+        self._anomaly_dist_color: tuple = (220, 50, 50)
+        self._anomaly_dist_method: str = "centroid"
 
         # --- UI State Trackers ---
         self.selected_polygon_idx: int = -1
@@ -185,6 +193,9 @@ class ImageLabel(QLabel):
         self.clear_current_polygon()
         self._overlays = []
         self._ai_overlays = []
+        self._anomaly_area_violations = set()
+        self._anomaly_distance_pairs = set()
+        self._anomaly_dist_values = {}
         self._heatmap_pix = None
         self._heatmap_alpha = 0.0
         self.selected_polygon_idx = -1
@@ -320,6 +331,11 @@ class ImageLabel(QLabel):
         self._active_color = color if isinstance(color, QColor) else QColor(0, 200, 0)
 
     @property
+    def center_crop_calibrating(self) -> bool:
+        """True while the center-crop overlay is being calibrated."""
+        return self._center_crop_calibrating
+
+    @property
     def line_thickness(self) -> float:
         """Current line thickness for drawing polygons and overlays."""
         return self._line_thickness
@@ -332,6 +348,8 @@ class ImageLabel(QLabel):
         self._line_thickness = thickness
         self.update()
 
+    _UNSET = object()
+
     def set_center_crop(
         self,
         enabled: Optional[bool] = None,
@@ -343,6 +361,7 @@ class ImageLabel(QLabel):
         center_x: Optional[float] = None,
         center_y: Optional[float] = None,
         calibrating: Optional[bool] = None,
+        border_color=_UNSET,
     ) -> None:
         """Set the centered crop preview mask drawn over the image.
 
@@ -378,8 +397,11 @@ class ImageLabel(QLabel):
             self._dragging_center_crop = False
             if self._center_crop_calibrating:
                 self.setCursor(Qt.SizeAllCursor)
+                self.setFocus()
             elif self.current_tool is None:
                 self.setCursor(Qt.ArrowCursor)
+        if border_color is not self._UNSET:
+            self._center_crop_color = border_color  # None resets to auto
         self.update()
         self.centerCropChanged.emit(self.center_crop_settings())
 
@@ -395,6 +417,7 @@ class ImageLabel(QLabel):
             "center_x": self._center_crop_center_x,
             "center_y": self._center_crop_center_y,
             "calibrating": self._center_crop_calibrating,
+            "border_color": self._center_crop_color,
         }
 
     def _ensure_center_crop_defaults(self, img_w: int, img_h: int) -> None:
@@ -426,6 +449,25 @@ class ImageLabel(QLabel):
         x, y = self.display_to_original(self.view_to_display(pos_view))
         self._center_crop_center_x = max(0.0, min(float(x), float(img_w)))
         self._center_crop_center_y = max(0.0, min(float(y), float(img_h)))
+        self.update()
+        self.centerCropChanged.emit(self.center_crop_settings())
+
+    def _nudge_center_crop(self, dx: float, dy: float) -> None:
+        if self._orig_image_bgr is None:
+            return
+        img_h, img_w = self._orig_image_bgr.shape[:2]
+        cx = (
+            self._center_crop_center_x
+            if self._center_crop_center_x is not None
+            else img_w / 2.0
+        ) + dx
+        cy = (
+            self._center_crop_center_y
+            if self._center_crop_center_y is not None
+            else img_h / 2.0
+        ) + dy
+        self._center_crop_center_x = max(0.0, min(cx, float(img_w)))
+        self._center_crop_center_y = max(0.0, min(cy, float(img_h)))
         self.update()
         self.centerCropChanged.emit(self.center_crop_settings())
 
@@ -465,6 +507,44 @@ class ImageLabel(QLabel):
             )
             self.selected_polygon_idx = -1
 
+        self.update()
+
+    def is_image_loaded(self) -> bool:
+        """Return True if a displayable image is currently set."""
+        return self._display_qpix is not None
+
+    def set_violation_highlights(
+        self,
+        area_violations: set,
+        distance_pairs: set,
+        dist_values: dict | None = None,
+    ) -> None:
+        """Update which annotations to highlight as constraint violations.
+
+        Args:
+            area_violations: Set of annotation indices whose area exceeds the threshold.
+            distance_pairs: Set of frozensets ``{i, j}`` for pairs that are too close.
+            dist_values: Optional mapping of each pair frozenset to its world-unit distance.
+        """
+        self._anomaly_area_violations = area_violations
+        self._anomaly_distance_pairs = distance_pairs
+        self._anomaly_dist_values = dist_values or {}
+        self.update()
+
+    def set_violation_unit(self, unit: str) -> None:
+        """Set the distance unit label shown on proximity violation lines."""
+        self._anomaly_dist_unit = unit
+        self.update()
+
+    def set_violation_colors(self, area_color: tuple, distance_color: tuple) -> None:
+        """Update the colors used to render violation highlights."""
+        self._anomaly_area_color = area_color
+        self._anomaly_dist_color = distance_color
+        self.update()
+
+    def set_violation_method(self, method: str) -> None:
+        """Set distance method ('centroid' or 'edge') for violation line drawing."""
+        self._anomaly_dist_method = method
         self.update()
 
     def set_ai_overlays(self, contours: List[List[Tuple[float, float]]]) -> None:
@@ -665,6 +745,19 @@ class ImageLabel(QLabel):
         Args:
             event (QKeyEvent): The key press event.
         """
+        if self._center_crop_calibrating:
+            step = 10.0 if event.modifiers() & Qt.ShiftModifier else 1.0
+            _arrow_delta = {
+                Qt.Key_Left: (-step, 0.0),
+                Qt.Key_Right: (step, 0.0),
+                Qt.Key_Up: (0.0, -step),
+                Qt.Key_Down: (0.0, step),
+            }
+            if event.key() in _arrow_delta:
+                dx, dy = _arrow_delta[event.key()]
+                self._nudge_center_crop(dx, dy)
+                return
+
         if self.current_tool == SAM_BBOX:
             if event.key() in (Qt.Key_Return, Qt.Key_Enter):
                 self.accept_sam_ghost()
@@ -1012,7 +1105,7 @@ class ImageLabel(QLabel):
         point_in_disp = self.view_to_display(cursor_pos)
 
         old_zoom = self._zoom
-        self._zoom = max(0.2, min(8.0, old_zoom * factor))
+        self._zoom = max(0.2, min(12.0, old_zoom * factor))
         self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
@@ -1041,7 +1134,7 @@ class ImageLabel(QLabel):
         """Apply a zoom *factor* anchored at the center of the widget.
 
         Adjusts :attr:`_pan` so the center point stays fixed after the zoom.
-        Clamps zoom to the range ``[0.2, 8.0]``.
+        Clamps zoom to the range ``[0.2, 12.0]``.
 
         Args:
             factor (float): Multiplicative zoom change (e.g. ``1.15`` to
@@ -1053,7 +1146,7 @@ class ImageLabel(QLabel):
         center = QPointF(self.width() / 2, self.height() / 2)
         point_in_disp = self.view_to_display(center)
 
-        self._zoom = max(0.2, min(8.0, self._zoom * factor))
+        self._zoom = max(0.2, min(12.0, self._zoom * factor))
         self._view_is_fit = False
         self.zoom_changed.emit(self._zoom)
 
@@ -1167,6 +1260,105 @@ class ImageLabel(QLabel):
         painter.setPen(QColor(255, 255, 255, 200))
         painter.drawText(QPointF(x1, baseline1), line1)
         painter.drawText(QPointF(x2, baseline2), line2)
+
+    def _paint_violation_highlights(self, painter: QPainter) -> None:
+        """Draw anomaly constraint violation highlights in display coords.
+
+        Called inside the pan/zoom-transformed painter so coordinates match
+        the normal overlay layer.  Area violations get an amber outline;
+        distance violations get a dashed red line connecting polygon centroids.
+        """
+        if not self._anomaly_area_violations and not self._anomaly_distance_pairs:
+            return
+
+        painter.setBrush(Qt.NoBrush)
+
+        if self._anomaly_area_violations:
+            ar, ag, ab = self._anomaly_area_color
+            color = QColor(ar, ag, ab)
+            f = painter.font()
+            f.setBold(True)
+            font_pts = max(6.0, 20.0 / self._zoom)
+            f.setPointSizeF(font_pts)
+            painter.setFont(f)
+            painter.setPen(QPen(color))
+            # Box must expand with the font when zoom clips it below its natural size
+            half = max(15.0 / self._zoom, font_pts * 2.0)
+            for idx in self._anomaly_area_violations:
+                if idx < len(self._overlays):
+                    pts, _color, _thick, visible = self._overlays[idx]
+                    if visible and pts:
+                        cx = sum(p.x() for p in pts) / len(pts)
+                        cy = sum(p.y() for p in pts) / len(pts)
+                        painter.drawText(
+                            QRectF(cx - half, cy - half, half * 2, half * 2),
+                            Qt.AlignCenter,
+                            "!",
+                        )
+
+        if self._anomaly_distance_pairs:
+            dr, dg, db = self._anomaly_dist_color
+            dist_color = QColor(dr, dg, db, 200)
+            dist_pen = QPen(dist_color, 2.0 / self._zoom, Qt.DashLine)
+            painter.setPen(dist_pen)
+            for pair in self._anomaly_distance_pairs:
+                idxs = list(pair)
+                if len(idxs) != 2:
+                    continue
+                i, j = idxs[0], idxs[1]
+                if i >= len(self._overlays) or j >= len(self._overlays):
+                    continue
+                pts_i = self._overlays[i][0]
+                pts_j = self._overlays[j][0]
+                if not pts_i or not pts_j:
+                    continue
+                if self._anomaly_dist_method == "edge":
+                    best = float("inf")
+                    p_start = pts_i[0]
+                    p_end = pts_j[0]
+                    for pi in pts_i:
+                        for pj in pts_j:
+                            d2 = (pi.x() - pj.x()) ** 2 + (pi.y() - pj.y()) ** 2
+                            if d2 < best:
+                                best = d2
+                                p_start, p_end = pi, pj
+                    cx_i, cy_i = p_start.x(), p_start.y()
+                    cx_j, cy_j = p_end.x(), p_end.y()
+                else:
+                    cx_i = sum(p.x() for p in pts_i) / len(pts_i)
+                    cy_i = sum(p.y() for p in pts_i) / len(pts_i)
+                    cx_j = sum(p.x() for p in pts_j) / len(pts_j)
+                    cy_j = sum(p.y() for p in pts_j) / len(pts_j)
+                painter.drawLine(QPointF(cx_i, cy_i), QPointF(cx_j, cy_j))
+
+                dist_val = self._anomaly_dist_values.get(pair)
+                if dist_val is None:
+                    continue
+                label = f"{dist_val:.4g}{self._anomaly_dist_unit}"
+                lf = painter.font()
+                lf.setBold(True)
+                lfont_pts = max(5.0, 11.0 / self._zoom)
+                lf.setPointSizeF(lfont_pts)
+                painter.setFont(lf)
+                painter.setPen(QPen(QColor(dr, dg, db)))
+                mx = (cx_i + cx_j) / 2
+                my = (cy_i + cy_j) / 2
+                dx = cx_j - cx_i
+                dy = cy_j - cy_i
+                # Box grows with the font when zoom pushes font past its natural size
+                box_w = max(55.0 / self._zoom, lfont_pts * 8.0)
+                box_h = max(14.0 / self._zoom, lfont_pts * 2.0)
+                # Near-vertical line: shift label right so it doesn't overlap
+                if abs(dy) > abs(dx):
+                    x0 = mx + 4.0 / self._zoom
+                else:
+                    x0 = mx - box_w / 2
+                painter.drawText(
+                    QRectF(x0, my - box_h / 2, box_w, box_h),
+                    Qt.AlignCenter,
+                    label,
+                )
+                painter.setPen(dist_pen)
 
     def _paint_calib_dots(self, painter: QPainter) -> None:
         """Draw calibration and measure dots in display coords (inside scaled painter)."""
@@ -1381,11 +1573,47 @@ class ImageLabel(QLabel):
                 painter.setPen(outline_pen)
                 painter.drawEllipse(pt, r, r)
 
+        self._paint_violation_highlights(painter)
         self._paint_calib_dots(painter)
 
         # Switch to screen coordinates for the viewport-fixed grid
         painter.resetTransform()
         self._paint_grid(painter)
+
+    def _crop_border_qcolor(self) -> QColor:
+        """Return the border color: user-set color or auto-contrast from the crop region."""
+        if self._center_crop_color is not None:
+            r, g, b = self._center_crop_color
+            return QColor(r, g, b)
+        img = self._orig_image_bgr
+        if img is None:
+            return QColor(255, 255, 255)
+        img_h, img_w = img.shape[:2]
+        crop_w = self._center_crop_width or img_w
+        crop_h = self._center_crop_height or img_h
+        if self._center_crop_shape == "circle":
+            d = min(crop_w, crop_h)
+            crop_w = crop_h = d
+        cx = (
+            self._center_crop_center_x
+            if self._center_crop_center_x is not None
+            else img_w / 2.0
+        )
+        cy = (
+            self._center_crop_center_y
+            if self._center_crop_center_y is not None
+            else img_h / 2.0
+        )
+        x1 = max(0, int(cx - crop_w / 2))
+        y1 = max(0, int(cy - crop_h / 2))
+        x2 = min(img_w, int(cx + crop_w / 2))
+        y2 = min(img_h, int(cy + crop_h / 2))
+        if x1 >= x2 or y1 >= y2:
+            return QColor(255, 255, 255)
+        region = img[y1:y2:4, x1:x2:4]
+        mean = region.mean(axis=(0, 1))
+        avg_b, avg_g, avg_r = float(mean[0]), float(mean[1]), float(mean[2])
+        return QColor(int(255 - avg_r), int(255 - avg_g), int(255 - avg_b))
 
     def _paint_center_crop(self, painter: QPainter) -> None:
         """Dim everything outside the configured center crop preview."""
@@ -1430,15 +1658,16 @@ class ImageLabel(QLabel):
         else:
             outside.addRect(crop_rect)
 
+        border_color = self._crop_border_qcolor()
         painter.save()
         painter.fillPath(outside, QColor(0, 0, 0, int(self._center_crop_opacity * 255)))
-        pen = QPen(QColor(255, 255, 255), 1.5 / self._zoom, Qt.SolidLine)
+        pen = QPen(border_color, 1.5 / self._zoom, Qt.SolidLine)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
         if self._center_crop_shape == "circle":
             painter.drawEllipse(crop_rect)
             if self._center_crop_calibrating:
-                self._paint_center_calibration_grid(painter, crop_rect)
+                self._paint_center_calibration_grid(painter, crop_rect, border_color)
         else:
             painter.drawRect(crop_rect)
         if self._center_crop_dot_visible:
@@ -1451,7 +1680,7 @@ class ImageLabel(QLabel):
         painter.restore()
 
     def _paint_center_calibration_grid(
-        self, painter: QPainter, crop_rect: QRectF
+        self, painter: QPainter, crop_rect: QRectF, border_color: QColor
     ) -> None:
         """Draw a reference grid clipped to the active circular center crop."""
         diameter_px = crop_rect.width() / max(self._base_scale, 0.0001)
@@ -1472,7 +1701,10 @@ class ImageLabel(QLabel):
             is_center_line = abs(i - center_index) < 0.001
             alpha = 150 if is_center_line else 85
             width = (1.25 if is_center_line else 0.75) / self._zoom
-            pen = QPen(QColor(255, 255, 255, alpha), width, Qt.SolidLine)
+            c = QColor(
+                border_color.red(), border_color.green(), border_color.blue(), alpha
+            )
+            pen = QPen(c, width, Qt.SolidLine)
             painter.setPen(pen)
 
             x = crop_rect.left() + i * spacing_x

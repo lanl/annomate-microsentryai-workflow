@@ -503,16 +503,22 @@ class DatasetTableModel(QAbstractTableModel):
             return False
         return self.state.is_reviewed(self.state.image_files[row])
 
-    def set_review_decision(self, row: int, decision) -> None:
+    def set_review_decision(
+        self, row: int, decision, omit_reason: str | None = None
+    ) -> None:
         """Set the image-level review decision for the image at *row*.
 
         Args:
             row (int): Zero-based row index of the target image.
-            decision (str | None): ``"accept"``, ``"reject"``, or ``None`` to clear.
+            decision (str | None): ``"accept"``, ``"reject"``, ``"omitted"``, or
+                ``None`` to clear.
+            omit_reason (str | None): Reason key when decision is ``"omitted"``.
         """
         if not (0 <= row < self.rowCount()):
             return
-        self.state.set_review_decision(self.state.image_files[row], decision)
+        self.state.set_review_decision(
+            self.state.image_files[row], decision, omit_reason
+        )
         self._emit_row(row)
 
     def get_review_decision(self, row: int):
@@ -524,6 +530,29 @@ class DatasetTableModel(QAbstractTableModel):
         if not (0 <= row < self.rowCount()):
             return None
         return self.state.get_review_decision(self.state.image_files[row])
+
+    def get_omit_reason(self, row: int) -> str | None:
+        """Return the omit reason key for the image at *row*, or None."""
+        if not (0 <= row < self.rowCount()):
+            return None
+        return self.state.get_omit_reason(self.state.image_files[row])
+
+    def get_navigation_warning(self, row: int) -> str | None:
+        """Return the omit reason key if navigating away from *row* should warn the user.
+
+        Returns ``"no_decision"`` when the image has annotations but no decision,
+        ``"no_annotation"`` when it is rejected without annotations, or ``None``
+        when no warning is needed.
+        """
+        if not (0 <= row < self.rowCount()):
+            return None
+        decision = self.get_review_decision(row)
+        count = self.get_annotation_count(row)
+        if count > 0 and not decision:
+            return "no_decision"
+        if decision == "reject" and count == 0:
+            return "no_annotation"
+        return None
 
     def get_annotation_count(self, row: int) -> int:
         """Return the number of polygon annotations for the image at *row*.

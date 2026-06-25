@@ -33,6 +33,8 @@ from views.annomate.tool_palette import ToolPalette
 from views.annomate.status_bar import AnnoMateStatusBar
 from views.annomate.viewport_actions import ViewportActionsBar
 from controllers.sam_controller import SAMController
+from controllers.anomaly_constraint_controller import AnomalyConstraintController
+from models.anomaly_constraint_model import AnomalyConstraintModel
 
 logger = logging.getLogger(__name__)
 
@@ -418,6 +420,7 @@ class AnnoMateWindow(QWidget):
         center_template_model=None,
         center_template_controller=None,
         project_controller=None,
+        anomaly_constraint_model=None,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
@@ -429,6 +432,11 @@ class AnnoMateWindow(QWidget):
         self._center_template_model = center_template_model
         self._center_template_controller = center_template_controller
         self._project_controller = project_controller
+        self._anomaly_model = anomaly_constraint_model or AnomalyConstraintModel()
+        self._anomaly_controller = AnomalyConstraintController(
+            self._anomaly_model, parent=self
+        )
+        self._prev_distance_method: str = self._anomaly_model.distance_method()
         self._current_row: int = -1
         self._active_class: str = ""
         self._active_tool: str = ""
@@ -436,6 +444,7 @@ class AnnoMateWindow(QWidget):
         self._current_bgr = None
         self._current_ai_contours: list = []
         self._selected_ai_idx: int = -1
+        self._accepting_ai: bool = False
         self._saved_model_path: str = ""
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
@@ -458,7 +467,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.image_loaded.connect(self.status_bar.set_dimensions)
 
         # Right panel
-        self.right_panel.image_selected.connect(self._load_row)
+        self.right_panel.image_selected.connect(self._navigate_to)
         self.right_panel.class_selected.connect(self._set_active_class)
         self.right_panel.prev_requested.connect(self._prev_image)
         self.right_panel.next_requested.connect(self._next_image)
@@ -498,6 +507,18 @@ class AnnoMateWindow(QWidget):
         # Route thickness signal directly to canvas setter
         self.tool_palette.thickness_changed.connect(self._on_thickness_changed)
 
+        # Anomaly constraint checks
+        self._anomaly_controller.violations_updated.connect(
+            self._on_anomaly_violations_updated
+        )
+        self._anomaly_model.constraints_changed.connect(
+            self._on_anomaly_constraints_changed
+        )
+        if calibration_model is not None:
+            calibration_model.calibration_changed.connect(
+                self._on_calibration_changed_for_anomaly
+            )
+
         # SAM tool
         self.canvas.samBboxDrawn.connect(self._on_sam_bbox_drawn)
         self.tool_palette.sam_variant_changed.connect(self._on_sam_variant_changed)
@@ -517,6 +538,12 @@ class AnnoMateWindow(QWidget):
         if self._sam_controller.try_autoload(variant):
             self._sam_loading = True
             logger.info("AnnoMateWindow startup: SAM autoload initiated")
+
+        # Project lifecycle
+        if self._project_controller is not None:
+            self._project_controller.project_opened.connect(
+                lambda _: self.refresh_inference_panel()
+            )
 
         # Inference controller signals
         if self.inference_controller is not None:
@@ -568,6 +595,7 @@ class AnnoMateWindow(QWidget):
             self._calib_model,
             self.canvas,
             center_template_model=self._center_template_model,
+            anomaly_constraint_model=self._anomaly_model,
         )
         self.viewport_actions.raise_()
 
@@ -692,6 +720,8 @@ class AnnoMateWindow(QWidget):
         )  # always set the original; resets zoom (expected on new image)
         self._apply_center_template_match(bgr)
         self._refresh_canvas_render()  # apply heatmap / overlay layer without resetting zoom
+        self._anomaly_controller.invalidate_cache()
+        self._run_anomaly_checks()
         total = self.dataset_model.rowCount()
         self.right_panel.set_counter(row, total)
         self.right_panel.select_row(row)
@@ -700,12 +730,51 @@ class AnnoMateWindow(QWidget):
     def _prev_image(self) -> None:
         row = self.right_panel.navigator_adjacent_source_row(self._current_row, -1)
         if row >= 0:
-            self._load_row(row)
+            self._navigate_to(row)
 
     def _next_image(self) -> None:
         row = self.right_panel.navigator_adjacent_source_row(self._current_row, 1)
         if row >= 0:
-            self._load_row(row)
+            self._navigate_to(row)
+
+    def _navigate_to(self, row: int) -> None:
+        """Navigate to *row*, prompting if the current image has unresolved review state."""
+        if self._current_row >= 0 and row != self._current_row:
+            warning = self.dataset_model.get_navigation_warning(self._current_row)
+            if warning == "no_decision":
+                reply = QMessageBox.warning(
+                    self,
+                    "No Decision Made",
+                    "This image has annotations but no Accept or Reject decision was made.\n\n"
+                    "Press OK to continue (image will be marked as Omitted), "
+                    "or Cancel to stay and make a decision.",
+                    QMessageBox.Ok | QMessageBox.Cancel,
+                    QMessageBox.Cancel,
+                )
+                if reply == QMessageBox.Ok:
+                    self.dataset_model.set_review_decision(
+                        self._current_row, "omitted", "no_decision"
+                    )
+                else:
+                    return
+            elif warning == "no_annotation":
+                reply = QMessageBox.warning(
+                    self,
+                    "No Annotations",
+                    "This image has been marked as rejected but has no annotations.\n"
+                    "Rejections should include annotations identifying the issue.\n\n"
+                    "Press OK to continue (image will be marked as Omitted), "
+                    "or Cancel to stay and annotate.",
+                    QMessageBox.Ok | QMessageBox.Cancel,
+                    QMessageBox.Cancel,
+                )
+                if reply == QMessageBox.Ok:
+                    self.dataset_model.set_review_decision(
+                        self._current_row, "omitted", "no_annotation"
+                    )
+                else:
+                    return
+        self._load_row(row)
 
     # ------------------------------------------------------------------ #
     # Tool slots
@@ -948,6 +1017,42 @@ class AnnoMateWindow(QWidget):
         self.canvas.set_active_color(QColor(r, g, b))
         self.status_bar.set_class(name)
 
+    def _on_anomaly_violations_updated(
+        self, area_violations: set, distance_pairs: set, dist_values: dict
+    ) -> None:
+        self.canvas.set_violation_highlights(
+            area_violations, distance_pairs, dist_values
+        )
+        self.viewport_actions.refresh_anomaly_violations(
+            len(area_violations), len(distance_pairs)
+        )
+
+    def _on_anomaly_constraints_changed(self) -> None:
+        new_method = self._anomaly_model.distance_method()
+        if new_method != self._prev_distance_method:
+            self._anomaly_controller.invalidate_cache()
+            self._prev_distance_method = new_method
+        self.canvas.set_violation_colors(
+            self._anomaly_model.area_color(),
+            self._anomaly_model.distance_color(),
+        )
+        self.canvas.set_violation_method(new_method)
+        self._run_anomaly_checks()
+
+    def _on_calibration_changed_for_anomaly(self) -> None:
+        if self._calib_model is not None:
+            unit = self._calib_model.unit()
+            self.viewport_actions.update_anomaly_units(unit)
+            self.canvas.set_violation_unit(unit)
+        self._run_anomaly_checks()
+
+    def _run_anomaly_checks(self) -> None:
+        if self._current_row < 0:
+            return
+        annotations = self.dataset_model.get_annotations(self._current_row)
+        scale = self._calib_model.scale() if self._calib_model is not None else None
+        self._anomaly_controller.run_checks(annotations, scale)
+
     def _on_polygon_finished(self, pts: list) -> None:
         if self._current_row < 0 or not pts:
             return
@@ -973,7 +1078,10 @@ class AnnoMateWindow(QWidget):
                 self._review_bar.set_decision(
                     self.dataset_model.get_review_decision(self._current_row)
                 )
-            self._refresh_canvas_render()
+            if not self._accepting_ai:
+                self._refresh_canvas_render()
+            self._anomaly_controller.invalidate_cache()
+            self._run_anomaly_checks()
 
     def _on_canvas_polygon_selected(self, idx: int) -> None:
         """Sync the right panel list and slider when a polygon is clicked on the canvas."""
@@ -1053,6 +1161,22 @@ class AnnoMateWindow(QWidget):
         """Called by AppWindow after opening a project to record the saved model path."""
         self._saved_model_path = path
 
+    def refresh_inference_panel(self) -> None:
+        """Called by AppWindow after opening a project to sync the inference panel.
+
+        Shows the inference controls when scoremaps were restored from disk even
+        though no model is currently loaded.
+        """
+        if self.inference_controller and self.inference_controller.has_model():
+            return
+        if self.inference_model and self.inference_model.get_processed_count() > 0:
+            self.right_panel.set_scoremaps_loaded()
+            self.right_panel.navigator_enable_inference_columns()
+        # Sync anomaly canvas state from the loaded project (state was mutated directly,
+        # bypassing constraints_changed, so we push colors/method explicitly here).
+        if self._anomaly_model is not None:
+            self._on_anomaly_constraints_changed()
+
     # ------------------------------------------------------------------ #
     # Microsentry rendering
     # ------------------------------------------------------------------ #
@@ -1105,6 +1229,7 @@ class AnnoMateWindow(QWidget):
         self.inference_model.clear()
         self._refresh_canvas_render()
         self.right_panel.set_model_loaded(name, path)
+        self.right_panel.navigator_enable_inference_columns()
         self._start_pending_inference()
 
     def _start_pending_inference(self) -> None:
@@ -1149,10 +1274,15 @@ class AnnoMateWindow(QWidget):
         if self._current_row < 0 or self._current_bgr is None:
             return
 
-        ms_active = (
-            self._microsentry_enabled
-            and self.inference_controller is not None
-            and self.inference_controller.has_model()
+        path = self.dataset_model.get_image_path(self._current_row)
+        has_results = self.inference_model.is_processed(path)
+
+        ms_active = self._microsentry_enabled and (
+            (
+                self.inference_controller is not None
+                and self.inference_controller.has_model()
+            )
+            or has_results
         )
 
         if not ms_active:
@@ -1160,8 +1290,7 @@ class AnnoMateWindow(QWidget):
             self._refresh_overlays()
             return
 
-        path = self.dataset_model.get_image_path(self._current_row)
-        if not self.inference_model.is_processed(path):
+        if not has_results:
             self.canvas.clear_heatmap_layer()
             self._refresh_overlays()
             return
@@ -1190,7 +1319,7 @@ class AnnoMateWindow(QWidget):
         ]
 
         # AI segmentation overlays — computed fresh, stored for per-polygon accept/reject
-        if ms["seg_enabled"]:
+        if ms["seg_enabled"] and self.inference_controller is not None:
             orig_h, orig_w = self._current_bgr.shape[:2]
             self._current_ai_contours = self.inference_controller.compute_segmentation(
                 s, ms["seg_pct"], ms["epsilon"], orig_w, orig_h
@@ -1243,6 +1372,7 @@ class AnnoMateWindow(QWidget):
 
     def _on_inference_batch_done(self) -> None:
         self.status_bar.clear_inference_progress()
+        self.right_panel.navigator_enable_inference_columns()
 
     def _on_ai_polygon_clicked(self, idx: int, view_pos: QPointF) -> None:
         self._selected_ai_idx = idx
@@ -1252,6 +1382,11 @@ class AnnoMateWindow(QWidget):
         class_names = self.dataset_model.get_class_names()
         if not class_names:
             self._ai_popup.setVisible(False)
+            QMessageBox.warning(
+                self,
+                "No Classes Defined",
+                "Add an annotation class before accepting AI segmentation polygons.",
+            )
             return
         self._ai_popup.set_classes(class_names, self._active_class)
         bbox = self.canvas.get_ai_polygon_view_rect(idx)
@@ -1272,7 +1407,11 @@ class AnnoMateWindow(QWidget):
                     else (class_names[0] if class_names else "")
                 )
             if target:
-                self.dataset_model.add_annotation(self._current_row, target, pts)
+                self._accepting_ai = True
+                try:
+                    self.dataset_model.add_annotation(self._current_row, target, pts)
+                finally:
+                    self._accepting_ai = False
         del self._current_ai_contours[idx]
         self._selected_ai_idx = -1
         self._ai_popup.setVisible(False)
@@ -1301,17 +1440,27 @@ class AnnoMateWindow(QWidget):
             return
         class_names = self.dataset_model.get_class_names()
         if not class_names:
+            QMessageBox.warning(
+                self,
+                "No Classes Defined",
+                "Add an annotation class before accepting AI segmentation polygons.",
+            )
             return
         target = (
             self._active_class if self._active_class in class_names else class_names[0]
         )
-        for pts in self._current_ai_contours:
-            if len(pts) >= 3:
-                self.dataset_model.add_annotation(self._current_row, target, pts)
+        contours_to_accept = list(self._current_ai_contours)
+        self._accepting_ai = True
+        try:
+            for pts in contours_to_accept:
+                if len(pts) >= 3:
+                    self.dataset_model.add_annotation(self._current_row, target, pts)
+        finally:
+            self._accepting_ai = False
         self._current_ai_contours = []
         self._selected_ai_idx = -1
         self._ai_popup.setVisible(False)
-        self._refresh_canvas_render()
+        self._push_overlays_after_edit()
 
     def _row_for_path(self, path: str) -> int:
         for i in range(self.dataset_model.rowCount()):
@@ -1326,6 +1475,8 @@ class AnnoMateWindow(QWidget):
     def keyPressEvent(self, event) -> None:
         """Handle annotation hotkeys.
 
+        - ``A``: previous image (disabled during center-crop calibration)
+        - ``D``: next image (disabled during center-crop calibration)
         - ``P``: toggle polygon tool
         - ``S``: toggle SAM segment tool
         - ``C``: toggle calibration tool
@@ -1335,7 +1486,12 @@ class AnnoMateWindow(QWidget):
         Args:
             event: The key press event.
         """
-        if event.key() == Qt.Key_P:
+        calibrating = self.canvas.center_crop_calibrating
+        if event.key() == Qt.Key_A and not calibrating:
+            self._prev_image()
+        elif event.key() == Qt.Key_D and not calibrating:
+            self._next_image()
+        elif event.key() == Qt.Key_P:
             self.tool_palette.toggle_polygon()
         elif event.key() == Qt.Key_S:
             self.tool_palette.toggle_sam()

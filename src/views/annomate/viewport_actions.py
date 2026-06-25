@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QColorDialog,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -81,11 +82,13 @@ class ViewportActionsBar(QFrame):
         calibration_model=None,
         parent: QWidget = None,
         center_template_model=None,
+        anomaly_constraint_model=None,
     ) -> None:
         super().__init__(parent or canvas)
         self._canvas = canvas
         self._model = None
         self._center_template_model = None
+        self._anomaly_model = None
         self._active_tool = ""
         self._has_image = False
         self._image_w = 0
@@ -110,6 +113,10 @@ class ViewportActionsBar(QFrame):
         font.setPointSize(16)
         font.setBold(True)
 
+        font_large = QFont()
+        font_large.setPointSize(20)
+        font_large.setBold(True)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 4, 6, 4)
         layout.setSpacing(4)
@@ -124,8 +131,8 @@ class ViewportActionsBar(QFrame):
         self._btn_zoom_out.clicked.connect(canvas.zoom_out)
         layout.addWidget(self._btn_zoom_out)
 
-        self._btn_reset = self._make_button("⊙", "Reset View")
-        self._btn_reset.setFont(font)
+        self._btn_reset = self._make_button("⊡", "Reset View")
+        self._btn_reset.setFont(font_large)
         self._btn_reset.clicked.connect(canvas.reset_view)
         layout.addWidget(self._btn_reset)
 
@@ -139,20 +146,29 @@ class ViewportActionsBar(QFrame):
         )
         layout.addWidget(self._btn_measure)
 
-        self._btn_settings = self._make_popup_button("⚙", "Grid Settings")
-        self._btn_settings.setFont(font)
+        self._btn_settings = self._make_popup_button("⊞", "Grid Settings")
+        self._btn_settings.setFont(font_large)
         self._btn_settings.setMenu(self._build_settings_menu())
         layout.addWidget(self._btn_settings)
 
+        self._btn_anomaly = self._make_popup_button("⊿", "Anomaly Constraints")
+        font_anomaly = QFont()
+        font_anomaly.setPointSize(13)
+        font_anomaly.setBold(True)
+        self._btn_anomaly.setFont(font_anomaly)
+        self._btn_anomaly.setMenu(self._build_anomaly_menu())
+        layout.addWidget(self._btn_anomaly)
+
         self._add_divider(layout)
 
-        self._btn_crop = self._make_popup_button("⌗", "Center Crop")
-        self._btn_crop.setFont(font)
+        self._btn_crop = self._make_popup_button("⊕", "Center Crop")
+        self._btn_crop.setFont(font_large)
         self._btn_crop.setMenu(self._build_crop_menu())
         layout.addWidget(self._btn_crop)
 
         self.adjustSize()
-        self.set_image_loaded(False)
+        already_loaded = hasattr(canvas, "is_image_loaded") and canvas.is_image_loaded()
+        self.set_image_loaded(already_loaded)
         if hasattr(canvas, "image_loaded"):
             canvas.image_loaded.connect(self.set_image_dimensions)
         if hasattr(canvas, "centerCropChanged"):
@@ -163,6 +179,8 @@ class ViewportActionsBar(QFrame):
             self._refresh_controls()
         if center_template_model is not None:
             self.set_center_template_model(center_template_model)
+        if anomaly_constraint_model is not None:
+            self.set_anomaly_constraint_model(anomaly_constraint_model)
 
     def _make_button(self, text: str, tooltip: str) -> QToolButton:
         btn = QToolButton()
@@ -186,6 +204,220 @@ class ViewportActionsBar(QFrame):
         divider.setFrameShadow(QFrame.Sunken)
         layout.addWidget(divider)
 
+    def _build_anomaly_menu(self) -> QMenu:
+        menu = QMenu(self)
+        action = QWidgetAction(self)
+        panel = QWidget()
+        panel.setMinimumWidth(280)
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(6)
+
+        # ── Header + master enable ──────────────────────────────────────
+        header = QLabel("Anomaly Constraints")
+        header.setStyleSheet("font-weight: bold;")
+        layout.addWidget(header)
+
+        self._anomaly_enable_chk = QCheckBox("Enable")
+        layout.addWidget(self._anomaly_enable_chk)
+
+        # ── Area threshold section ──────────────────────────────────────
+        div1 = QFrame()
+        div1.setFrameShape(QFrame.HLine)
+        div1.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(div1)
+
+        area_header = QLabel("Area Threshold")
+        area_header.setStyleSheet("font-weight: bold;")
+        layout.addWidget(area_header)
+
+        self._anomaly_area_chk = QCheckBox("Check Area")
+        layout.addWidget(self._anomaly_area_chk)
+
+        area_row = QHBoxLayout()
+        area_row.setSpacing(4)
+        area_row.addWidget(QLabel("Max Area:"))
+        self._anomaly_area_spin = QDoubleSpinBox()
+        self._anomaly_area_spin.setRange(0.0, 1e12)
+        self._anomaly_area_spin.setDecimals(2)
+        self._anomaly_area_spin.setSingleStep(1.0)
+        self._anomaly_area_spin.setToolTip(
+            "Annotations with area above this value will be highlighted"
+        )
+        area_row.addWidget(self._anomaly_area_spin, 1)
+        self._anomaly_area_unit_lbl = QLabel("px²")
+        self._anomaly_area_unit_lbl.setFixedWidth(30)
+        area_row.addWidget(self._anomaly_area_unit_lbl)
+        layout.addLayout(area_row)
+
+        area_color_row = QHBoxLayout()
+        area_color_row.setSpacing(4)
+        area_color_row.addWidget(QLabel("Outline Color:"))
+        self._anomaly_area_color_btn = QPushButton()
+        self._anomaly_area_color_btn.setFixedSize(24, 20)
+        self._anomaly_area_color_btn.setToolTip("Choose area violation outline color")
+        self._apply_color_swatch(self._anomaly_area_color_btn, (255, 165, 0))
+        area_color_row.addWidget(self._anomaly_area_color_btn)
+        area_color_row.addStretch()
+        layout.addLayout(area_color_row)
+
+        self._anomaly_area_count_lbl = QLabel("")
+        self._anomaly_area_count_lbl.setStyleSheet("color: #cc4400; font-weight: bold;")
+        layout.addWidget(self._anomaly_area_count_lbl)
+
+        # ── Distance threshold section ──────────────────────────────────
+        div2 = QFrame()
+        div2.setFrameShape(QFrame.HLine)
+        div2.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(div2)
+
+        dist_header = QLabel("Proximity Threshold")
+        dist_header.setStyleSheet("font-weight: bold;")
+        layout.addWidget(dist_header)
+
+        self._anomaly_dist_chk = QCheckBox("Check Distance")
+        layout.addWidget(self._anomaly_dist_chk)
+
+        method_row = QHBoxLayout()
+        method_row.setSpacing(4)
+        method_row.addWidget(QLabel("Method:"))
+        self._anomaly_centroid_radio = QRadioButton("Centroid")
+        self._anomaly_edge_radio = QRadioButton("Edge")
+        self._anomaly_centroid_radio.setChecked(True)
+        self._anomaly_method_group = QButtonGroup(self)
+        self._anomaly_method_group.addButton(self._anomaly_centroid_radio, 0)
+        self._anomaly_method_group.addButton(self._anomaly_edge_radio, 1)
+        method_row.addWidget(self._anomaly_centroid_radio)
+        method_row.addWidget(self._anomaly_edge_radio)
+        method_row.addStretch()
+        layout.addLayout(method_row)
+
+        dist_row = QHBoxLayout()
+        dist_row.setSpacing(4)
+        dist_row.addWidget(QLabel("Min Dist:"))
+        self._anomaly_dist_spin = QDoubleSpinBox()
+        self._anomaly_dist_spin.setRange(0.0, 1e12)
+        self._anomaly_dist_spin.setDecimals(2)
+        self._anomaly_dist_spin.setSingleStep(1.0)
+        self._anomaly_dist_spin.setToolTip(
+            "Annotation pairs closer than this distance will be highlighted"
+        )
+        dist_row.addWidget(self._anomaly_dist_spin, 1)
+        self._anomaly_dist_unit_lbl = QLabel("px")
+        self._anomaly_dist_unit_lbl.setFixedWidth(30)
+        dist_row.addWidget(self._anomaly_dist_unit_lbl)
+        layout.addLayout(dist_row)
+
+        dist_color_row = QHBoxLayout()
+        dist_color_row.setSpacing(4)
+        dist_color_row.addWidget(QLabel("Line Color:"))
+        self._anomaly_dist_color_btn = QPushButton()
+        self._anomaly_dist_color_btn.setFixedSize(24, 20)
+        self._anomaly_dist_color_btn.setToolTip("Choose proximity violation line color")
+        self._apply_color_swatch(self._anomaly_dist_color_btn, (220, 50, 50))
+        dist_color_row.addWidget(self._anomaly_dist_color_btn)
+        dist_color_row.addStretch()
+        layout.addLayout(dist_color_row)
+
+        self._anomaly_dist_count_lbl = QLabel("")
+        self._anomaly_dist_count_lbl.setStyleSheet("color: #cc4400; font-weight: bold;")
+        layout.addWidget(self._anomaly_dist_count_lbl)
+
+        # ── Wire signals ───────────────────────────────────────────────
+        self._anomaly_enable_chk.toggled.connect(self._on_anomaly_enable_toggled)
+        self._anomaly_area_chk.toggled.connect(self._on_anomaly_area_check_toggled)
+        self._anomaly_area_spin.valueChanged.connect(self._on_anomaly_area_changed)
+        self._anomaly_area_color_btn.clicked.connect(
+            self._on_anomaly_area_color_clicked
+        )
+        self._anomaly_dist_chk.toggled.connect(self._on_anomaly_dist_check_toggled)
+        self._anomaly_dist_spin.valueChanged.connect(self._on_anomaly_dist_changed)
+        self._anomaly_centroid_radio.toggled.connect(self._on_anomaly_method_changed)
+        self._anomaly_dist_color_btn.clicked.connect(
+            self._on_anomaly_dist_color_clicked
+        )
+
+        action.setDefaultWidget(panel)
+        menu.addAction(action)
+        return menu
+
+    def _on_anomaly_enable_toggled(self, checked: bool) -> None:
+        if self._anomaly_model is not None and not self._refreshing:
+            self._anomaly_model.set_enabled(checked)
+
+    def _on_anomaly_area_check_toggled(self, checked: bool) -> None:
+        if self._anomaly_model is not None and not self._refreshing:
+            self._anomaly_model.set_area_check_enabled(checked)
+
+    def _on_anomaly_area_changed(self, value: float) -> None:
+        if self._anomaly_model is not None and not self._refreshing:
+            self._anomaly_model.set_area_threshold(value)
+
+    def _on_anomaly_dist_check_toggled(self, checked: bool) -> None:
+        if self._anomaly_model is not None and not self._refreshing:
+            self._anomaly_model.set_distance_check_enabled(checked)
+
+    def _on_anomaly_dist_changed(self, value: float) -> None:
+        if self._anomaly_model is not None and not self._refreshing:
+            self._anomaly_model.set_distance_threshold(value)
+
+    def _on_anomaly_method_changed(self, centroid_checked: bool) -> None:
+        if self._anomaly_model is not None and not self._refreshing:
+            method = "centroid" if centroid_checked else "edge"
+            self._anomaly_model.set_distance_method(method)
+
+    def _on_anomaly_area_color_clicked(self) -> None:
+        if self._anomaly_model is None:
+            return
+        r, g, b = self._anomaly_model.area_color()
+        color = QColorDialog.getColor(QColor(r, g, b), self, "Area Violation Color")
+        if color.isValid():
+            self._anomaly_model.set_area_color(
+                (color.red(), color.green(), color.blue())
+            )
+
+    def _on_anomaly_dist_color_clicked(self) -> None:
+        if self._anomaly_model is None:
+            return
+        r, g, b = self._anomaly_model.distance_color()
+        color = QColorDialog.getColor(QColor(r, g, b), self, "Proximity Line Color")
+        if color.isValid():
+            self._anomaly_model.set_distance_color(
+                (color.red(), color.green(), color.blue())
+            )
+
+    def _apply_color_swatch(self, btn, rgb: tuple) -> None:
+        r, g, b = rgb
+        btn.setStyleSheet(
+            f"QPushButton {{ background-color: rgb({r},{g},{b}); "
+            f"border: 1px solid #888; border-radius: 2px; }}"
+        )
+
+    def _refresh_anomaly_controls(self) -> None:
+        if not hasattr(self, "_anomaly_enable_chk"):
+            return
+        if self._anomaly_model is None:
+            return
+        self._refreshing = True
+        self._anomaly_enable_chk.setChecked(self._anomaly_model.enabled())
+        self._anomaly_area_chk.setChecked(self._anomaly_model.area_check_enabled())
+        self._anomaly_area_spin.setValue(self._anomaly_model.area_threshold())
+        self._apply_color_swatch(
+            self._anomaly_area_color_btn, self._anomaly_model.area_color()
+        )
+        self._anomaly_dist_chk.setChecked(self._anomaly_model.distance_check_enabled())
+        self._anomaly_dist_spin.setValue(self._anomaly_model.distance_threshold())
+        self._anomaly_centroid_radio.setChecked(
+            self._anomaly_model.distance_method() == "centroid"
+        )
+        self._anomaly_edge_radio.setChecked(
+            self._anomaly_model.distance_method() == "edge"
+        )
+        self._apply_color_swatch(
+            self._anomaly_dist_color_btn, self._anomaly_model.distance_color()
+        )
+        self._refreshing = False
+
     def _build_settings_menu(self) -> QMenu:
         menu = QMenu(self)
         action = QWidgetAction(self)
@@ -205,20 +437,28 @@ class ViewportActionsBar(QFrame):
         self._calib_status_lbl = QLabel("Current Calibration: None")
         layout.addWidget(self._calib_status_lbl)
 
-        # Ratio input: [ 1px ] : [ 0.05mm ] [ Apply ]
+        # Ratio input: [ 1 ] px : [ 0.05 ] [ mm▾ ] [ Apply ]
         ratio_row = QHBoxLayout()
         ratio_row.setSpacing(4)
-        self._ratio_px_edit = QLineEdit()
-        self._ratio_px_edit.setPlaceholderText("1px")
-        self._ratio_px_edit.setToolTip("Left side of ratio, e.g. 1px or 50px")
-        ratio_row.addWidget(self._ratio_px_edit)
-        ratio_row.addWidget(QLabel(":"))
-        self._ratio_val_edit = QLineEdit()
-        self._ratio_val_edit.setPlaceholderText("0.05mm")
-        self._ratio_val_edit.setToolTip(
-            "Right side of ratio, e.g. 0.05mm, 100um, 1furlong"
+        self._ratio_px_spin = QSpinBox()
+        self._ratio_px_spin.setRange(1, 999999)
+        self._ratio_px_spin.setValue(1)
+        self._ratio_px_spin.setToolTip("Number of pixels on the left side of the ratio")
+        ratio_row.addWidget(self._ratio_px_spin)
+        ratio_row.addWidget(QLabel("px :"))
+        self._ratio_val_num_spin = QDoubleSpinBox()
+        self._ratio_val_num_spin.setRange(0.0, 999999.0)
+        self._ratio_val_num_spin.setDecimals(2)
+        self._ratio_val_num_spin.setSingleStep(0.1)
+        self._ratio_val_num_spin.setToolTip(
+            "Real-world value for the right side of the ratio"
         )
-        ratio_row.addWidget(self._ratio_val_edit)
+        ratio_row.addWidget(self._ratio_val_num_spin)
+        self._ratio_unit_combo = QComboBox()
+        for _u in ("mm", "um", "nm", "pm", "fm", "cm", "dm", "m", "km"):
+            self._ratio_unit_combo.addItem(_u)
+        self._ratio_unit_combo.setFixedWidth(52)
+        ratio_row.addWidget(self._ratio_unit_combo)
         self._btn_apply_ratio = QPushButton("Apply")
         self._btn_apply_ratio.setFixedWidth(50)
         self._btn_apply_ratio.clicked.connect(self._on_apply_ratio_clicked)
@@ -357,44 +597,56 @@ class ViewportActionsBar(QFrame):
         header.setStyleSheet("font-weight: bold;")
         panel_layout.addWidget(header)
 
-        # Enable + Shape on one row
-        enable_shape_row = QHBoxLayout()
-        enable_shape_row.setSpacing(8)
+        # Enable
         self._crop_chk = QCheckBox("Enable")
         self._crop_chk.toggled.connect(self._on_crop_toggled)
-        enable_shape_row.addWidget(self._crop_chk)
-        enable_shape_row.addStretch()
-        enable_shape_row.addWidget(QLabel("Shape"))
+        panel_layout.addWidget(self._crop_chk)
+
+        # Shape
+        shape_row = QHBoxLayout()
+        shape_row.setSpacing(8)
+        shape_lbl = QLabel("Shape")
+        shape_lbl.setFixedWidth(58)
+        shape_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        shape_row.addWidget(shape_lbl)
         self._crop_shape_combo = QComboBox()
         self._crop_shape_combo.addItems(["Rectangle", "Circle"])
+        self._crop_shape_combo.setMaximumWidth(90)
         self._crop_shape_combo.currentTextChanged.connect(self._on_crop_shape_changed)
-        enable_shape_row.addWidget(self._crop_shape_combo)
-        panel_layout.addLayout(enable_shape_row)
+        shape_row.addWidget(self._crop_shape_combo)
+        shape_row.addStretch()
+        panel_layout.addLayout(shape_row)
 
-        # Width
+        # Width / Diameter
         width_row = QHBoxLayout()
         width_row.setSpacing(8)
         self._crop_primary_lbl = QLabel("Width")
-        self._crop_primary_lbl.setFixedWidth(44)
+        self._crop_primary_lbl.setFixedWidth(58)
+        self._crop_primary_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         width_row.addWidget(self._crop_primary_lbl)
         self._crop_width_spin = QSpinBox()
         self._crop_width_spin.setRange(1, 999999)
         self._crop_width_spin.setSuffix(" px")
+        self._crop_width_spin.setMaximumWidth(90)
         self._crop_width_spin.valueChanged.connect(self._on_crop_primary_changed)
         width_row.addWidget(self._crop_width_spin)
+        width_row.addStretch()
         panel_layout.addLayout(width_row)
 
-        # Height
+        # Height / Radius
         height_row = QHBoxLayout()
         height_row.setSpacing(8)
         self._crop_secondary_lbl = QLabel("Height")
-        self._crop_secondary_lbl.setFixedWidth(44)
+        self._crop_secondary_lbl.setFixedWidth(58)
+        self._crop_secondary_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         height_row.addWidget(self._crop_secondary_lbl)
         self._crop_height_spin = QSpinBox()
         self._crop_height_spin.setRange(1, 999999)
         self._crop_height_spin.setSuffix(" px")
+        self._crop_height_spin.setMaximumWidth(90)
         self._crop_height_spin.valueChanged.connect(self._on_crop_secondary_changed)
         height_row.addWidget(self._crop_height_spin)
+        height_row.addStretch()
         panel_layout.addLayout(height_row)
 
         # Outside opacity
@@ -409,6 +661,27 @@ class ViewportActionsBar(QFrame):
         self._crop_opacity_lbl.setFixedWidth(34)
         opacity_row.addWidget(self._crop_opacity_lbl)
         panel_layout.addLayout(opacity_row)
+
+        # Border color
+        border_row = QHBoxLayout()
+        border_row.setSpacing(8)
+        border_lbl = QLabel("Border")
+        border_lbl.setFixedWidth(58)
+        border_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        border_row.addWidget(border_lbl)
+        self._crop_color_btn = QPushButton()
+        self._crop_color_btn.setFixedSize(32, 20)
+        self._crop_color_btn.setToolTip("Click to set a custom border color")
+        self._crop_color_btn.clicked.connect(self._on_crop_color_clicked)
+        border_row.addWidget(self._crop_color_btn)
+        self._crop_color_auto_btn = QPushButton("Auto")
+        self._crop_color_auto_btn.setFixedHeight(20)
+        self._crop_color_auto_btn.setToolTip("Reset to auto-contrast color")
+        self._crop_color_auto_btn.clicked.connect(self._on_crop_color_auto)
+        border_row.addWidget(self._crop_color_auto_btn)
+        border_row.addStretch()
+        panel_layout.addLayout(border_row)
+        self._update_crop_color_swatch(None)
 
         # Center dot
         self._crop_center_dot_chk = QCheckBox("Show center dot")
@@ -479,6 +752,41 @@ class ViewportActionsBar(QFrame):
         self._refresh_template_status()
         self._refresh_action_availability()
 
+    def set_anomaly_constraint_model(self, model) -> None:
+        self._anomaly_model = model
+        model.constraints_changed.connect(self._refresh_anomaly_controls)
+        self._refresh_anomaly_controls()
+
+    def refresh_anomaly_violations(self, area_count: int, dist_count: int) -> None:
+        """Update the inline violation count labels with threshold-aware text."""
+        if not hasattr(self, "_anomaly_area_count_lbl"):
+            return
+
+        if area_count > 0 and self._anomaly_model is not None:
+            t = self._anomaly_model.area_threshold()
+            unit = self._anomaly_area_unit_lbl.text()
+            label = "defect" if area_count == 1 else "defects"
+            self._anomaly_area_count_lbl.setText(f"{area_count} {label} > {t:g}{unit}")
+        else:
+            self._anomaly_area_count_lbl.setText("")
+
+        if dist_count > 0 and self._anomaly_model is not None:
+            t = self._anomaly_model.distance_threshold()
+            unit = self._anomaly_dist_unit_lbl.text()
+            label = "defect" if dist_count == 1 else "defects"
+            self._anomaly_dist_count_lbl.setText(
+                f"{dist_count} {label} within {t:g}{unit}"
+            )
+        else:
+            self._anomaly_dist_count_lbl.setText("")
+
+    def update_anomaly_units(self, unit: str) -> None:
+        """Update the unit labels in the anomaly panel (called when calibration changes)."""
+        if not hasattr(self, "_anomaly_area_unit_lbl"):
+            return
+        self._anomaly_area_unit_lbl.setText(f"{unit}²")
+        self._anomaly_dist_unit_lbl.setText(unit)
+
     def set_image_loaded(self, loaded: bool) -> None:
         self._has_image = loaded
         self._refresh_action_availability()
@@ -522,17 +830,15 @@ class ViewportActionsBar(QFrame):
     def _on_apply_ratio_clicked(self) -> None:
         if self._model is None:
             return
-        px_text = self._ratio_px_edit.text().strip()
-        val_text = self._ratio_val_edit.text().strip()
-        if not px_text or not val_text:
+        px_count = self._ratio_px_spin.value()
+        world_val = self._ratio_val_num_spin.value()
+        unit = self._ratio_unit_combo.currentText()
+        if world_val <= 0:
+            QMessageBox.warning(
+                self, "Invalid Ratio", "World value must be greater than zero."
+            )
             return
-        from core.persistence.calibration_io import parse_ratio_string
-
-        try:
-            px_count, world_val, unit = parse_ratio_string(f"{px_text}:{val_text}")
-            self._model.apply_scale_direct(px_count, world_val, unit)
-        except ValueError as exc:
-            QMessageBox.warning(self, "Invalid Ratio", str(exc))
+        self._model.apply_scale_direct(px_count, world_val, unit)
 
     def _on_import_ratio_clicked(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -666,6 +972,36 @@ class ViewportActionsBar(QFrame):
             return
         self._canvas.set_center_crop(center_dot=checked)
 
+    def _on_crop_color_clicked(self) -> None:
+        current = self._canvas.center_crop_settings().get("border_color")
+        initial = QColor(*current) if current else QColor(255, 255, 255)
+        color = QColorDialog.getColor(initial, self, "Border Color")
+        if color.isValid():
+            rgb = (color.red(), color.green(), color.blue())
+            self._canvas.set_center_crop(border_color=rgb)
+            self._update_crop_color_swatch(rgb)
+
+    def _on_crop_color_auto(self) -> None:
+        self._canvas.set_center_crop(border_color=None)
+        self._update_crop_color_swatch(None)
+
+    def _update_crop_color_swatch(self, rgb) -> None:
+        if rgb is None:
+            self._crop_color_btn.setStyleSheet(
+                "background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                "stop:0 #ffffff,stop:0.49 #ffffff,stop:0.5 #000000,stop:1 #000000);"
+                "border: 1px solid #888;"
+            )
+            self._crop_color_btn.setToolTip("Auto-contrast (click to override)")
+        else:
+            r, g, b = rgb
+            self._crop_color_btn.setStyleSheet(
+                f"background-color: rgb({r},{g},{b}); border: 1px solid #888;"
+            )
+            self._crop_color_btn.setToolTip(
+                f"Border color: rgb({r},{g},{b}) — click to change"
+            )
+
     def _on_reset_crop_clicked(self) -> None:
         if self._refreshing:
             return
@@ -738,15 +1074,12 @@ class ViewportActionsBar(QFrame):
         self._refresh_controls()
         self._refresh_measurement()
         self._refresh_crop_controls()
+        self._refresh_anomaly_controls()
         self._refresh_action_availability()
 
     def _refresh_calib_status(self) -> None:
         if self._model is None or not self._model.has_scale():
             self._calib_status_lbl.setText("Current Calibration: None")
-            if not self._ratio_px_edit.hasFocus():
-                self._ratio_px_edit.clear()
-            if not self._ratio_val_edit.hasFocus():
-                self._ratio_val_edit.clear()
             return
         from core.persistence.calibration_io import format_ratio_string
 
@@ -755,11 +1088,16 @@ class ViewportActionsBar(QFrame):
         unit = self._model.unit()
         ratio_str = format_ratio_string(px_count, world_val, unit)
         self._calib_status_lbl.setText(f"Current Calibration: {ratio_str}")
-        left, right = ratio_str.split(":", 1)
-        if not self._ratio_px_edit.hasFocus():
-            self._ratio_px_edit.setText(left)
-        if not self._ratio_val_edit.hasFocus():
-            self._ratio_val_edit.setText(right)
+        if not self._ratio_px_spin.hasFocus():
+            self._ratio_px_spin.setValue(int(round(px_count)))
+        if not self._ratio_val_num_spin.hasFocus():
+            self._ratio_val_num_spin.setValue(world_val)
+            idx = self._ratio_unit_combo.findText(unit)
+            if idx >= 0:
+                self._ratio_unit_combo.setCurrentIndex(idx)
+            else:
+                self._ratio_unit_combo.addItem(unit)
+                self._ratio_unit_combo.setCurrentText(unit)
 
     def _refresh_controls(self) -> None:
         if self._model is None:
@@ -861,6 +1199,7 @@ class ViewportActionsBar(QFrame):
         self._crop_opacity_slider.setValue(opacity_pct)
         self._crop_opacity_lbl.setText(f"{opacity_pct}%")
         self._crop_center_dot_chk.setChecked(center_dot)
+        self._update_crop_color_swatch(settings.get("border_color"))
         if settings.get("calibrating") != self._center_calibrating:
             self._center_calibrating = bool(settings.get("calibrating"))
         self._crop_hint_lbl.setText(
@@ -877,6 +1216,11 @@ class ViewportActionsBar(QFrame):
 
     def _refresh_action_availability(self) -> None:
         scale_available = self._model is not None and self._model.has_scale()
+        self._btn_zoom_in.setEnabled(self._has_image)
+        self._btn_zoom_out.setEnabled(self._has_image)
+        self._btn_reset.setEnabled(self._has_image)
+        self._btn_settings.setEnabled(self._has_image)
+        self._btn_anomaly.setEnabled(self._has_image)
         self._btn_calibrate_points.setEnabled(self._has_image)
         self._btn_import_ratio.setEnabled(True)
         self._btn_export_ratio.setEnabled(scale_available)

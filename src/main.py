@@ -5,7 +5,17 @@ Creates all layers in dependency order (states → models → controllers → vi
 and starts the Qt event loop. Contains no UI code.
 """
 
+import os
 import sys
+
+# PyInstaller --windowed sets sys.stdout/stderr to None (no console).
+# Any library that calls .write() on them (e.g. tqdm in huggingface_hub) will
+# crash with 'NoneType has no attribute write'. Redirect to devnull early.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
@@ -13,11 +23,13 @@ from core.states.dataset_state import DatasetState
 from core.states.inference_state import InferenceState
 from core.states.calibration_state import CalibrationState
 from core.states.center_template_state import CenterTemplateState
+from core.states.anomaly_constraint_state import AnomalyConstraintState
 
 from models.dataset_model import DatasetTableModel
 from models.inference_model import InferenceModel
 from models.calibration_model import CalibrationModel
 from models.center_template_model import CenterTemplateModel
+from models.anomaly_constraint_model import AnomalyConstraintModel
 
 from controllers.io_controller import IOController
 from controllers.inference_controller import InferenceController
@@ -43,12 +55,14 @@ def main() -> None:
     inference_state = InferenceState()
     calibration_state = CalibrationState()
     center_template_state = CenterTemplateState()
+    anomaly_constraint_state = AnomalyConstraintState()
 
     # Models
     dataset_model = DatasetTableModel(dataset_state)
     inference_model = InferenceModel(inference_state)
     calibration_model = CalibrationModel(calibration_state)
     center_template_model = CenterTemplateModel(center_template_state)
+    anomaly_constraint_model = AnomalyConstraintModel(anomaly_constraint_state)
 
     # Controllers
     io_controller = IOController(dataset_model)
@@ -61,6 +75,7 @@ def main() -> None:
         inference_controller,
         calibration_model=calibration_model,
         center_template_model=center_template_model,
+        anomaly_constraint_model=anomaly_constraint_model,
     )
 
     # View
@@ -73,6 +88,7 @@ def main() -> None:
         calibration_model=calibration_model,
         center_template_model=center_template_model,
         center_template_controller=center_template_controller,
+        anomaly_constraint_model=anomaly_constraint_model,
     )
     window.show()
 

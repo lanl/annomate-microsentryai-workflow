@@ -16,6 +16,7 @@ class NavigatorColumns:
 SOURCE_ROW_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 STATUS_COLOR_ROLE = Qt.UserRole + 3
+STATUS_OMIT_ROLE = Qt.UserRole + 4
 
 
 _HEADERS = ["", "Img ID", "Annots", "Decision", "Score", "Class"]
@@ -27,8 +28,8 @@ _TOOLTIPS = {
     NavigatorColumns.SCORE: "MicroSentry anomaly score",
     NavigatorColumns.CLASS: "MicroSentry class",
 }
-_DECISION_LABELS = {"accept": "Accept", "reject": "Reject"}
-_DECISION_SORT = {None: 0, "": 0, "accept": 1, "reject": 2}
+_DECISION_LABELS = {"accept": "Accept", "reject": "Reject", "omitted": "Omitted"}
+_DECISION_SORT = {None: 0, "": 0, "accept": 1, "reject": 2, "omitted": 3}
 _CLASS_SORT = {"": 0, "ANOMALY": 1, "NORMAL": 2}
 
 
@@ -82,6 +83,8 @@ class NavigatorTableModel(QAbstractTableModel):
             return self.sort_value(row, col)
         if role == STATUS_COLOR_ROLE and col == NavigatorColumns.STATUS:
             return "#4caf50" if self._dataset_model.is_reviewed(row) else "#ff9800"
+        if role == STATUS_OMIT_ROLE and col == NavigatorColumns.STATUS:
+            return self._dataset_model.get_review_decision(row) == "omitted"
         if role == Qt.ToolTipRole:
             return self._tooltip(row, col)
         if role == Qt.TextAlignmentRole:
@@ -176,6 +179,14 @@ class NavigatorTableModel(QAbstractTableModel):
 
     def _tooltip(self, row: int, col: int) -> str:
         if col == NavigatorColumns.STATUS:
+            decision = self._dataset_model.get_review_decision(row)
+            if decision == "omitted":
+                reason = self._dataset_model.get_omit_reason(row)
+                if reason == "no_decision":
+                    return "Omitted: Annotated without making an Accept/Reject decision"
+                if reason == "no_annotation":
+                    return "Omitted: Image was rejected without any annotations"
+                return "Omitted: Review was skipped"
             return "Reviewed" if self._dataset_model.is_reviewed(row) else "In Review"
         value = self._display(row, col)
         return value or (_TOOLTIPS.get(col) or "")
@@ -211,6 +222,8 @@ class NavigatorTableModel(QAbstractTableModel):
                 return QBrush(QColor("#4caf50"))
             if decision == "reject":
                 return QBrush(QColor("#f44336"))
+            if decision == "omitted":
+                return QBrush(QColor("#ff9800"))
         if col == NavigatorColumns.CLASS:
             label = self._label(row)
             if label == "ANOMALY":
