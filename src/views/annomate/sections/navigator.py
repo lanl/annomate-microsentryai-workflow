@@ -1,5 +1,5 @@
 from PySide6.QtCore import QItemSelectionModel, QRect, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QPainter
+from PySide6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -106,6 +106,7 @@ class DataNavigatorSection(QWidget):
         self._table_model = NavigatorTableModel(dataset_model, inference_model, self)
         self._proxy = NavigatorSortProxyModel(self)
         self._proxy.setSourceModel(self._table_model)
+        self._filter_group: QActionGroup | None = None
 
         self._init_ui()
         self.dataset_model.modelReset.connect(self._on_model_reset)
@@ -150,12 +151,12 @@ class DataNavigatorSection(QWidget):
         nav_h.addWidget(QLabel("Omitted"))
         nav_h.addSpacing(4)
 
-        self._btn_columns = QToolButton()
-        self._btn_columns.setText("Columns")
-        self._btn_columns.setToolTip("Choose navigator columns")
-        self._btn_columns.setPopupMode(QToolButton.InstantPopup)
-        self._btn_columns.setMenu(self._build_column_menu())
-        nav_h.addWidget(self._btn_columns)
+        self._btn_settings = QToolButton()
+        self._btn_settings.setText("⚙ Settings")
+        self._btn_settings.setToolTip("Filter images and toggle columns")
+        self._btn_settings.setPopupMode(QToolButton.InstantPopup)
+        self._btn_settings.setMenu(self._build_settings_menu())
+        nav_h.addWidget(self._btn_settings)
 
         layout.addWidget(nav_row)
 
@@ -223,8 +224,19 @@ class DataNavigatorSection(QWidget):
 
         layout.addWidget(self._table)
 
-    def _build_column_menu(self) -> QMenu:
+    def _build_settings_menu(self) -> QMenu:
         menu = QMenu(self)
+
+        menu.addSection("Filter")
+        self._filter_group = QActionGroup(menu)
+        self._filter_group.setExclusive(True)
+        for label in ("All images", "Accept only", "Reject only", "Undecided only"):
+            action = QAction(label, self._filter_group)
+            action.setCheckable(True)
+            menu.addAction(action)
+        self._filter_group.actions()[0].setChecked(True)
+
+        menu.addSection("Columns")
         for column, label in _OPTIONAL_COLUMNS:
             action = QAction(label, self)
             action.setCheckable(True)
@@ -234,6 +246,7 @@ class DataNavigatorSection(QWidget):
             )
             menu.addAction(action)
             self._column_actions[column] = action
+
         return menu
 
     def _on_model_reset(self) -> None:
