@@ -271,3 +271,73 @@ class TestStatusTooltip:
             setup()
             tip = nav._status_tooltip(0)
             assert "—" not in tip, f"Em dash found in tooltip: {tip!r}"
+
+
+class TestProxyFilter:
+    @pytest.fixture
+    def nav_model(self, dataset_model, inference_model):
+        return NavigatorTableModel(dataset_model, inference_model)
+
+    @pytest.fixture
+    def proxy(self, nav_model):
+        p = NavigatorSortProxyModel()
+        p.setSourceModel(nav_model)
+        return p
+
+    def _visible_source_rows(self, proxy):
+        return [
+            proxy.mapToSource(proxy.index(r, 0)).row()
+            for r in range(proxy.rowCount())
+        ]
+
+    def test_all_shows_every_row(self, proxy, dataset_model):
+        proxy.set_filter_mode("all")
+        assert proxy.rowCount() == 3
+
+    def test_accept_filter(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        proxy.set_filter_mode("accept")
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_reject_filter(self, proxy, dataset_model):
+        dataset_model.set_review_decision(1, "reject")
+        proxy.set_filter_mode("reject")
+        assert self._visible_source_rows(proxy) == [1]
+
+    def test_undecided_filter(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.set_review_decision(1, "reject")
+        proxy.set_filter_mode("undecided")
+        assert self._visible_source_rows(proxy) == [2]
+
+    def test_incomplete_filter_catches_reject_without_annotation(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "reject")  # incomplete — no work
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")  # reviewed
+        proxy.set_filter_mode("incomplete")
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_incomplete_filter_catches_accept_conflict(self, proxy, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")  # accept_conflict
+        proxy.set_filter_mode("incomplete")
+        assert 0 in self._visible_source_rows(proxy)
+
+    def test_incomplete_filter_catches_undecided_with_work(self, proxy, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        # no decision set — undecided_work
+        proxy.set_filter_mode("incomplete")
+        assert 0 in self._visible_source_rows(proxy)
+
+    def test_conflicting_filter_shows_only_accept_conflict(self, proxy, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")   # accept_conflict
+        dataset_model.set_review_decision(1, "reject")   # reject_incomplete
+        dataset_model.add_annotation(2, "crack", _POLY)  # undecided_work
+        proxy.set_filter_mode("conflicting")
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_conflicting_filter_excludes_reject_incomplete(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "reject")
+        proxy.set_filter_mode("conflicting")
+        assert self._visible_source_rows(proxy) == []

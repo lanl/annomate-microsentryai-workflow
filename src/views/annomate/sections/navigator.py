@@ -59,6 +59,7 @@ _FILTER_OPTIONS = (
     ("Reject only", "reject"),
     ("Undecided only", "undecided"),
     ("Incomplete only", "incomplete"),
+    ("Conflicting only", "conflicting"),
 )
 
 

@@ -348,15 +348,18 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
         if model is None:
             return True
         idx = model.index(source_row, 0)
-        decision = model.data(idx, FILTER_DECISION_ROLE)
-        if self._filter_mode == "accept":
-            return decision == "accept"
-        if self._filter_mode == "reject":
-            return decision == "reject"
-        if self._filter_mode == "undecided":
-            return not decision
+        if self._filter_mode in ("accept", "reject", "undecided"):
+            decision = model.data(idx, FILTER_DECISION_ROLE)
+            if self._filter_mode == "accept":
+                return decision == "accept"
+            if self._filter_mode == "reject":
+                return decision == "reject"
+            return not decision  # undecided
+        state = model.data(idx, IMAGE_STATE_ROLE)
         if self._filter_mode == "incomplete":
-            return decision == "reject" and not model.data(idx, FILTER_COMPLETE_ROLE)
+            return state in ("reject_incomplete", "accept_conflict", "undecided_work")
+        if self._filter_mode == "conflicting":
+            return state == "accept_conflict"
         return True
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:
