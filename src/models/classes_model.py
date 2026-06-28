@@ -15,8 +15,9 @@ CLASS_NAME_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 COLOR_ROLE = Qt.UserRole + 3
 VISIBLE_ROLE = Qt.UserRole + 4
-IMAGE_TAG_ROLE = Qt.UserRole + 5  # bool — whether this class is tagged for the current image
+IMAGE_TAG_ROLE = Qt.UserRole + 5  # bool — tagged in any mode (union of pixel and image-level)
 IMAGE_LEVEL_MODE_ROLE = Qt.UserRole + 6  # bool — whether image-level annotation mode is active
+IMAGE_TAG_KIND_ROLE = Qt.UserRole + 7  # str — "active" | "inactive" | "none"
 
 _HEADERS = ["", "", "Class", "Img", "Tot", "", ""]
 _TOOLTIPS = {
@@ -38,7 +39,9 @@ class ClassTableModel(QAbstractTableModel):
         self._dataset_model = dataset_model
         self._current_row = -1
         self._class_names = self._dataset_model.get_class_names()
-        self._image_tags: set = set()
+        self._pixel_tags: set = set()
+        self._image_level_tags: set = set()
+        self._image_tags: set = set()  # union of both — used for sort
         self._tag_interactive: bool = False
         self._in_image_level_mode: bool = False
 
@@ -101,6 +104,8 @@ class ClassTableModel(QAbstractTableModel):
             return self._dataset_model.is_class_visible(name)
         if role == IMAGE_TAG_ROLE:
             return name in self._image_tags
+        if role == IMAGE_TAG_KIND_ROLE:
+            return self._tag_kind(name)
         if role == IMAGE_LEVEL_MODE_ROLE and col == ClassColumns.IMAGE_TAG:
             return self._in_image_level_mode
         if role == Qt.ToolTipRole:
@@ -120,14 +125,21 @@ class ClassTableModel(QAbstractTableModel):
     def _refresh_tag_state(self) -> None:
         """Update image tag state and interactivity for the current row."""
         if self._current_row >= 0:
-            self._image_tags = set(
-                self._dataset_model.get_image_classes(self._current_row)
-            )
             mode = self._dataset_model.get_annotation_mode()
             decision = self._dataset_model.get_review_decision(self._current_row)
             self._tag_interactive = (mode == "image_level" and decision == "reject")
             self._in_image_level_mode = (mode == "image_level")
+            self._pixel_tags = {
+                a["category_name"]
+                for a in self._dataset_model.get_annotations(self._current_row)
+            }
+            self._image_level_tags = set(
+                self._dataset_model.get_image_classes(self._current_row)
+            )
+            self._image_tags = self._pixel_tags | self._image_level_tags
         else:
+            self._pixel_tags = set()
+            self._image_level_tags = set()
             self._image_tags = set()
             self._tag_interactive = False
             self._in_image_level_mode = False
@@ -135,7 +147,7 @@ class ClassTableModel(QAbstractTableModel):
             self.dataChanged.emit(
                 self.index(0, ClassColumns.IMAGE_TAG),
                 self.index(self.rowCount() - 1, ClassColumns.IMAGE_TAG),
-                [Qt.DisplayRole, IMAGE_TAG_ROLE, IMAGE_LEVEL_MODE_ROLE],
+                [Qt.DisplayRole, IMAGE_TAG_ROLE, IMAGE_TAG_KIND_ROLE, IMAGE_LEVEL_MODE_ROLE],
             )
 
     def refresh_classes(self) -> None:
@@ -156,6 +168,30 @@ class ClassTableModel(QAbstractTableModel):
         if not (0 <= row < self.rowCount()):
             return ""
         return self._class_names[row]
+
+    def _tag_kind(self, name: str) -> str:
+        """Return tag classification for name.
+
+        "active"   — amber: has pixel annotation (pixel mode) OR purely image-level tag
+                     with no pixel backing (image-level mode)
+        "inactive" — blue: has pixel annotation (image-level mode) OR only image-level
+                     tag with no pixel backing (pixel mode)
+        "none"     — not tagged in either mode
+
+        The amber/blue meaning is consistent: amber = active-mode-exclusive,
+        blue = other-mode-backed. In both modes, blue always means pixel-backed.
+        """
+        has_pixel = name in self._pixel_tags
+        has_image = name in self._image_level_tags
+        if not has_pixel and not has_image:
+            return "none"
+        if self._in_image_level_mode:
+            # Amber = exclusively image-level (no pixel backing)
+            # Blue  = pixel-backed (with or without an image-level tag)
+            return "active" if (has_image and not has_pixel) else "inactive"
+        # Pixel mode:
+        # Amber = has pixel annotation   Blue = image-level tag only
+        return "active" if has_pixel else "inactive"
 
     def sort_value(self, row: int, col: int):
         name = self.class_name(row)
@@ -189,7 +225,8 @@ class ClassTableModel(QAbstractTableModel):
         self.dataChanged.emit(
             self.index(0, 0),
             self.index(self.rowCount() - 1, self.columnCount() - 1),
-            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, VISIBLE_ROLE, IMAGE_TAG_ROLE, Qt.ToolTipRole],
+            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, VISIBLE_ROLE,
+             IMAGE_TAG_ROLE, IMAGE_TAG_KIND_ROLE, Qt.ToolTipRole],
         )
 
     def _on_annotation_mode_changed(self, mode: str) -> None:
@@ -224,10 +261,31 @@ class ClassTableModel(QAbstractTableModel):
 
     def _tooltip(self, name: str, col: int) -> str:
         if col == ClassColumns.IMAGE_TAG:
-            if not self._tag_interactive:
-                return "Switch to Image Level Mode and reject this image to assign class tags"
-            tagged = name in self._image_tags
-            return f'{"Remove" if tagged else "Add"} "{name}" as an image-level defect tag'
+            kind = self._tag_kind(name)
+            if kind == "none":
+                if self._tag_interactive:
+                    return f'Click to add "{name}" as an image-level tag'
+                return "Switch to Image Level mode and reject this image to assign class tags"
+            if self._in_image_level_mode:
+                if kind == "active":
+                    return f'"{name}" is exclusively tagged at image level. Click to remove.'
+                # inactive = pixel-backed (may or may not also have an image-level tag)
+                pixel_n = self._count_image_annotations(name)
+                if name in self._image_level_tags:
+                    return (
+                        f'"{name}" has {pixel_n} pixel-level annotation(s) and an '
+                        f'image-level tag. To untag, remove the pixel annotations in '
+                        f'Pixel Level mode first.'
+                    )
+                return (
+                    f'"{name}" has {pixel_n} pixel-level annotation(s) on this image. '
+                    f'Click to also add an image-level tag.'
+                )
+            else:
+                if kind == "active":
+                    pixel_n = self._count_image_annotations(name)
+                    return f'"{name}" has {pixel_n} pixel-level annotation(s) on this image'
+                return f'"{name}" is tagged at image level — switch to Image Level mode to manage'
         if col == ClassColumns.COLOR:
             r, g, b = self._dataset_model.get_class_color(name)
             return f"{name}: rgb({r}, {g}, {b})"

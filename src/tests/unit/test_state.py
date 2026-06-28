@@ -285,6 +285,54 @@ class TestImageClasses:
         assert "img.jpg" not in state.image_classes
 
 
+class TestMergePixelClasses:
+    def test_populates_empty_image_classes_from_pixels(self, state):
+        state.image_files = ["img.jpg"]
+        state.add_annotation("img.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        state.add_annotation("img.jpg", "void", [(0, 0), (1, 0), (1, 1)])
+        state.merge_pixel_classes_to_image_level()
+        result = set(state.get_image_classes("img.jpg"))
+        assert result == {"crack", "void"}
+
+    def test_adds_new_pixel_class_to_existing_tags(self, state):
+        state.image_files = ["img.jpg"]
+        state.set_image_classes("img.jpg", ["crack"])
+        state.add_annotation("img.jpg", "void", [(0, 0), (1, 0), (1, 1)])
+        state.merge_pixel_classes_to_image_level()
+        result = set(state.get_image_classes("img.jpg"))
+        assert "crack" in result
+        assert "void" in result
+
+    def test_does_not_duplicate_existing_tags(self, state):
+        state.image_files = ["img.jpg"]
+        state.set_image_classes("img.jpg", ["crack"])
+        state.add_annotation("img.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        state.merge_pixel_classes_to_image_level()
+        assert state.get_image_classes("img.jpg").count("crack") == 1
+
+    def test_skips_images_with_no_pixel_annotations(self, state):
+        state.image_files = ["img.jpg"]
+        state.merge_pixel_classes_to_image_level()
+        assert state.get_image_classes("img.jpg") == []
+
+    def test_multiple_images_merged_independently(self, state):
+        state.image_files = ["a.jpg", "b.jpg"]
+        state.add_annotation("a.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        state.add_annotation("b.jpg", "void", [(0, 0), (1, 0), (1, 1)])
+        state.merge_pixel_classes_to_image_level()
+        assert set(state.get_image_classes("a.jpg")) == {"crack"}
+        assert set(state.get_image_classes("b.jpg")) == {"void"}
+
+    def test_merge_is_non_destructive_for_custom_tags(self, state):
+        state.image_files = ["img.jpg"]
+        state.set_image_classes("img.jpg", ["scratch"])
+        state.add_annotation("img.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        state.merge_pixel_classes_to_image_level()
+        result = set(state.get_image_classes("img.jpg"))
+        assert "scratch" in result
+        assert "crack" in result
+
+
 class TestIsReviewedWithMode:
     def test_pixel_mode_reject_needs_polygon(self, state):
         state.set_annotation_mode("pixel")

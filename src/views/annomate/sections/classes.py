@@ -24,6 +24,7 @@ from models.classes_model import (
     CLASS_NAME_ROLE,
     COLOR_ROLE,
     IMAGE_LEVEL_MODE_ROLE,
+    IMAGE_TAG_KIND_ROLE,
     IMAGE_TAG_ROLE,
     VISIBLE_ROLE,
     ClassColumns,
@@ -33,6 +34,8 @@ from models.classes_model import (
 
 
 _TAG_COL_W = 28
+_COLOR_TAG_ACTIVE = QColor("#ff9800")    # amber — current mode's tags
+_COLOR_TAG_INACTIVE = QColor("#4a90d9")  # blue  — other mode's tags
 _COLOR_COL_W = 44
 _SWATCH_W = 24
 _COUNT_W = 56
@@ -186,13 +189,12 @@ class _ImageTagDelegate(QStyledItemDelegate):
         if style is not None:
             style.drawControl(QStyle.CE_ItemViewItem, opt, painter)
 
-        tagged = bool(index.data(IMAGE_TAG_ROLE))
-        rgb = index.data(COLOR_ROLE)
+        kind = index.data(IMAGE_TAG_KIND_ROLE)  # "active" | "inactive" | "none"
         interactive = bool(index.flags() & Qt.ItemIsSelectable)
         in_mode = bool(index.data(IMAGE_LEVEL_MODE_ROLE))
 
-        if not tagged and not interactive and not in_mode:
-            return  # pixel mode, no tags → draw nothing
+        if kind == "none" and not interactive and not in_mode:
+            return  # pixel mode, untagged — draw nothing beyond the row background
 
         rect = option.rect
         cx = rect.x() + rect.width() // 2
@@ -203,35 +205,37 @@ class _ImageTagDelegate(QStyledItemDelegate):
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
 
-        if interactive and tagged and rgb:
-            # image-level mode + rejected + tagged → colored filled square
-            painter.setBrush(QColor(*rgb))
-            painter.setPen(QPen(QColor(*rgb).darker(140), 1))
-        elif tagged:
-            # tagged but not interactive → grey filled square (read-only reference)
-            painter.setBrush(QColor(160, 160, 160, 120))
-            painter.setPen(QPen(QColor(120, 120, 120), 1))
+        if kind == "active":
+            painter.setBrush(_COLOR_TAG_ACTIVE)
+            painter.setPen(QPen(_COLOR_TAG_ACTIVE.darker(130), 1))
+            painter.drawRoundedRect(sq, 3, 3)
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            self._draw_check(painter, sq)
+        elif kind == "inactive":
+            painter.setBrush(_COLOR_TAG_INACTIVE)
+            painter.setPen(QPen(_COLOR_TAG_INACTIVE.darker(130), 1))
+            painter.drawRoundedRect(sq, 3, 3)
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            self._draw_check(painter, sq)
         elif interactive:
-            # image-level mode + rejected + not yet tagged → bright empty outlined square
+            # No tag yet but interactive — empty outlined square (click to tag)
             painter.setBrush(Qt.NoBrush)
             painter.setPen(QPen(QColor(160, 160, 160), 1))
+            painter.drawRoundedRect(sq, 3, 3)
         else:
-            # image-level mode active, but image not rejected → faint empty square
+            # In image-level mode, not interactive, not tagged — faint square
             painter.setBrush(Qt.NoBrush)
             painter.setPen(QPen(QColor(190, 190, 190, 100), 1))
-
-        painter.drawRoundedRect(sq, 3, 3)
-
-        if tagged:
-            tick_color = QColor(255, 255, 255) if interactive else QColor(80, 80, 80)
-            painter.setPen(QPen(tick_color, 1.5))
-            l, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
-            painter.drawLine(int(l + 2), int(t + h * 0.55),
-                             int(l + w * 0.4), int(t + h - 2))
-            painter.drawLine(int(l + w * 0.4), int(t + h - 2),
-                             int(l + w - 1), int(t + 2))
+            painter.drawRoundedRect(sq, 3, 3)
 
         painter.restore()
+
+    def _draw_check(self, painter: QPainter, sq: QRectF) -> None:
+        l, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
+        painter.drawLine(int(l + 2), int(t + h * 0.55),
+                         int(l + w * 0.4), int(t + h - 2))
+        painter.drawLine(int(l + w * 0.4), int(t + h - 2),
+                         int(l + w - 1), int(t + 2))
 
 
 class ClassesSection(QWidget):
@@ -490,6 +494,18 @@ class ClassesSection(QWidget):
             return
         current = self.dataset_model.get_image_classes(self._current_row)
         if name in current:
+            pixel_count = self.dataset_model.get_pixel_annotation_count_for_class(
+                self._current_row, name
+            )
+            if pixel_count > 0:
+                QMessageBox.warning(
+                    self,
+                    "Cannot Remove Tag",
+                    f"'{name}' has {pixel_count} pixel-level annotation(s) on this image.\n"
+                    "To remove this class, switch to pixel-level mode and delete those "
+                    "annotations first.",
+                )
+                return
             current.remove(name)
         else:
             current.append(name)

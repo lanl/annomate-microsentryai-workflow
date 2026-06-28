@@ -531,10 +531,15 @@ class DatasetTableModel(QAbstractTableModel):
     def set_annotation_mode(self, mode: str) -> None:
         """Switch the annotation workflow mode and refresh all status indicators.
 
+        When switching to image_level, pixel annotation classes are merged into
+        image_classes for each image (non-destructive — existing tags are kept).
+
         Args:
             mode (str): ``"pixel"`` or ``"image_level"``.
         """
         self.state.set_annotation_mode(mode)
+        if mode == "image_level":
+            self.state.merge_pixel_classes_to_image_level()
         self.annotation_mode_changed.emit(mode)
         self.beginResetModel()
         self.endResetModel()
@@ -569,6 +574,24 @@ class DatasetTableModel(QAbstractTableModel):
         if not (0 <= row < self.rowCount()):
             return []
         return self.state.get_image_classes(self.state.image_files[row])
+
+    def get_pixel_annotation_count_for_class(self, row: int, class_name: str) -> int:
+        """Count polygon annotations of class_name on the image at row.
+
+        Args:
+            row (int): Zero-based row index of the target image.
+            class_name (str): Class label to count (case-sensitive; store in lowercase).
+
+        Returns:
+            int: Number of annotations matching class_name, or 0 for out-of-bounds rows.
+        """
+        if not (0 <= row < self.rowCount()):
+            return 0
+        fname = self.state.image_files[row]
+        return sum(
+            1 for a in self.state.annotations.get(fname, [])
+            if a.get("category_name") == class_name
+        )
 
     def get_annotation_count(self, row: int) -> int:
         """Return the number of polygon annotations for the image at *row*.

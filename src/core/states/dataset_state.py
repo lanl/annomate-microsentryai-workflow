@@ -249,6 +249,24 @@ class DatasetState:
         """Return image-level defect class tags, or an empty list if none set."""
         return list(self.image_classes.get(image_name, []))
 
+    def merge_pixel_classes_to_image_level(self) -> None:
+        """Add pixel annotation classes to image_classes for each image (non-destructive).
+
+        Only adds classes that are not already present — never removes existing tags.
+        Images with no polygon annotations are left unchanged.
+        """
+        for fname in self.image_files:
+            pixel_classes = {
+                a["category_name"] for a in self.annotations.get(fname, [])
+            }
+            if not pixel_classes:
+                continue
+            existing = self.image_classes.get(fname, [])
+            existing_set = set(existing)
+            new_classes = [c for c in pixel_classes if c not in existing_set]
+            if new_classes:
+                self.image_classes[fname] = existing + new_classes
+
     # --- Per-image Metadata ---
 
     def set_inspector(self, image_name: str, value: str) -> None:
