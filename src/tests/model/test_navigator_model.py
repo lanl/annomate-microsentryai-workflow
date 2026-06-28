@@ -162,9 +162,14 @@ class TestImageState:
         dataset_model.add_annotation(0, "crack", _POLY)
         assert nav._image_state(0) == "undecided_work"
 
-    def test_no_decision_with_image_class_is_undecided_work(self, nav, dataset_model):
+    def test_no_decision_with_image_class_is_undecided_work_in_image_level_mode(self, nav, dataset_model):
+        dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["crack"])
         assert nav._image_state(0) == "undecided_work"
+
+    def test_no_decision_with_image_class_is_undecided_in_pixel_mode(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["crack"])
+        assert nav._image_state(0) == "undecided"
 
     def test_accept_no_work_is_accept_clean(self, nav, dataset_model):
         dataset_model.set_review_decision(0, "accept")
@@ -175,10 +180,16 @@ class TestImageState:
         dataset_model.set_review_decision(0, "accept")
         assert nav._image_state(0) == "accept_conflict"
 
-    def test_accept_with_image_class_is_accept_conflict(self, nav, dataset_model):
+    def test_accept_with_image_class_is_accept_conflict_in_image_level_mode(self, nav, dataset_model):
+        dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["crack"])
         dataset_model.set_review_decision(0, "accept")
         assert nav._image_state(0) == "accept_conflict"
+
+    def test_accept_with_image_class_is_accept_clean_in_pixel_mode(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_clean"
 
     def test_reject_no_work_is_reject_incomplete(self, nav, dataset_model):
         dataset_model.set_review_decision(0, "reject")
@@ -189,10 +200,16 @@ class TestImageState:
         dataset_model.set_review_decision(0, "reject")
         assert nav._image_state(0) == "reject_reviewed"
 
-    def test_reject_with_image_class_is_reject_reviewed(self, nav, dataset_model):
+    def test_reject_with_image_class_is_reject_reviewed_in_image_level_mode(self, nav, dataset_model):
+        dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["crack"])
         dataset_model.set_review_decision(0, "reject")
         assert nav._image_state(0) == "reject_reviewed"
+
+    def test_reject_with_image_class_is_reject_incomplete_in_pixel_mode(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_incomplete"
 
 
 class TestStatusTooltip:
@@ -212,6 +229,7 @@ class TestStatusTooltip:
         assert "polygon annotation" in tip
 
     def test_undecided_work_tooltip_mentions_class_tag(self, nav, dataset_model):
+        dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["void"])
         tip = nav._status_tooltip(0)
         assert "No decision" in tip

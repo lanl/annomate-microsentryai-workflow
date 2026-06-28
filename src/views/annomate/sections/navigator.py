@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from models.navigator_model import (
     FILTER_COMPLETE_ROLE,
     FILTER_DECISION_ROLE,
+    IMAGE_STATE_ROLE,
     NavigatorColumns,
     NavigatorSortProxyModel,
     NavigatorTableModel,
@@ -79,24 +80,22 @@ class _StatusDotDelegate(QStyledItemDelegate):
         rect = option.rect
         x = rect.x() + (rect.width() - _DOT_W) // 2
         y = rect.y() + (rect.height() - _DOT_W) // 2
-        decision = index.data(FILTER_DECISION_ROLE)
-        complete = index.data(FILTER_COMPLETE_ROLE)
-        is_reviewed = (decision == "accept") or (decision == "reject" and complete)
+        state = index.data(IMAGE_STATE_ROLE)
 
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
-        if decision == "reject" and not complete:
+        if state in ("reject_incomplete", "accept_conflict", "undecided_work"):
             painter.setPen(QColor(_COLOR_INCOMPLETE))
             f = painter.font()
             f.setPixelSize(_DOT_W + 2)
             f.setBold(True)
             painter.setFont(f)
             painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "!")
-        elif is_reviewed:
+        elif state in ("accept_clean", "reject_reviewed"):
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(_COLOR_REVIEWED))
             painter.drawEllipse(x, y, _DOT_W, _DOT_W)
-        else:
+        else:  # undecided
             painter.setPen(QPen(QColor(_COLOR_UNDECIDED), 1.5))
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(x, y, _DOT_W, _DOT_W)

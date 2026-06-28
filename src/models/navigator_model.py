@@ -18,6 +18,7 @@ SORT_ROLE = Qt.UserRole + 2
 STATUS_COLOR_ROLE = Qt.UserRole + 3
 FILTER_DECISION_ROLE = Qt.UserRole + 5   # raw decision string for proxy filtering
 FILTER_COMPLETE_ROLE = Qt.UserRole + 6   # bool: reject + sufficient work for current mode
+IMAGE_STATE_ROLE = Qt.UserRole + 7       # str: one of the six _image_state() keys
 
 
 _HEADERS = ["", "Img ID", "Annots", "Decision", "Score", "Class"]
@@ -86,6 +87,8 @@ class NavigatorTableModel(QAbstractTableModel):
             return self._dataset_model.get_review_decision(row)
         if role == FILTER_COMPLETE_ROLE:
             return self._is_complete(row)
+        if role == IMAGE_STATE_ROLE:
+            return self._image_state(row)
         if role == STATUS_COLOR_ROLE and col == NavigatorColumns.STATUS:
             return "#4caf50" if self._dataset_model.is_reviewed(row) else "#ff9800"
         if role == Qt.ToolTipRole:
@@ -147,19 +150,24 @@ class NavigatorTableModel(QAbstractTableModel):
     def _image_state(self, row: int) -> str:
         """Return a string key describing the review completeness of this image.
 
+        "Work" is mode-aware: pixel mode counts polygon annotations; image-level
+        mode counts image-level class tags.  This keeps the state consistent with
+        what the user can actually produce in the current mode.
+
         States:
-            undecided         -- no decision, no annotations or tags
-            undecided_work    -- no decision, but has pixel annotations or image-level tags
-            accept_clean      -- accepted, no annotations or tags
-            accept_conflict   -- accepted, but has pixel annotations and/or image-level tags
-            reject_incomplete -- rejected, no annotations and no tags
-            reject_reviewed   -- rejected, has pixel annotations or image-level tags
+            undecided         -- no decision, no work in the current mode
+            undecided_work    -- no decision, but has work in the current mode
+            accept_clean      -- accepted, no work in the current mode
+            accept_conflict   -- accepted, but has work in the current mode
+            reject_incomplete -- rejected, no work in the current mode
+            reject_reviewed   -- rejected, has work in the current mode
         """
         decision = self._dataset_model.get_review_decision(row)
-        has_work = (
-            self._dataset_model.get_annotation_count(row) > 0
-            or bool(self._dataset_model.get_image_classes(row))
-        )
+        mode = self._dataset_model.get_annotation_mode()
+        if mode == "image_level":
+            has_work = bool(self._dataset_model.get_image_classes(row))
+        else:
+            has_work = self._dataset_model.get_annotation_count(row) > 0
         if decision is None:
             return "undecided_work" if has_work else "undecided"
         if decision == "accept":
