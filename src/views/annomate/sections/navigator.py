@@ -1,5 +1,5 @@
 from PySide6.QtCore import QItemSelectionModel, QRect, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QColor, QPainter
+from PySide6.QtGui import QAction, QActionGroup, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -29,11 +29,12 @@ from models.navigator_model import (
 )
 
 from ._shared import (
-    _COLOR_IN_REVIEW,
     _COLOR_INCOMPLETE,
     _COLOR_REVIEWED,
+    _COLOR_UNDECIDED,
     _dot,
     _incomplete_badge,
+    _ring_undecided,
 )
 
 
@@ -78,21 +79,26 @@ class _StatusDotDelegate(QStyledItemDelegate):
         rect = option.rect
         x = rect.x() + (rect.width() - _DOT_W) // 2
         y = rect.y() + (rect.height() - _DOT_W) // 2
+        decision = index.data(FILTER_DECISION_ROLE)
+        complete = index.data(FILTER_COMPLETE_ROLE)
+        is_reviewed = (decision == "accept") or (decision == "reject" and complete)
+
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
-        if (
-            index.data(FILTER_DECISION_ROLE) == "reject"
-            and not index.data(FILTER_COMPLETE_ROLE)
-        ):
+        if decision == "reject" and not complete:
             painter.setPen(QColor(_COLOR_INCOMPLETE))
             f = painter.font()
             f.setPixelSize(_DOT_W + 2)
             f.setBold(True)
             painter.setFont(f)
             painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "!")
-        else:
+        elif is_reviewed:
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(color))
+            painter.setBrush(QColor(_COLOR_REVIEWED))
+            painter.drawEllipse(x, y, _DOT_W, _DOT_W)
+        else:
+            painter.setPen(QPen(QColor(_COLOR_UNDECIDED), 1.5))
+            painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(x, y, _DOT_W, _DOT_W)
         painter.restore()
 
@@ -152,8 +158,8 @@ class DataNavigatorSection(QWidget):
         self._lbl_counter = QLabel("No images loaded")
         nav_h.addWidget(self._lbl_counter)
         nav_h.addStretch()
-        nav_h.addWidget(_dot(_COLOR_IN_REVIEW))
-        nav_h.addWidget(QLabel("In Review"))
+        nav_h.addWidget(_ring_undecided())
+        nav_h.addWidget(QLabel("Undecided"))
         nav_h.addSpacing(4)
         nav_h.addWidget(_dot(_COLOR_REVIEWED))
         nav_h.addWidget(QLabel("Reviewed"))
