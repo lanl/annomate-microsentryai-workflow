@@ -30,8 +30,12 @@ class DatasetState:
         self.image_dir = ""
         self.image_files = []
 
+        # Annotation workflow mode — "pixel" (default) or "image_level"
+        self.annotation_mode: str = "pixel"
+
         # Annotations & Metadata
         self.annotations = {}  # { "img.jpg": [ { "category_name": str, "polygon": [...] } ] }
+        self.image_classes = {}  # { "img.jpg": ["crack", "void"] } — image-level class tags
         self.inspectors = {}  # { "img.jpg": "John Doe" }
         self.notes = {}  # { "img.jpg": "Needs review" }
         self.review_decisions = {}  # { "img.jpg": "accept" | "reject" | "omitted" }
@@ -48,7 +52,9 @@ class DatasetState:
         """Reset per-folder data. Class registry is intentionally preserved."""
         self.image_dir = ""
         self.image_files = []
+        self.annotation_mode = "pixel"
         self.annotations.clear()
+        self.image_classes.clear()
         self.inspectors.clear()
         self.notes.clear()
         self.review_decisions.clear()
@@ -66,7 +72,8 @@ class DatasetState:
         """Return whether an image has been fully reviewed.
 
         Accept decisions are reviewed unconditionally. Reject decisions require
-        at least one annotation to be considered reviewed.
+        evidence appropriate to the current annotation_mode: at least one polygon
+        annotation in pixel mode, or at least one image-level class tag in image_level mode.
 
         Args:
             img_name (str): Image filename to check.
@@ -78,6 +85,8 @@ class DatasetState:
         if decision == "accept":
             return True
         if decision == "reject":
+            if self.annotation_mode == "image_level":
+                return bool(self.image_classes.get(img_name))
             return bool(self.annotations.get(img_name))
         return False
 
@@ -192,6 +201,12 @@ class DatasetState:
                 self.annotations[img] = [
                     a for a in self.annotations[img] if a.get("category_name") != name
                 ]
+            for img in list(self.image_classes):
+                tags = [t for t in self.image_classes[img] if t != name]
+                if tags:
+                    self.image_classes[img] = tags
+                else:
+                    del self.image_classes[img]
 
     def set_class_visible(self, name: str, visible: bool) -> None:
         """Set viewport visibility for an annotation class."""
@@ -201,6 +216,40 @@ class DatasetState:
     def is_class_visible(self, name: str) -> bool:
         """Return whether an annotation class should render in the viewport."""
         return self.class_visibility.get(name, True)
+
+    # --- Annotation Mode ---
+
+    def set_annotation_mode(self, mode: str) -> None:
+        """Switch the annotation workflow mode.
+
+        Args:
+            mode (str): ``"pixel"`` for polygon annotation or ``"image_level"``
+                for image-level class tag assignment.
+        """
+        if mode not in ("pixel", "image_level"):
+            raise ValueError(f"Invalid annotation_mode: {mode!r}")
+        self.annotation_mode = mode
+
+    # --- Image-Level Class Tags ---
+
+    def set_image_classes(self, image_name: str, names: list) -> None:
+        """Set image-level defect class tags for *image_name*.
+
+        Stores a deduplicated, lowercased copy. An empty list clears the entry.
+
+        Args:
+            image_name (str): Target image filename.
+            names (list[str]): Class names to assign at the image level.
+        """
+        cleaned = list(dict.fromkeys(n.lower() for n in names))
+        if cleaned:
+            self.image_classes[image_name] = cleaned
+        else:
+            self.image_classes.pop(image_name, None)
+
+    def get_image_classes(self, image_name: str) -> list:
+        """Return image-level defect class tags, or an empty list if none set."""
+        return list(self.image_classes.get(image_name, []))
 
     # --- Per-image Metadata ---
 

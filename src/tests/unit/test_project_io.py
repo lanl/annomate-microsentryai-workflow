@@ -835,3 +835,94 @@ class TestProjectRoundTrip:
         saved_dir = raw["dataset"]["image_dir"]
         assert not saved_dir.startswith("/"), "image_dir should be relative"
         assert saved_dir == "../images"
+
+
+class TestAnnotationModeRoundTrip:
+    def test_annotation_mode_saved_and_restored(self, pio, tmp_path):
+        """annotation_mode 'image_level' round-trips through save/load."""
+        ds = _make_dataset(tmp_path)
+        ds.set_annotation_mode("image_level")
+        inf = InferenceState()
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["annotation_mode"] == "image_level"
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.annotation_mode == "image_level"
+
+    def test_missing_annotation_mode_key_defaults_to_pixel(self, pio, tmp_path):
+        """Old .annoproj files without annotation_mode load as 'pixel'."""
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        del raw["annotation_mode"]
+        Path(path).write_text(json.dumps(raw))
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.annotation_mode == "pixel"
+
+
+class TestImageClassesRoundTrip:
+    def test_image_classes_saved_and_restored(self, pio, tmp_path):
+        """image_classes round-trip: saved in per_image, restored on load."""
+        ds = _make_dataset(tmp_path)
+        ds.set_image_classes("img001.jpg", ["crack", "void"])
+        inf = InferenceState()
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["per_image"]["img001.jpg"]["image_classes"] == ["crack", "void"]
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.get_image_classes("img001.jpg") == ["crack", "void"]
+
+    def test_missing_image_classes_key_is_safe(self, pio, tmp_path):
+        """Old .annoproj files without image_classes load without error."""
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.image_classes == {}
+
+    def test_coco_export_includes_image_classes_extension(self, pio, tmp_path):
+        """COCO images array gets image_classes when tags are present."""
+        ds = _make_dataset(tmp_path)
+        ds.set_image_classes("img001.jpg", ["crack"])
+        coco_path = str(tmp_path / "out.coco.json")
+        pio.export_coco(coco_path, ds)
+        data = json.loads(Path(coco_path).read_text())
+        assert data["images"][0]["image_classes"] == ["crack"]
+
+    def test_coco_export_omits_image_classes_when_absent(self, pio, tmp_path):
+        """COCO images array has no image_classes key when no tags set."""
+        ds = _make_dataset(tmp_path)
+        coco_path = str(tmp_path / "out.coco.json")
+        pio.export_coco(coco_path, ds)
+        data = json.loads(Path(coco_path).read_text())
+        assert "image_classes" not in data["images"][0]

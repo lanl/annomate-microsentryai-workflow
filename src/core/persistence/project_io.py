@@ -148,6 +148,9 @@ class ProjectIO:
                 entry["note"] = note
             if omit_reason:
                 entry["omit_reason"] = omit_reason
+            img_classes = dataset_state.image_classes.get(fname, [])
+            if img_classes:
+                entry["image_classes"] = img_classes
             if entry:
                 per_image[fname] = entry
         _t4 = time.perf_counter()
@@ -158,6 +161,7 @@ class ProjectIO:
             "created_at": created_at,
             "modified_at": now,
             "project_name": project_name,
+            "annotation_mode": dataset_state.annotation_mode,
             "dataset": {
                 "image_dir": self._as_relative_path(
                     dataset_state.image_dir or "", project_dir
@@ -404,6 +408,9 @@ class ProjectIO:
         """
         ds = project_data.get("dataset", {})
 
+        # Annotation mode (absent in old files → default "pixel")
+        dataset_state.annotation_mode = project_data.get("annotation_mode", "pixel")
+
         # Class registry
         class_names = ds.get("class_names", [])
         if class_names:
@@ -455,6 +462,11 @@ class ProjectIO:
                     dataset_state.omit_reasons[fname] = info["omit_reason"]
                 dataset_state.inspectors[fname] = info.get("inspector", "")
                 dataset_state.notes[fname] = info.get("note", "")
+                img_classes = info.get("image_classes", [])
+                if img_classes:
+                    dataset_state.image_classes[fname] = [
+                        c.lower() for c in img_classes
+                    ]
         else:
             # Legacy format: separate review_status, review_decisions, score_cache, label_cache
             for fname, info in project_data.get("review_status", {}).items():
@@ -620,9 +632,11 @@ class ProjectIO:
                 )
                 w, h = self._read_image_size(img_path)
                 dataset_state.image_sizes[fname] = (w, h)
-            coco["images"].append(
-                {"id": img_id, "file_name": fname, "width": w, "height": h}
-            )
+            img_entry = {"id": img_id, "file_name": fname, "width": w, "height": h}
+            tags = dataset_state.image_classes.get(fname, [])
+            if tags:
+                img_entry["image_classes"] = tags
+            coco["images"].append(img_entry)
 
             for ann_rec in dataset_state.annotations.get(fname, []):
                 polygon = ann_rec["polygon"]

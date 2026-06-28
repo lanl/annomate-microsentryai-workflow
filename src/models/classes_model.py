@@ -2,21 +2,25 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyMod
 
 
 class ClassColumns:
-    COLOR = 0
-    CLASS = 1
-    IMAGE = 2
-    TOTAL = 3
-    VISIBILITY = 4
-    DELETE = 5
+    IMAGE_TAG = 0  # image-level defect class tag toggle
+    COLOR = 1
+    CLASS = 2
+    IMAGE = 3
+    TOTAL = 4
+    VISIBILITY = 5
+    DELETE = 6
 
 
 CLASS_NAME_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 COLOR_ROLE = Qt.UserRole + 3
 VISIBLE_ROLE = Qt.UserRole + 4
+IMAGE_TAG_ROLE = Qt.UserRole + 5  # bool — whether this class is tagged for the current image
+IMAGE_LEVEL_MODE_ROLE = Qt.UserRole + 6  # bool — whether image-level annotation mode is active
 
-_HEADERS = ["", "Class", "Img", "Tot", "", ""]
+_HEADERS = ["", "", "Class", "Img", "Tot", "", ""]
 _TOOLTIPS = {
+    ClassColumns.IMAGE_TAG: "Image-level defect class tag (active in Image Level Mode for rejected images)",
     ClassColumns.COLOR: "Annotation class color",
     ClassColumns.CLASS: "Annotation class name",
     ClassColumns.IMAGE: "Class count for this image",
@@ -34,11 +38,17 @@ class ClassTableModel(QAbstractTableModel):
         self._dataset_model = dataset_model
         self._current_row = -1
         self._class_names = self._dataset_model.get_class_names()
+        self._image_tags: set = set()
+        self._tag_interactive: bool = False
+        self._in_image_level_mode: bool = False
 
-        self._dataset_model.modelReset.connect(self.refresh_classes)
+        self._dataset_model.modelReset.connect(self._on_model_reset)
         self._dataset_model.dataChanged.connect(self._on_source_data_changed)
         self._dataset_model.classVisibilityChanged.connect(
             self._on_class_visibility_changed
+        )
+        self._dataset_model.annotation_mode_changed.connect(
+            self._on_annotation_mode_changed
         )
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
@@ -54,6 +64,10 @@ class ClassTableModel(QAbstractTableModel):
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
         if not index.isValid():
             return Qt.NoItemFlags
+        if index.column() == ClassColumns.IMAGE_TAG:
+            if self._tag_interactive:
+                return Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            return Qt.ItemIsEnabled  # visible but not selectable when inactive
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
 
     def headerData(
@@ -64,6 +78,8 @@ class ClassTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             return _HEADERS[section]
         if role == Qt.ToolTipRole:
+            if section == ClassColumns.TOTAL and self._in_image_level_mode:
+                return "Number of images tagged with this defect class"
             return _TOOLTIPS.get(section)
         return None
 
@@ -83,6 +99,10 @@ class ClassTableModel(QAbstractTableModel):
             return self._dataset_model.get_class_color(name)
         if role == VISIBLE_ROLE:
             return self._dataset_model.is_class_visible(name)
+        if role == IMAGE_TAG_ROLE:
+            return name in self._image_tags
+        if role == IMAGE_LEVEL_MODE_ROLE and col == ClassColumns.IMAGE_TAG:
+            return self._in_image_level_mode
         if role == Qt.ToolTipRole:
             return self._tooltip(name, col)
         if role == Qt.TextAlignmentRole:
@@ -93,10 +113,30 @@ class ClassTableModel(QAbstractTableModel):
         return None
 
     def set_current_row(self, row: int) -> None:
-        if row == self._current_row:
-            return
         self._current_row = row
+        self._refresh_tag_state()
         self.refresh_counts()
+
+    def _refresh_tag_state(self) -> None:
+        """Update image tag state and interactivity for the current row."""
+        if self._current_row >= 0:
+            self._image_tags = set(
+                self._dataset_model.get_image_classes(self._current_row)
+            )
+            mode = self._dataset_model.get_annotation_mode()
+            decision = self._dataset_model.get_review_decision(self._current_row)
+            self._tag_interactive = (mode == "image_level" and decision == "reject")
+            self._in_image_level_mode = (mode == "image_level")
+        else:
+            self._image_tags = set()
+            self._tag_interactive = False
+            self._in_image_level_mode = False
+        if self.rowCount() > 0:
+            self.dataChanged.emit(
+                self.index(0, ClassColumns.IMAGE_TAG),
+                self.index(self.rowCount() - 1, ClassColumns.IMAGE_TAG),
+                [Qt.DisplayRole, IMAGE_TAG_ROLE, IMAGE_LEVEL_MODE_ROLE],
+            )
 
     def refresh_classes(self) -> None:
         self.beginResetModel()
@@ -119,6 +159,8 @@ class ClassTableModel(QAbstractTableModel):
 
     def sort_value(self, row: int, col: int):
         name = self.class_name(row)
+        if col == ClassColumns.IMAGE_TAG:
+            return int(name in self._image_tags)
         if col == ClassColumns.COLOR:
             return tuple(self._dataset_model.get_class_color(name))
         if col == ClassColumns.CLASS:
@@ -132,18 +174,26 @@ class ClassTableModel(QAbstractTableModel):
     def tie_break_value(self, row: int) -> str:
         return self.class_name(row).casefold()
 
+    def _on_model_reset(self) -> None:
+        self.refresh_classes()
+        self._refresh_tag_state()
+
     def _on_source_data_changed(self, top_left, bottom_right, roles=None) -> None:
         class_names = self._dataset_model.get_class_names()
         if class_names != self._class_names:
             self.refresh_classes()
             return
+        self._refresh_tag_state()
         if self.rowCount() == 0:
             return
         self.dataChanged.emit(
             self.index(0, 0),
             self.index(self.rowCount() - 1, self.columnCount() - 1),
-            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, VISIBLE_ROLE, Qt.ToolTipRole],
+            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, VISIBLE_ROLE, IMAGE_TAG_ROLE, Qt.ToolTipRole],
         )
+
+    def _on_annotation_mode_changed(self, mode: str) -> None:
+        self._refresh_tag_state()
 
     def _on_class_visibility_changed(self, name: str, visible: bool) -> None:
         row = self._class_names.index(name) if name in self._class_names else -1
@@ -156,6 +206,8 @@ class ClassTableModel(QAbstractTableModel):
         )
 
     def _display(self, name: str, col: int) -> str:
+        if col == ClassColumns.IMAGE_TAG:
+            return ""
         if col == ClassColumns.COLOR:
             return ""
         if col == ClassColumns.CLASS:
@@ -171,9 +223,17 @@ class ClassTableModel(QAbstractTableModel):
         return ""
 
     def _tooltip(self, name: str, col: int) -> str:
+        if col == ClassColumns.IMAGE_TAG:
+            if not self._tag_interactive:
+                return "Switch to Image Level Mode and reject this image to assign class tags"
+            tagged = name in self._image_tags
+            return f'{"Remove" if tagged else "Add"} "{name}" as an image-level defect tag'
         if col == ClassColumns.COLOR:
             r, g, b = self._dataset_model.get_class_color(name)
             return f"{name}: rgb({r}, {g}, {b})"
+        if col == ClassColumns.TOTAL and self._in_image_level_mode:
+            n = self._count_total_annotations(name)
+            return f'"{name}" tagged on {n} image(s) across the dataset'
         if col == ClassColumns.DELETE:
             return f'Delete "{name}"'
         if col == ClassColumns.VISIBILITY:
@@ -184,7 +244,7 @@ class ClassTableModel(QAbstractTableModel):
     def _alignment(self, col: int) -> Qt.AlignmentFlag:
         if col in (ClassColumns.IMAGE, ClassColumns.TOTAL):
             return Qt.AlignRight | Qt.AlignVCenter
-        if col in (ClassColumns.COLOR, ClassColumns.VISIBILITY, ClassColumns.DELETE):
+        if col in (ClassColumns.IMAGE_TAG, ClassColumns.COLOR, ClassColumns.VISIBILITY, ClassColumns.DELETE):
             return Qt.AlignCenter
         return Qt.AlignLeft | Qt.AlignVCenter
 
@@ -198,6 +258,12 @@ class ClassTableModel(QAbstractTableModel):
         )
 
     def _count_total_annotations(self, class_name: str) -> int:
+        if self._in_image_level_mode:
+            return sum(
+                1
+                for row in range(self._dataset_model.rowCount())
+                if class_name in self._dataset_model.get_image_classes(row)
+            )
         total = 0
         for row in range(self._dataset_model.rowCount()):
             for annotation in self._dataset_model.get_annotations(row):

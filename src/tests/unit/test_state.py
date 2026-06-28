@@ -215,3 +215,109 @@ class TestIsReviewed:
         """
         state.set_inspector("img.jpg", "Alice")
         assert not state.is_reviewed("img.jpg")
+
+
+class TestAnnotationMode:
+    def test_default_mode_is_pixel(self, state):
+        assert state.annotation_mode == "pixel"
+
+    def test_set_annotation_mode_pixel(self, state):
+        state.set_annotation_mode("image_level")
+        state.set_annotation_mode("pixel")
+        assert state.annotation_mode == "pixel"
+
+    def test_set_annotation_mode_image_level(self, state):
+        state.set_annotation_mode("image_level")
+        assert state.annotation_mode == "image_level"
+
+    def test_set_annotation_mode_invalid_raises(self, state):
+        import pytest
+        with pytest.raises(ValueError):
+            state.set_annotation_mode("bad")
+
+    def test_clear_resets_mode_to_pixel(self, state):
+        state.set_annotation_mode("image_level")
+        state.clear()
+        assert state.annotation_mode == "pixel"
+
+
+class TestImageClasses:
+    def test_default_image_classes_empty(self, state):
+        assert state.get_image_classes("img.jpg") == []
+
+    def test_set_and_get_image_classes(self, state):
+        state.set_image_classes("img.jpg", ["crack", "void"])
+        assert state.get_image_classes("img.jpg") == ["crack", "void"]
+
+    def test_normalizes_case(self, state):
+        state.set_image_classes("img.jpg", ["Crack", "VOID"])
+        assert state.get_image_classes("img.jpg") == ["crack", "void"]
+
+    def test_deduplicates(self, state):
+        state.set_image_classes("img.jpg", ["crack", "Crack", "crack"])
+        assert state.get_image_classes("img.jpg") == ["crack"]
+
+    def test_empty_list_clears_entry(self, state):
+        state.set_image_classes("img.jpg", ["crack"])
+        state.set_image_classes("img.jpg", [])
+        assert state.get_image_classes("img.jpg") == []
+        assert "img.jpg" not in state.image_classes
+
+    def test_get_missing_image_returns_empty(self, state):
+        assert state.get_image_classes("missing.jpg") == []
+
+    def test_clear_removes_image_classes(self, state):
+        state.set_image_classes("img.jpg", ["crack"])
+        state.clear()
+        assert state.image_classes == {}
+
+    def test_delete_class_removes_image_level_tags(self, state):
+        state.add_class("crack", (255, 0, 0))
+        state.add_class("void", (0, 255, 0))
+        state.set_image_classes("img.jpg", ["crack", "void"])
+        state.delete_class("crack")
+        assert state.get_image_classes("img.jpg") == ["void"]
+
+    def test_delete_class_clears_entry_when_last_tag_removed(self, state):
+        state.add_class("crack", (255, 0, 0))
+        state.set_image_classes("img.jpg", ["crack"])
+        state.delete_class("crack")
+        assert "img.jpg" not in state.image_classes
+
+
+class TestIsReviewedWithMode:
+    def test_pixel_mode_reject_needs_polygon(self, state):
+        state.set_annotation_mode("pixel")
+        state.set_review_decision("img.jpg", "reject")
+        state.set_image_classes("img.jpg", ["crack"])
+        assert not state.is_reviewed("img.jpg")
+
+    def test_pixel_mode_reject_with_polygon_is_reviewed(self, state):
+        state.set_annotation_mode("pixel")
+        state.add_annotation("img.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        state.set_review_decision("img.jpg", "reject")
+        assert state.is_reviewed("img.jpg")
+
+    def test_image_level_mode_reject_needs_class_tag(self, state):
+        state.set_annotation_mode("image_level")
+        state.set_review_decision("img.jpg", "reject")
+        assert not state.is_reviewed("img.jpg")
+
+    def test_image_level_mode_reject_with_tag_is_reviewed(self, state):
+        state.set_annotation_mode("image_level")
+        state.set_review_decision("img.jpg", "reject")
+        state.set_image_classes("img.jpg", ["crack"])
+        assert state.is_reviewed("img.jpg")
+
+    def test_image_level_mode_polygon_alone_does_not_count(self, state):
+        state.set_annotation_mode("image_level")
+        state.add_annotation("img.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        state.set_review_decision("img.jpg", "reject")
+        assert not state.is_reviewed("img.jpg")
+
+    def test_accept_is_always_reviewed_regardless_of_mode(self, state):
+        for mode in ("pixel", "image_level"):
+            state.set_annotation_mode(mode)
+            state.set_review_decision("img.jpg", "accept")
+            assert state.is_reviewed("img.jpg")
+

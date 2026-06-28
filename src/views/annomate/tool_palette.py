@@ -61,6 +61,7 @@ class ToolPalette(QFrame):
         self._active_tool: str = ""
         self._btn_group = QButtonGroup(self)
         self._btn_group.setExclusive(True)
+        self._drawing_btns: list = []  # buttons disabled in image-level mode
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 6, 4, 6)
@@ -82,6 +83,7 @@ class ToolPalette(QFrame):
         self._btn_tool[poly_btn] = "polygon"
         self._btn_group.addButton(poly_btn)
         layout.addWidget(poly_btn)
+        self._drawing_btns.append(poly_btn)
 
         # ------------------------------------------------------------------ #
         # Brush thickness popup
@@ -92,6 +94,7 @@ class ToolPalette(QFrame):
         btn_thickness.setFixedSize(_BTN_W, _BTN_H)
         btn_thickness.setFont(font)
         btn_thickness.setPopupMode(QToolButton.InstantPopup)
+        self._drawing_btns.append(btn_thickness)
 
         thickness_menu = QMenu(self)
         thickness_action = QWidgetAction(self)
@@ -137,6 +140,7 @@ class ToolPalette(QFrame):
         self._btn_tool[sam_btn] = "sam_bbox"
         self._btn_group.addButton(sam_btn)
         layout.addWidget(sam_btn)
+        self._drawing_btns.append(sam_btn)
 
         # ------------------------------------------------------------------ #
         # SAM options popup
@@ -147,6 +151,7 @@ class ToolPalette(QFrame):
         btn_sam_opts.setFixedSize(_BTN_W, _BTN_H)
         btn_sam_opts.setFont(font)
         btn_sam_opts.setPopupMode(QToolButton.InstantPopup)
+        self._drawing_btns.append(btn_sam_opts)
 
         sam_menu = QMenu(self)
         sam_action = QWidgetAction(self)
@@ -194,6 +199,18 @@ class ToolPalette(QFrame):
         for btn in self._btn_tool:
             btn.setChecked(False)
         self._btn_group.setExclusive(True)
+
+    def set_drawing_enabled(self, enabled: bool) -> None:
+        """Enable or disable polygon/SAM drawing tools.
+
+        Called when switching between pixel-level and image-level annotation modes.
+        When disabled, deselects any active drawing tool so the canvas goes idle.
+        """
+        for btn in self._drawing_btns:
+            btn.setEnabled(enabled)
+        if not enabled:
+            self.deselect_all()
+            self.tool_selected.emit("")
 
     def toggle_polygon(self) -> None:
         """Toggle the polygon tool on/off."""

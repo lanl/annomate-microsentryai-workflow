@@ -480,6 +480,8 @@ class AnnoMateWindow(QWidget):
             self._refresh_canvas_render
         )
         self.right_panel.accept_polygons_requested.connect(self._on_accept_ai_polygons)
+        self.right_panel.annotation_mode_changed.connect(self._on_annotation_mode_changed)
+        self.dataset_model.annotation_mode_changed.connect(self.right_panel.set_annotation_mode)
 
         # Keep canvas in sync when annotations change outside the canvas
         self.dataset_model.dataChanged.connect(self._on_dataset_data_changed)
@@ -682,6 +684,9 @@ class AnnoMateWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_model_reset(self) -> None:
+        mode = self.dataset_model.get_annotation_mode()
+        self.right_panel.set_annotation_mode(mode)
+        self.tool_palette.set_drawing_enabled(mode == "pixel")
         if self.dataset_model.rowCount() > 0:
             self._load_row(0)
             self._start_pending_center_crop_preload()
@@ -1090,7 +1095,13 @@ class AnnoMateWindow(QWidget):
 
     def _on_review_decision(self, decision) -> None:
         if self._current_row >= 0:
+            if decision == "accept":
+                self.dataset_model.set_image_classes(self._current_row, [])
             self.dataset_model.set_review_decision(self._current_row, decision)
+
+    def _on_annotation_mode_changed(self, mode: str) -> None:
+        self.dataset_model.set_annotation_mode(mode)
+        self.tool_palette.set_drawing_enabled(mode == "pixel")
 
     def _on_annotation_selected(self, idx: int) -> None:
         """Apply selection to the canvas and sync the UI slider to match the polygon's thickness."""

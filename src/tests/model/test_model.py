@@ -241,3 +241,44 @@ class TestQueryAPI:
         annos = model.get_annotations(0)
         # Large polygon should be first after sort
         assert len(annos[0]["polygon"]) == 4
+
+
+class TestAnnotationModeModel:
+    def test_default_mode_is_pixel(self, model):
+        assert model.get_annotation_mode() == "pixel"
+
+    def test_set_annotation_mode_emits_signal(self, qtbot, model):
+        with qtbot.waitSignal(model.annotation_mode_changed, timeout=1000) as blocker:
+            model.set_annotation_mode("image_level")
+        assert blocker.args == ["image_level"]
+
+    def test_set_annotation_mode_emits_model_reset(self, qtbot, model):
+        with qtbot.waitSignal(model.modelReset, timeout=1000):
+            model.set_annotation_mode("image_level")
+
+    def test_set_annotation_mode_updates_get(self, model):
+        model.set_annotation_mode("image_level")
+        assert model.get_annotation_mode() == "image_level"
+
+
+class TestImageClassesModel:
+    def test_get_image_classes_returns_empty_initially(self, model, tmp_path):
+        model.load_folder(str(tmp_path), ["img.jpg"])
+        assert model.get_image_classes(0) == []
+
+    def test_set_get_image_classes_round_trip(self, model, tmp_path):
+        model.load_folder(str(tmp_path), ["img.jpg"])
+        model.set_image_classes(0, ["crack", "void"])
+        assert model.get_image_classes(0) == ["crack", "void"]
+
+    def test_set_image_classes_emits_dataChanged(self, qtbot, model, tmp_path):
+        model.load_folder(str(tmp_path), ["img.jpg"])
+        with qtbot.waitSignal(model.dataChanged, timeout=1000):
+            model.set_image_classes(0, ["crack"])
+
+    def test_get_image_classes_out_of_bounds_returns_empty(self, model):
+        assert model.get_image_classes(-1) == []
+        assert model.get_image_classes(999) == []
+
+    def test_set_image_classes_out_of_bounds_is_safe(self, model):
+        model.set_image_classes(99, ["crack"])  # should not raise
