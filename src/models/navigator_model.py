@@ -17,6 +17,8 @@ SOURCE_ROW_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 STATUS_COLOR_ROLE = Qt.UserRole + 3
 STATUS_OMIT_ROLE = Qt.UserRole + 4
+FILTER_DECISION_ROLE = Qt.UserRole + 5   # raw decision string for proxy filtering
+FILTER_COMPLETE_ROLE = Qt.UserRole + 6   # bool: reject + sufficient work for current mode
 
 
 _HEADERS = ["", "Img ID", "Annots", "Decision", "Score", "Class"]
@@ -81,6 +83,10 @@ class NavigatorTableModel(QAbstractTableModel):
             return row
         if role == SORT_ROLE:
             return self.sort_value(row, col)
+        if role == FILTER_DECISION_ROLE:
+            return self._dataset_model.get_review_decision(row)
+        if role == FILTER_COMPLETE_ROLE:
+            return self._is_complete(row)
         if role == STATUS_COLOR_ROLE and col == NavigatorColumns.STATUS:
             return "#4caf50" if self._dataset_model.is_reviewed(row) else "#ff9800"
         if role == STATUS_OMIT_ROLE and col == NavigatorColumns.STATUS:
@@ -140,6 +146,16 @@ class NavigatorTableModel(QAbstractTableModel):
             self.index(self.rowCount() - 1, NavigatorColumns.CLASS),
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
+
+    def _is_complete(self, row: int) -> bool:
+        """Return True if the image needs no further work for the current mode."""
+        decision = self._dataset_model.get_review_decision(row)
+        if decision != "reject":
+            return True
+        mode = self._dataset_model.get_annotation_mode()
+        if mode == "image_level":
+            return bool(self._dataset_model.get_image_classes(row))
+        return self._dataset_model.get_annotation_count(row) > 0
 
     def _on_source_reset(self) -> None:
         self.beginResetModel()
@@ -250,12 +266,35 @@ class NavigatorTableModel(QAbstractTableModel):
 
 
 class NavigatorSortProxyModel(QSortFilterProxyModel):
-    """Type-aware proxy for navigator column sorting."""
+    """Type-aware proxy for navigator column sorting and row filtering."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setDynamicSortFilter(True)
         self.setSortCaseSensitivity(Qt.CaseInsensitive)
+        self._filter_mode: str = "all"
+
+    def set_filter_mode(self, mode: str) -> None:
+        self._filter_mode = mode
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row: int, parent: QModelIndex) -> bool:
+        if self._filter_mode == "all":
+            return True
+        model = self.sourceModel()
+        if model is None:
+            return True
+        idx = model.index(source_row, 0)
+        decision = model.data(idx, FILTER_DECISION_ROLE)
+        if self._filter_mode == "accept":
+            return decision == "accept"
+        if self._filter_mode == "reject":
+            return decision == "reject"
+        if self._filter_mode == "undecided":
+            return not decision
+        if self._filter_mode == "incomplete":
+            return decision == "reject" and not model.data(idx, FILTER_COMPLETE_ROLE)
+        return True
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:
         model = self.sourceModel()

@@ -50,6 +50,13 @@ _OPTIONAL_COLUMNS = (
     (NavigatorColumns.CLASS, "Class"),
 )
 _INFERENCE_COLUMNS = {NavigatorColumns.SCORE, NavigatorColumns.CLASS}
+_FILTER_OPTIONS = (
+    ("All images", "all"),
+    ("Accept only", "accept"),
+    ("Reject only", "reject"),
+    ("Undecided only", "undecided"),
+    ("Incomplete only", "incomplete"),
+)
 
 
 class _StatusDotDelegate(QStyledItemDelegate):
@@ -230,11 +237,13 @@ class DataNavigatorSection(QWidget):
         menu.addSection("Filter")
         self._filter_group = QActionGroup(menu)
         self._filter_group.setExclusive(True)
-        for label in ("All images", "Accept only", "Reject only", "Undecided only"):
+        for label, mode in _FILTER_OPTIONS:
             action = QAction(label, self._filter_group)
             action.setCheckable(True)
+            action.setData(mode)
             menu.addAction(action)
         self._filter_group.actions()[0].setChecked(True)
+        self._filter_group.triggered.connect(self._on_filter_action_triggered)
 
         menu.addSection("Columns")
         for column, label in _OPTIONAL_COLUMNS:
@@ -249,6 +258,11 @@ class DataNavigatorSection(QWidget):
 
         return menu
 
+    def _on_filter_action_triggered(self, action) -> None:
+        mode = action.data()
+        self._proxy.set_filter_mode(mode)
+        self._btn_settings.setText("⚙ • Settings" if mode != "all" else "⚙ Settings")
+
     def _on_model_reset(self) -> None:
         has_images = self.dataset_model.rowCount() > 0
         self._btn_prev.setVisible(has_images)
@@ -262,6 +276,10 @@ class DataNavigatorSection(QWidget):
             )
         else:
             self._lbl_counter.setText("No images loaded")
+        if self._filter_group:
+            self._filter_group.actions()[0].setChecked(True)
+        self._proxy.set_filter_mode("all")
+        self._btn_settings.setText("⚙ Settings")
         self._sync_visible_columns()
 
     def _on_proxy_order_changed(self, *args) -> None:
