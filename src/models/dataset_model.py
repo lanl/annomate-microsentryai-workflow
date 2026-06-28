@@ -541,8 +541,11 @@ class DatasetTableModel(QAbstractTableModel):
         if mode == "image_level":
             self.state.merge_pixel_classes_to_image_level()
         self.annotation_mode_changed.emit(mode)
-        self.beginResetModel()
-        self.endResetModel()
+        if self.rowCount() > 0:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(self.rowCount() - 1, self.columnCount() - 1),
+            )
 
     def get_annotation_mode(self) -> str:
         """Return the current annotation mode (``"pixel"`` or ``"image_level"``)."""

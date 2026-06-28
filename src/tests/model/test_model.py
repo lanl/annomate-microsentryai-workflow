@@ -252,8 +252,9 @@ class TestAnnotationModeModel:
             model.set_annotation_mode("image_level")
         assert blocker.args == ["image_level"]
 
-    def test_set_annotation_mode_emits_model_reset(self, qtbot, model):
-        with qtbot.waitSignal(model.modelReset, timeout=1000):
+    def test_set_annotation_mode_emits_data_changed(self, qtbot, model):
+        model.load_folder("/fake", ["img.jpg"])
+        with qtbot.waitSignal(model.dataChanged, timeout=1000):
             model.set_annotation_mode("image_level")
 
     def test_set_annotation_mode_updates_get(self, model):

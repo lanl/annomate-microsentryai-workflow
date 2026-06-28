@@ -926,3 +926,69 @@ class TestImageClassesRoundTrip:
         pio.export_coco(coco_path, ds)
         data = json.loads(Path(coco_path).read_text())
         assert "image_classes" not in data["images"][0]
+
+
+class TestPixelClassesInPerImage:
+    def test_pixel_classes_written_when_annotations_exist(self, pio, tmp_path):
+        """pixel_classes appears in per_image when the image has polygon annotations."""
+        ds = _make_dataset(tmp_path)  # has a 'defect' annotation on img001.jpg
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        assert "pixel_classes" in raw["per_image"]["img001.jpg"]
+        assert raw["per_image"]["img001.jpg"]["pixel_classes"] == ["defect"]
+
+    def test_pixel_classes_absent_when_no_annotations(self, pio, tmp_path):
+        """pixel_classes is omitted from per_image when the image has no polygon annotations."""
+        from PIL import Image as PILImage
+
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        PILImage.new("RGB", (10, 10)).save(img_dir / "img001.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img001.jpg"]
+        ds.set_review_decision("img001.jpg", "accept")
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        assert "pixel_classes" not in raw["per_image"].get("img001.jpg", {})
+
+    def test_pixel_classes_sorted_and_deduplicated(self, pio, tmp_path):
+        """pixel_classes contains sorted unique class names even with multiple annotations."""
+        from PIL import Image as PILImage
+
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        PILImage.new("RGB", (100, 100)).save(img_dir / "img001.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img001.jpg"]
+        ds.add_annotation("img001.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        ds.add_annotation("img001.jpg", "void", [(0, 0), (1, 0), (1, 1)])
+        ds.add_annotation("img001.jpg", "crack", [(2, 2), (3, 2), (3, 3)])
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        pixel_classes = raw["per_image"]["img001.jpg"]["pixel_classes"]
+        assert pixel_classes == ["crack", "void"]  # sorted, no duplicates
+
+    def test_pixel_and_image_classes_coexist(self, pio, tmp_path):
+        """pixel_classes and image_classes can both be present on the same image."""
+        ds = _make_dataset(tmp_path)  # has 'defect' pixel annotation
+        ds.set_image_classes("img001.jpg", ["defect", "scratch"])
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        entry = raw["per_image"]["img001.jpg"]
+        assert entry["pixel_classes"] == ["defect"]
+        assert entry["image_classes"] == ["defect", "scratch"]
