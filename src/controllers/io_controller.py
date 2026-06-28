@@ -84,10 +84,10 @@ class IOController:
     def export_csv(self, out_path: str) -> str:
         """Write per-image metadata to a CSV file at *out_path*.
 
-        Each row contains tray name, image filename, accept/reject decision,
-        inspector, note, and a comma-separated list of unique annotation class
-        names (or ``"good"`` when the image has been reviewed but carries no
-        annotations).
+        Columns: tray, image_name, decision, pixel_classes, image_classes,
+        inspector, note.  ``pixel_classes`` is derived from polygon
+        annotations; ``image_classes`` from image-level tags.  Both may be
+        populated on the same image when an A-merge has occurred.
 
         Args:
             out_path (str): Absolute path for the output CSV file.
@@ -105,21 +105,20 @@ class IOController:
         tray_name = Path(state.image_dir).name if state.image_dir else ""
         rows = []
         for name in state.image_files:
-            anns = state.annotations.get(name, [])
-            unique_classes = sorted({a["category_name"] for a in anns})
+            decision = state.review_decisions.get(name, "")
             reviewed = state.is_reviewed(name)
+            anns = state.annotations.get(name, [])
+            pixel_cls = ",".join(sorted({a["category_name"] for a in anns}))
+            img_cls = ",".join(state.image_classes.get(name, []))
             rows.append(
                 {
                     "tray": tray_name,
                     "image_name": name,
-                    "decision": state.review_decisions.get(name, "")
-                    if reviewed
-                    else "",
+                    "decision": decision if reviewed else "",
+                    "pixel_classes": pixel_cls,
+                    "image_classes": img_cls,
                     "inspector": state.inspectors.get(name, ""),
                     "note": state.notes.get(name, "") if reviewed else "",
-                    "classes": (",".join(unique_classes) if unique_classes else "good")
-                    if reviewed
-                    else "",
                 }
             )
 
@@ -130,7 +129,8 @@ class IOController:
                     "tray",
                     "image_name",
                     "decision",
-                    "classes",
+                    "pixel_classes",
+                    "image_classes",
                     "inspector",
                     "note",
                 ],
@@ -216,14 +216,18 @@ class IOController:
 
         return f"Annotation classes saved to:\n{class_path}"
 
-    def export_train_structure(self, out_dir: str) -> str:
-        """Export an MVTec-style anomaly detection training directory.
+    def export_pixel_train_structure(self, out_dir: str) -> str:
+        """Export an MVTec-style training directory from polygon annotations.
 
         Structure:
             {out_dir}/
-            ├── train/good/          reviewed images with no annotations
-            ├── test/{defect}/       annotated images; multi-class joined with "-"
-            └── ground_truth/{defect}/  binary mask PNGs (same subfolder as test)
+            ├── train/good/              accepted images
+            ├── test/{defect}/           rejected images with polygon annotations
+            └── ground_truth/{defect}/   binary mask PNGs
+
+        Only images with a polygon ``reject`` decision contribute to test/.
+        Rejected images without polygon annotations (image-level-only) are
+        skipped — they carry no mask information.
 
         Args:
             out_dir: Root directory to write the structure into.
@@ -248,16 +252,16 @@ class IOController:
                 logger.warning("Image not found, skipping: %s", src)
                 continue
 
+            decision = state.review_decisions.get(name, "")
             anns = state.annotations.get(name, [])
-            reviewed = state.is_reviewed(name)
 
-            if not anns and reviewed:
+            if decision == "accept":
                 dest = root / "train" / "good"
                 dest.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dest / name)
                 counts["train_good"] += 1
 
-            elif anns:
+            elif decision == "reject" and anns:
                 folder = "-".join(sorted({a["category_name"] for a in anns}))
 
                 test_dest = root / "test" / folder
@@ -277,14 +281,76 @@ class IOController:
                     cv2.imwrite(str(gt_dest / f"{src.stem}.png"), mask)
                     counts["masks"] += 1
 
-        logger.debug("Exported train structure to: %s — %s", out_dir, counts)
+        logger.debug("Exported pixel train structure to: %s — %s", out_dir, counts)
         return (
-            f"Train structure exported to:\n{out_dir}\n"
+            f"Pixel train structure exported to:\n{out_dir}\n"
             f"  train/good:      {counts['train_good']} images\n"
             f"  test/*:          {counts['test']} images\n"
             f"  ground_truth/*:  {counts['masks']} masks"
             + (
                 f"\n  skipped:         {counts['skipped']} (file not found)"
+                if counts["skipped"]
+                else ""
+            )
+        )
+
+    def export_image_level_train_structure(self, out_dir: str) -> str:
+        """Export a classification-style training directory from image-level tags.
+
+        Structure:
+            {out_dir}/
+            ├── train/good/    accepted images
+            └── test/{defect}/ rejected images with image-level class tags
+
+        No ground_truth masks are written — this export is for classification
+        or image-level anomaly models that do not use pixel masks.
+
+        Args:
+            out_dir: Root directory to write the structure into.
+
+        Returns:
+            str: Human-readable summary of counts written.
+
+        Raises:
+            RuntimeError: If no images are loaded.
+        """
+        state = self.model.state
+        if not state.image_files:
+            raise RuntimeError("No images loaded.")
+
+        root = Path(out_dir)
+        counts = {"train_good": 0, "test": 0, "skipped": 0}
+
+        for name in state.image_files:
+            src = Path(state.image_dir) / name
+            if not src.exists():
+                counts["skipped"] += 1
+                logger.warning("Image not found, skipping: %s", src)
+                continue
+
+            decision = state.review_decisions.get(name, "")
+            img_classes = state.image_classes.get(name, [])
+
+            if decision == "accept":
+                dest = root / "train" / "good"
+                dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest / name)
+                counts["train_good"] += 1
+
+            elif decision == "reject" and img_classes:
+                folder = "-".join(sorted(img_classes))
+                test_dest = root / "test" / folder
+                test_dest.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, test_dest / name)
+                counts["test"] += 1
+
+        logger.debug("Exported image-level train structure to: %s — %s", out_dir, counts)
+        return (
+            f"Image-level train structure exported to:\n{out_dir}\n"
+            f"  train/good:  {counts['train_good']} images\n"
+            f"  test/*:      {counts['test']} images"
+            + (
+                f"\n  skipped:     {counts['skipped']} (file not found)"
                 if counts["skipped"]
                 else ""
             )

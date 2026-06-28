@@ -145,7 +145,8 @@ class AppWindow(QMainWindow):
         )
         add(data_menu, "Export Binary Masks…", "", self._export_binary_masks)
         add(data_menu, "Export CSV…", "", self._export_csv)
-        add(data_menu, "Export Train Structure…", "", self._export_train_structure)
+        add(data_menu, "Export Pixel Train Structure…", "", self._export_pixel_train_structure)
+        add(data_menu, "Export Image-Level Train Structure…", "", self._export_image_level_train_structure)
         data_menu.addSeparator()
         add(data_menu, "Export Project Template…", "", self._export_project_template)
 
@@ -402,9 +403,9 @@ class AppWindow(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 
-    def _export_train_structure(self) -> None:
+    def _export_pixel_train_structure(self) -> None:
         parent_dir = QFileDialog.getExistingDirectory(
-            self, "Choose Train Structure Output Folder", self._export_start_dir()
+            self, "Choose Pixel Train Structure Output Folder", self._export_start_dir()
         )
         if not parent_dir:
             return
@@ -418,8 +419,29 @@ class AppWindow(QMainWindow):
 
         out_dir = os.path.join(parent_dir, name.strip())
         try:
-            msg = self.io_controller.export_train_structure(out_dir)
-            QMessageBox.information(self, "Export Train Structure", msg)
+            msg = self.io_controller.export_pixel_train_structure(out_dir)
+            QMessageBox.information(self, "Export Pixel Train Structure", msg)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
+
+    def _export_image_level_train_structure(self) -> None:
+        parent_dir = QFileDialog.getExistingDirectory(
+            self, "Choose Image-Level Train Structure Output Folder", self._export_start_dir()
+        )
+        if not parent_dir:
+            return
+
+        default_name = self.project_controller.project_name or "dataset"
+        name, ok = QInputDialog.getText(
+            self, "Dataset Folder Name", "Enter dataset folder name:", text=default_name
+        )
+        if not ok or not name.strip():
+            return
+
+        out_dir = os.path.join(parent_dir, name.strip())
+        try:
+            msg = self.io_controller.export_image_level_train_structure(out_dir)
+            QMessageBox.information(self, "Export Image-Level Train Structure", msg)
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 
