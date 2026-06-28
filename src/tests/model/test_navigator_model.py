@@ -14,6 +14,8 @@ from models.navigator_model import (
     SORT_ROLE,
 )
 
+_POLY = [(0, 0), (1, 0), (1, 1)]
+
 
 @pytest.fixture
 def dataset_model(tmp_path):
@@ -146,3 +148,108 @@ class TestNavigatorSortProxyModel:
 
         proxy.sort(NavigatorColumns.SCORE, Qt.DescendingOrder)
         assert proxy_source_rows(proxy) == [2, 0, 1]
+
+
+class TestImageState:
+    @pytest.fixture
+    def nav(self, dataset_model, inference_model):
+        return NavigatorTableModel(dataset_model, inference_model)
+
+    def test_no_decision_no_work_is_undecided(self, nav):
+        assert nav._image_state(0) == "undecided"
+
+    def test_no_decision_with_annotation_is_undecided_work(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        assert nav._image_state(0) == "undecided_work"
+
+    def test_no_decision_with_image_class_is_undecided_work(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["crack"])
+        assert nav._image_state(0) == "undecided_work"
+
+    def test_accept_no_work_is_accept_clean(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_clean"
+
+    def test_accept_with_annotation_is_accept_conflict(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_conflict"
+
+    def test_accept_with_image_class_is_accept_conflict(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_conflict"
+
+    def test_reject_no_work_is_reject_incomplete(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_incomplete"
+
+    def test_reject_with_annotation_is_reject_reviewed(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_reviewed"
+
+    def test_reject_with_image_class_is_reject_reviewed(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_reviewed"
+
+
+class TestStatusTooltip:
+    @pytest.fixture
+    def nav(self, dataset_model, inference_model):
+        return NavigatorTableModel(dataset_model, inference_model)
+
+    def test_undecided_tooltip(self, nav):
+        tip = nav._status_tooltip(0)
+        assert "No decision" in tip
+        assert "Accept or Reject" in tip
+
+    def test_undecided_work_tooltip_mentions_annotation(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        tip = nav._status_tooltip(0)
+        assert "No decision" in tip
+        assert "polygon annotation" in tip
+
+    def test_undecided_work_tooltip_mentions_class_tag(self, nav, dataset_model):
+        dataset_model.set_image_classes(0, ["void"])
+        tip = nav._status_tooltip(0)
+        assert "No decision" in tip
+        assert "void" in tip
+
+    def test_accept_clean_tooltip(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        tip = nav._status_tooltip(0)
+        assert "defect-free" in tip
+
+    def test_accept_conflict_tooltip_mentions_annotation(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")
+        tip = nav._status_tooltip(0)
+        assert "Accepted but" in tip
+        assert "polygon annotation" in tip
+        assert "Reject" in tip
+
+    def test_reject_incomplete_tooltip(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "reject")
+        tip = nav._status_tooltip(0)
+        assert "no supporting evidence" in tip
+
+    def test_reject_reviewed_tooltip_mentions_class(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "reject")
+        tip = nav._status_tooltip(0)
+        assert "Reviewed" in tip
+        assert "crack" in tip
+
+    def test_tooltips_contain_no_emdash(self, nav, dataset_model):
+        states = [
+            lambda: None,
+            lambda: dataset_model.add_annotation(0, "crack", _POLY),
+            lambda: dataset_model.set_review_decision(0, "accept"),
+            lambda: dataset_model.set_review_decision(0, "reject"),
+        ]
+        for setup in states:
+            setup()
+            tip = nav._status_tooltip(0)
+            assert "—" not in tip, f"Em dash found in tooltip: {tip!r}"

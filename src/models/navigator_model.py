@@ -144,6 +144,29 @@ class NavigatorTableModel(QAbstractTableModel):
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
 
+    def _image_state(self, row: int) -> str:
+        """Return a string key describing the review completeness of this image.
+
+        States:
+            undecided         -- no decision, no annotations or tags
+            undecided_work    -- no decision, but has pixel annotations or image-level tags
+            accept_clean      -- accepted, no annotations or tags
+            accept_conflict   -- accepted, but has pixel annotations and/or image-level tags
+            reject_incomplete -- rejected, no annotations and no tags
+            reject_reviewed   -- rejected, has pixel annotations or image-level tags
+        """
+        decision = self._dataset_model.get_review_decision(row)
+        has_work = (
+            self._dataset_model.get_annotation_count(row) > 0
+            or bool(self._dataset_model.get_image_classes(row))
+        )
+        if decision is None:
+            return "undecided_work" if has_work else "undecided"
+        if decision == "accept":
+            return "accept_conflict" if has_work else "accept_clean"
+        # reject
+        return "reject_reviewed" if has_work else "reject_incomplete"
+
     def _is_complete(self, row: int) -> bool:
         """Return True if the image needs no further work for the current mode."""
         decision = self._dataset_model.get_review_decision(row)
@@ -192,9 +215,54 @@ class NavigatorTableModel(QAbstractTableModel):
 
     def _tooltip(self, row: int, col: int) -> str:
         if col == NavigatorColumns.STATUS:
-            return "Reviewed" if self._dataset_model.is_reviewed(row) else "In Review"
+            return self._status_tooltip(row)
         value = self._display(row, col)
         return value or (_TOOLTIPS.get(col) or "")
+
+    def _status_tooltip(self, row: int) -> str:
+        state = self._image_state(row)
+        ann_count = self._dataset_model.get_annotation_count(row)
+        img_classes = self._dataset_model.get_image_classes(row)
+
+        if state == "undecided":
+            return "No decision set. Mark this image Accept or Reject to complete review."
+
+        if state == "undecided_work":
+            parts = []
+            if ann_count:
+                parts.append(f"{ann_count} polygon annotation(s)")
+            if img_classes:
+                parts.append(f"class tag(s): {', '.join(img_classes)}")
+            work = " and ".join(parts)
+            return f"No decision set. This image has {work} but no Accept or Reject has been assigned. Set a decision to complete."
+
+        if state == "accept_clean":
+            return "Accepted as defect-free."
+
+        if state == "accept_conflict":
+            parts = []
+            if ann_count:
+                parts.append(f"{ann_count} polygon annotation(s)")
+            if img_classes:
+                parts.append(f"class tag(s): {', '.join(img_classes)}")
+            work = " and ".join(parts)
+            return f"Accepted but has {work}. Remove the annotations or tags, or change the decision to Reject."
+
+        if state == "reject_incomplete":
+            return "Reject with no supporting evidence. Add a polygon annotation or a class tag to complete."
+
+        # reject_reviewed
+        parts = []
+        if ann_count:
+            classes = sorted({
+                a["category_name"]
+                for a in self._dataset_model.get_annotations(row)
+            })
+            parts.append(f"{ann_count} polygon annotation(s): {', '.join(classes)}")
+        if img_classes:
+            parts.append(f"class tag(s): {', '.join(img_classes)}")
+        detail = " and ".join(parts)
+        return f"Reviewed. Rejected with {detail}."
 
     def _alignment(self, col: int) -> Qt.AlignmentFlag:
         if col in (NavigatorColumns.ANNOTS, NavigatorColumns.SCORE):
