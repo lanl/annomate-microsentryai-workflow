@@ -133,7 +133,6 @@ class ProjectIO:
             decision_at = dataset_state.decision_timestamps.get(fname, "")
             inspector = dataset_state.inspectors.get(fname, "")
             note = dataset_state.notes.get(fname, "")
-            omit_reason = dataset_state.omit_reasons.get(fname, "")
             if score is not None:
                 entry["score"] = score
             if label is not None:
@@ -146,8 +145,6 @@ class ProjectIO:
                 entry["inspector"] = inspector
             if note:
                 entry["note"] = note
-            if omit_reason:
-                entry["omit_reason"] = omit_reason
             img_classes = dataset_state.image_classes.get(fname, [])
             if img_classes:
                 entry["image_classes"] = img_classes
@@ -454,12 +451,14 @@ class ProjectIO:
                     inference_state.scores[abs_path] = score
                 if label is not None:
                     inference_state.labels[abs_path] = label
-                if info.get("decision"):
-                    dataset_state.review_decisions[fname] = info["decision"]
+                decision = info.get("decision")
+                if decision:
+                    # "omitted" was the old blocking-popup state; treat as reject
+                    dataset_state.review_decisions[fname] = (
+                        "reject" if decision == "omitted" else decision
+                    )
                 if info.get("decision_at"):
                     dataset_state.decision_timestamps[fname] = info["decision_at"]
-                if info.get("omit_reason"):
-                    dataset_state.omit_reasons[fname] = info["omit_reason"]
                 dataset_state.inspectors[fname] = info.get("inspector", "")
                 dataset_state.notes[fname] = info.get("note", "")
                 img_classes = info.get("image_classes", [])

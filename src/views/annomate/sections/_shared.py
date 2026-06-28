@@ -3,7 +3,6 @@ from PySide6.QtWidgets import QLabel
 
 _COLOR_REVIEWED = "#4caf50"
 _COLOR_IN_REVIEW = "#ff9800"
-_COLOR_OMITTED = "#ff9800"
 _COLOR_INCOMPLETE = "#ff9800"
 
 
@@ -14,19 +13,11 @@ def _dot(color: str) -> QLabel:
     return lbl
 
 
-def _omit_badge() -> QLabel:
+def _incomplete_badge() -> QLabel:
     lbl = QLabel("!")
     lbl.setFixedSize(10, 10)
     lbl.setAlignment(Qt.AlignCenter)
-    lbl.setStyleSheet(f"color: {_COLOR_OMITTED}; font-size: 10px; font-weight: bold;")
-    return lbl
-
-
-def _incomplete_badge() -> QLabel:
-    lbl = QLabel("⚠")
-    lbl.setFixedSize(10, 10)
-    lbl.setAlignment(Qt.AlignCenter)
     lbl.setStyleSheet(
-        f"color: {_COLOR_INCOMPLETE}; font-size: 8px; font-weight: bold;"
+        f"color: {_COLOR_INCOMPLETE}; font-size: 10px; font-weight: bold;"
     )
     return lbl

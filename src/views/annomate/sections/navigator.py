@@ -26,17 +26,14 @@ from models.navigator_model import (
     NavigatorTableModel,
     SOURCE_ROW_ROLE,
     STATUS_COLOR_ROLE,
-    STATUS_OMIT_ROLE,
 )
 
 from ._shared import (
     _COLOR_IN_REVIEW,
     _COLOR_INCOMPLETE,
-    _COLOR_OMITTED,
     _COLOR_REVIEWED,
     _dot,
     _incomplete_badge,
-    _omit_badge,
 )
 
 
@@ -83,14 +80,7 @@ class _StatusDotDelegate(QStyledItemDelegate):
         y = rect.y() + (rect.height() - _DOT_W) // 2
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
-        if index.data(STATUS_OMIT_ROLE):
-            painter.setPen(QColor(_COLOR_OMITTED))
-            f = painter.font()
-            f.setPixelSize(_DOT_W + 2)
-            f.setBold(True)
-            painter.setFont(f)
-            painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "!")
-        elif (
+        if (
             index.data(FILTER_DECISION_ROLE) == "reject"
             and not index.data(FILTER_COMPLETE_ROLE)
         ):
@@ -99,7 +89,7 @@ class _StatusDotDelegate(QStyledItemDelegate):
             f.setPixelSize(_DOT_W + 2)
             f.setBold(True)
             painter.setFont(f)
-            painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "⚠")
+            painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "!")
         else:
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(color))
@@ -167,9 +157,6 @@ class DataNavigatorSection(QWidget):
         nav_h.addSpacing(4)
         nav_h.addWidget(_dot(_COLOR_REVIEWED))
         nav_h.addWidget(QLabel("Reviewed"))
-        nav_h.addSpacing(4)
-        nav_h.addWidget(_omit_badge())
-        nav_h.addWidget(QLabel("Omitted"))
         nav_h.addSpacing(4)
         nav_h.addWidget(_incomplete_badge())
         nav_h.addWidget(QLabel("Incomplete"))
