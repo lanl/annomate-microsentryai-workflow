@@ -1488,9 +1488,11 @@ class AnnoMateWindow(QWidget):
         elif event.key() == Qt.Key_D and not calibrating:
             self._next_image()
         elif event.key() == Qt.Key_P:
-            self.tool_palette.toggle_polygon()
+            if self.dataset_model.get_annotation_mode() == "pixel":
+                self.tool_palette.toggle_polygon()
         elif event.key() == Qt.Key_S:
-            self.tool_palette.toggle_sam()
+            if self.dataset_model.get_annotation_mode() == "pixel":
+                self.tool_palette.toggle_sam()
         elif event.key() == Qt.Key_C:
             self.viewport_actions.toggle_calibrate()
         elif event.key() == Qt.Key_M:
