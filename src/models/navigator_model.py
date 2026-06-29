@@ -147,6 +147,31 @@ class NavigatorTableModel(QAbstractTableModel):
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
 
+    _STATE_LABELS = {
+        "undecided":         "No decision",
+        "undecided_work":    "Has work, no decision",
+        "accept_clean":      "Accepted",
+        "accept_conflict":   "Accepted with annotations",
+        "reject_incomplete": "Reject incomplete",
+        "reject_reviewed":   "Reviewed",
+    }
+
+    def get_image_state_label(self, row: int) -> str:
+        return self._STATE_LABELS.get(self._image_state(row), "")
+
+    def get_state_counts(self) -> dict:
+        """Return counts of reviewed, incomplete, and undecided images."""
+        reviewed = incomplete = undecided = 0
+        for row in range(self.rowCount()):
+            state = self._image_state(row)
+            if state in ("accept_clean", "reject_reviewed"):
+                reviewed += 1
+            elif state in ("reject_incomplete", "accept_conflict", "undecided_work"):
+                incomplete += 1
+            else:
+                undecided += 1
+        return {"reviewed": reviewed, "incomplete": incomplete, "undecided": undecided}
+
     def _image_state(self, row: int) -> str:
         """Return a string key describing the review completeness of this image.
 
