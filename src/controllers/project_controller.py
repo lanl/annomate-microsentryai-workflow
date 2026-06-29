@@ -386,8 +386,8 @@ class ProjectController(QObject):
     # ------------------------------------------------------------------ #
 
     def _do_autosave(self, project_dir: str) -> None:
-        """Write an autosave snapshot. Skips NPZ to keep the write fast."""
-        if not self._is_dirty:
+        """Write an autosave snapshot. Score maps are excluded — manual save only."""
+        if not self._is_dirty and self._session_start is None:
             return
         autosave_dir = os.path.join(project_dir, "autosave")
         try:
