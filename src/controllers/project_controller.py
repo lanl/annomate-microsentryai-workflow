@@ -417,6 +417,11 @@ class ProjectController(QObject):
                 anomaly_constraint_state=anomaly_constraint_state,
                 session_seconds=self.get_session_seconds(),
             )
+            main_annoproj = os.path.join(project_dir, f"{self._project_name}.annoproj")
+            if os.path.exists(main_annoproj):
+                self._project_io.patch_session_seconds(
+                    main_annoproj, self.get_session_seconds()
+                )
             self.autosave_written.emit(path)
         except Exception as exc:
             self.autosave_failed.emit(str(exc))

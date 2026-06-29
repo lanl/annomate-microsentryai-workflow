@@ -338,6 +338,18 @@ class ProjectIO:
         logger.debug("Project template exported to: %s", template_path)
         return template_path
 
+    def patch_session_seconds(self, annoproj_path: str, seconds: float) -> None:
+        """Update only the session_seconds field in an existing .annoproj file.
+
+        Used by autosave to keep the main project file's session time current
+        without triggering a full project write.
+        """
+        with open(annoproj_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        data["session_seconds"] = seconds
+        with open(annoproj_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
     # ------------------------------------------------------------------ #
     # Load
     # ------------------------------------------------------------------ #
