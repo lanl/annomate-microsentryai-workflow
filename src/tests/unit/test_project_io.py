@@ -491,6 +491,31 @@ class TestProjectRoundTrip:
         assert "created_at" in raw
         assert "modified_at" in raw
 
+    def test_session_seconds_round_trip(self, pio, tmp_path):
+        """Verify that session_seconds is saved to and loaded from the project file.
+
+        Saves with session_seconds=3665.0, loads back, and checks the value is preserved
+        exactly. Success means the field survives the save/load cycle unchanged.
+        """
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState(), session_seconds=3665.0)
+        data = pio.load_project(path)
+        assert data["session_seconds"] == 3665.0
+
+    def test_session_seconds_defaults_to_zero(self, pio, tmp_path):
+        """Verify that session_seconds is always written to the project file, defaulting to 0.0.
+
+        Saves without passing session_seconds, then checks the raw JSON contains
+        session_seconds=0.0. Success means the field is always present so old-project
+        loaders never have to handle a missing key.
+        """
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+        raw = json.loads(Path(path).read_text())
+        assert raw["session_seconds"] == 0.0
+
     def test_calibration_pixel_defaults_round_trip(self, pio, tmp_path):
         """Verify that a default (pixel-scale) CalibrationState survives a project save/load cycle.
 

@@ -11,6 +11,7 @@ Rules (consistent with existing controllers):
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -88,6 +89,8 @@ class ProjectController(QObject):
         # Preserved from the last loaded project so that saving without loading
         # a model doesn't erase a model path that was previously persisted.
         self._last_project_model_path: str = ""
+        self._accumulated_seconds: float = 0.0
+        self._session_start: Optional[float] = None
 
         # Connect model signals for dirty tracking. The _loading guard
         # suppresses spurious dirty events fired during our own load sequence.
@@ -126,6 +129,12 @@ class ProjectController(QObject):
     @property
     def autosave_manager(self) -> AutosaveManager:
         return self._autosave_manager
+
+    def get_session_seconds(self) -> float:
+        """Return cumulative seconds spent in this project, including the current session."""
+        if self._session_start is None:
+            return self._accumulated_seconds
+        return self._accumulated_seconds + (time.monotonic() - self._session_start)
 
     # ------------------------------------------------------------------ #
     # Dirty tracking
@@ -177,6 +186,8 @@ class ProjectController(QObject):
         self._project_name = ""
         self._created_at = None
         self._last_project_model_path = ""
+        self._accumulated_seconds = 0.0
+        self._session_start = None
         self._autosave_manager.stop()
         self.clear_dirty()
 
@@ -288,6 +299,8 @@ class ProjectController(QObject):
         self._last_project_model_path = project_data.get("inference", {}).get(
             "model_path", ""
         )
+        self._accumulated_seconds = project_data.get("session_seconds", 0.0)
+        self._session_start = time.monotonic()
         self.clear_dirty()
         self.project_opened.emit(self._project_name)
 
@@ -360,6 +373,7 @@ class ProjectController(QObject):
             calibration_state=calib_state,
             center_template_state=center_template_state,
             anomaly_constraint_state=anomaly_constraint_state,
+            session_seconds=self.get_session_seconds(),
         )
         if self._created_at is None:
             self._created_at = datetime.now(timezone.utc).isoformat()
@@ -401,6 +415,7 @@ class ProjectController(QObject):
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
                 anomaly_constraint_state=anomaly_constraint_state,
+                session_seconds=self.get_session_seconds(),
             )
             self.autosave_written.emit(path)
         except Exception as exc:

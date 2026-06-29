@@ -56,6 +56,7 @@ class ProjectIO:
         calibration_state=None,
         center_template_state=None,
         anomaly_constraint_state=None,
+        session_seconds: float = 0.0,
     ) -> str:
         """Write .annoproj + annotations.coco.json to project_dir.
 
@@ -71,6 +72,7 @@ class ProjectIO:
             created_at: ISO timestamp from the original save; if None, uses now.
             save_score_maps: When True, write inference score maps to NPZ.
             model_path: Absolute path to the inference model file (informational).
+            session_seconds: Cumulative seconds spent in this project across all sessions.
         """
         _t0 = time.perf_counter()
 
@@ -163,6 +165,7 @@ class ProjectIO:
             "version": _SCHEMA_VERSION,
             "created_at": created_at,
             "modified_at": now,
+            "session_seconds": session_seconds,
             "project_name": project_name,
             "annotation_mode": dataset_state.annotation_mode,
             "dataset": {

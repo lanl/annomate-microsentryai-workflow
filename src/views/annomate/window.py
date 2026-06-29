@@ -448,6 +448,9 @@ class AnnoMateWindow(QWidget):
         self._saved_model_path: str = ""
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
+        self._session_timer = QTimer(self)
+        self._session_timer.setInterval(60_000)
+        self._session_timer.timeout.connect(self._update_session_display)
         self._init_ui()
         if calibration_model is not None:
             self.canvas.set_calibration_model(calibration_model)
@@ -545,6 +548,10 @@ class AnnoMateWindow(QWidget):
         if self._project_controller is not None:
             self._project_controller.project_opened.connect(
                 lambda _: self.refresh_inference_panel()
+            )
+            self._project_controller.project_opened.connect(self._on_session_started)
+            self._project_controller.autosave_written.connect(
+                lambda _: self._update_session_display()
             )
 
         # Inference controller signals
@@ -705,6 +712,20 @@ class AnnoMateWindow(QWidget):
             self.right_panel.set_current_row(-1)
             self.status_bar.set_class("")
             self._set_start_screen_visible(True)
+        if self._project_controller is not None and not self._project_controller.has_project:
+            self._session_timer.stop()
+            self.status_bar.clear_session_time()
+
+    def _on_session_started(self, _name: str) -> None:
+        self._update_session_display()
+        self._session_timer.start()
+
+    def _update_session_display(self) -> None:
+        if self._project_controller is not None and self._project_controller.has_project:
+            self.status_bar.set_session_time(self._project_controller.get_session_seconds())
+        else:
+            self._session_timer.stop()
+            self.status_bar.clear_session_time()
 
     def _load_row(self, row: int) -> None:
         bgr = self.io_controller.load_image_for_display(row)
