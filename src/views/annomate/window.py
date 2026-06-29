@@ -504,6 +504,9 @@ class AnnoMateWindow(QWidget):
         self.viewport_actions.center_template_cleared.connect(
             self._on_center_template_cleared
         )
+        self.viewport_actions.center_template_import_requested.connect(
+            self._on_center_template_import_requested
+        )
         self.viewport_actions.crop_overlay_toggled.connect(
             self._on_crop_overlay_toggled
         )
@@ -945,6 +948,30 @@ class AnnoMateWindow(QWidget):
         self._center_template_model.set_enabled(checked)
         if checked and self._current_bgr is not None:
             self._apply_center_template_match(self._current_bgr)
+
+    def _on_center_template_import_requested(self, png_path: str) -> None:
+        if self._center_template_controller is None:
+            return
+        project_dir = (
+            self._project_controller.project_dir
+            if self._project_controller is not None
+            else ""
+        )
+        try:
+            self._center_template_controller.import_template_from_png(
+                project_dir, png_path
+            )
+        except Exception as exc:
+            logger.warning("Center template import failed: %s", exc)
+            QMessageBox.warning(
+                self,
+                "Import Template",
+                f"Could not import template:\n{exc}",
+            )
+            return
+        if self._current_bgr is not None:
+            self._apply_center_template_match(self._current_bgr)
+            self._start_pending_center_crop_preload()
 
     def _on_center_template_cleared(self) -> None:
         if self._center_template_controller is None:
