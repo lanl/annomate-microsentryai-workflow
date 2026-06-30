@@ -173,6 +173,14 @@ class ProjectController(QObject):
         if self._center_template_model is not None:
             self._center_template_model.clear_template()
 
+        self._project_dir = None
+        self._project_name = ""
+        self._created_at = None
+        self._last_project_model_path = ""
+        self._accumulated_seconds = 0.0
+        self._session_start = None
+        self._autosave_manager.stop()
+
         self._loading = True
         try:
             if self._calibration_model is not None:
@@ -182,13 +190,6 @@ class ProjectController(QObject):
         finally:
             self._loading = False
 
-        self._project_dir = None
-        self._project_name = ""
-        self._created_at = None
-        self._last_project_model_path = ""
-        self._accumulated_seconds = 0.0
-        self._session_start = None
-        self._autosave_manager.stop()
         self.clear_dirty()
 
     def open_project(self, annoproj_path: str) -> Tuple[dict, List[str]]:
