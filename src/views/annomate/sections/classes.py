@@ -231,11 +231,11 @@ class _ImageTagDelegate(QStyledItemDelegate):
         painter.restore()
 
     def _draw_check(self, painter: QPainter, sq: QRectF) -> None:
-        l, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
-        painter.drawLine(int(l + 2), int(t + h * 0.55),
-                         int(l + w * 0.4), int(t + h - 2))
-        painter.drawLine(int(l + w * 0.4), int(t + h - 2),
-                         int(l + w - 1), int(t + 2))
+        x, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
+        painter.drawLine(int(x + 2), int(t + h * 0.55),
+                         int(x + w * 0.4), int(t + h - 2))
+        painter.drawLine(int(x + w * 0.4), int(t + h - 2),
+                         int(x + w - 1), int(t + 2))
 
 
 class ClassesSection(QWidget):
