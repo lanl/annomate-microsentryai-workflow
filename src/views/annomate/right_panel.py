@@ -174,6 +174,9 @@ class RightPanel(QWidget):
     # Microsentry pass-throughs
     # ------------------------------------------------------------------ #
 
+    def set_project_saved(self, has_project: bool) -> None:
+        self._ms_section.set_project_saved(has_project)
+
     def set_model_loaded(self, name: str, path: str = "") -> None:
         self._ms_section.set_model_loaded(name, path)
 

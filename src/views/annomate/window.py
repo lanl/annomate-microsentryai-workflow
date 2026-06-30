@@ -556,6 +556,16 @@ class AnnoMateWindow(QWidget):
             self._project_controller.autosave_written.connect(
                 lambda _: self._update_session_display()
             )
+            self._project_controller.dirty_changed.connect(
+                lambda _: self._update_microsentry_availability()
+            )
+            self._project_controller.project_opened.connect(
+                lambda _: self._update_microsentry_availability()
+            )
+            self._project_controller.project_saved.connect(
+                lambda _: self._update_microsentry_availability()
+            )
+        self._update_microsentry_availability()
 
         # Inference controller signals
         if self.inference_controller is not None:
@@ -1179,6 +1189,13 @@ class AnnoMateWindow(QWidget):
     # ------------------------------------------------------------------ #
     # Microsentry toggle & rendering
     # ------------------------------------------------------------------ #
+
+    def _update_microsentry_availability(self) -> None:
+        has_project = (
+            self._project_controller is not None
+            and self._project_controller.has_project
+        )
+        self.right_panel.set_project_saved(has_project)
 
     def set_saved_model_path(self, path: str) -> None:
         """Called by AppWindow after opening a project to record the saved model path."""
