@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (
 from models.classes_model import (
     CLASS_NAME_ROLE,
     COLOR_ROLE,
+    IMAGE_LEVEL_MODE_ROLE,
+    IMAGE_TAG_KIND_ROLE,
     VISIBLE_ROLE,
     ClassColumns,
     ClassSortProxyModel,
@@ -30,6 +32,9 @@ from models.classes_model import (
 )
 
 
+_TAG_COL_W = 28
+_COLOR_TAG_ACTIVE = QColor("#ff9800")  # amber — current mode's tags
+_COLOR_TAG_INACTIVE = QColor("#4a90d9")  # blue  — other mode's tags
 _COLOR_COL_W = 44
 _SWATCH_W = 24
 _COUNT_W = 56
@@ -164,20 +169,91 @@ class _IconButtonDelegate(QStyledItemDelegate):
         )
 
 
+class _ImageTagDelegate(QStyledItemDelegate):
+    """Paint image-level class tag toggle cells in the class table.
+
+    When interactive (image-level mode + rejected image): draws a colored
+    rounded square with a checkmark if tagged, or an empty square if not.
+    When not interactive: draws a faint grey square with a dimmed checkmark
+    if tagged (read-only reference), or nothing if not tagged.
+    """
+
+    _TAG_W = 14
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = opt.widget.style() if opt.widget is not None else None
+        if style is not None:
+            style.drawControl(QStyle.CE_ItemViewItem, opt, painter)
+
+        kind = index.data(IMAGE_TAG_KIND_ROLE)  # "active" | "inactive" | "none"
+        interactive = bool(index.flags() & Qt.ItemIsSelectable)
+        in_mode = bool(index.data(IMAGE_LEVEL_MODE_ROLE))
+
+        if kind == "none" and not interactive and not in_mode:
+            return  # pixel mode, untagged — draw nothing beyond the row background
+
+        rect = option.rect
+        cx = rect.x() + rect.width() // 2
+        cy = rect.y() + rect.height() // 2
+        half = self._TAG_W // 2
+        sq = QRectF(cx - half, cy - half, self._TAG_W, self._TAG_W)
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        if kind == "active":
+            painter.setBrush(_COLOR_TAG_ACTIVE)
+            painter.setPen(QPen(_COLOR_TAG_ACTIVE.darker(130), 1))
+            painter.drawRoundedRect(sq, 3, 3)
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            self._draw_check(painter, sq)
+        elif kind == "inactive":
+            painter.setBrush(_COLOR_TAG_INACTIVE)
+            painter.setPen(QPen(_COLOR_TAG_INACTIVE.darker(130), 1))
+            painter.drawRoundedRect(sq, 3, 3)
+            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
+            self._draw_check(painter, sq)
+        elif interactive:
+            # No tag yet but interactive — empty outlined square (click to tag)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QColor(160, 160, 160), 1))
+            painter.drawRoundedRect(sq, 3, 3)
+        else:
+            # In image-level mode, not interactive, not tagged — faint square
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QColor(190, 190, 190, 100), 1))
+            painter.drawRoundedRect(sq, 3, 3)
+
+        painter.restore()
+
+    def _draw_check(self, painter: QPainter, sq: QRectF) -> None:
+        x, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
+        painter.drawLine(
+            int(x + 2), int(t + h * 0.55), int(x + w * 0.4), int(t + h - 2)
+        )
+        painter.drawLine(int(x + w * 0.4), int(t + h - 2), int(x + w - 1), int(t + 2))
+
+
 class ClassesSection(QWidget):
     """Sortable annotation class table with add/delete and count summaries.
 
     Signals:
         class_selected (str): Emitted when the user clicks a class row.
+        annotation_mode_changed (str): Emitted when the user switches annotation mode.
     """
 
     class_selected = Signal(str)
+    annotation_mode_changed = Signal(str)  # "pixel" | "image_level"
 
     def __init__(self, dataset_model, parent: QWidget = None) -> None:
         super().__init__(parent)
         self.dataset_model = dataset_model
         self._selected_name: str = ""
         self._current_row: int = -1
+        self._tag_interactive: bool = False
 
         self._table_model = ClassTableModel(dataset_model, self)
         self._proxy = ClassSortProxyModel(self)
@@ -187,14 +263,72 @@ class ClassesSection(QWidget):
         self._table_model.modelReset.connect(self._on_class_model_reset)
         self._proxy.layoutChanged.connect(self._sync_selection)
         self._proxy.modelReset.connect(self._sync_selection)
+        dataset_model.dataChanged.connect(self._on_dataset_data_changed)
+        dataset_model.annotation_mode_changed.connect(self._on_annotation_mode_changed)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        # Mode selector: two connected buttons acting as a segmented control
+        mode_row = QWidget()
+        mode_h = QHBoxLayout(mode_row)
+        mode_h.setContentsMargins(16, 0, 16, 4)
+        mode_h.setSpacing(0)
+
+        _seg_base = (
+            "QPushButton {"
+            "  padding: 3px 10px;"
+            "  font-weight: bold;"
+            "  border: 1px solid palette(mid);"
+            "  background: palette(button);"
+            "  color: palette(button-text);"
+            "}"
+            "QPushButton:checked {"
+            "  background: #ff9800;"
+            "  color: white;"
+            "  border-color: #c96800;"
+            "}"
+        )
+        self._pixel_btn = QPushButton("Pixel Level")
+        self._pixel_btn.setCheckable(True)
+        self._pixel_btn.setChecked(True)
+        self._pixel_btn.setToolTip(
+            "Pixel Level mode: a rejected image requires at least one polygon "
+            "annotation to count as reviewed."
+        )
+        self._pixel_btn.setStyleSheet(
+            _seg_base
+            + "QPushButton { border-top-left-radius: 4px; border-bottom-left-radius: 4px;"
+            "  border-right: none; }"
+        )
+        self._pixel_btn.clicked.connect(lambda: self._on_mode_btn_clicked("pixel"))
+
+        self._image_btn = QPushButton("Image Level")
+        self._image_btn.setCheckable(True)
+        self._image_btn.setChecked(False)
+        self._image_btn.setToolTip(
+            "Image Level mode: a rejected image requires at least one class tag "
+            "to count as reviewed. Polygon drawing tools are disabled."
+        )
+        self._image_btn.setStyleSheet(
+            _seg_base
+            + "QPushButton { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }"
+        )
+        self._image_btn.clicked.connect(
+            lambda: self._on_mode_btn_clicked("image_level")
+        )
+
+        mode_h.addWidget(self._pixel_btn, stretch=1)
+        mode_h.addWidget(self._image_btn, stretch=1)
+        layout.addWidget(mode_row)
+
         self._table = QTableView()
         self._table.setModel(self._proxy)
+        self._table.setItemDelegateForColumn(
+            ClassColumns.IMAGE_TAG, _ImageTagDelegate(self._table)
+        )
         self._table.setItemDelegateForColumn(
             ClassColumns.COLOR, _ColorSwatchDelegate(self._table)
         )
@@ -248,12 +382,14 @@ class ClassesSection(QWidget):
         header.setSectionsClickable(True)
         header.setSortIndicatorShown(True)
         header.setMinimumSectionSize(24)
+        header.setSectionResizeMode(ClassColumns.IMAGE_TAG, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.COLOR, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.CLASS, QHeaderView.Stretch)
         header.setSectionResizeMode(ClassColumns.IMAGE, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.TOTAL, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.VISIBILITY, QHeaderView.Fixed)
         header.setSectionResizeMode(ClassColumns.DELETE, QHeaderView.Fixed)
+        self._table.setColumnWidth(ClassColumns.IMAGE_TAG, _TAG_COL_W)
         self._table.setColumnWidth(ClassColumns.COLOR, _COLOR_COL_W)
         self._table.setColumnWidth(ClassColumns.CLASS, _NAME_MIN_W)
         self._table.setColumnWidth(ClassColumns.IMAGE, _COUNT_W)
@@ -295,7 +431,41 @@ class ClassesSection(QWidget):
 
     def set_current_row(self, row: int) -> None:
         self._current_row = row
+        self._update_tag_interactive()
         self._table_model.set_current_row(row)
+
+    def _update_tag_interactive(self) -> None:
+        mode = self.dataset_model.get_annotation_mode()
+        decision = self.dataset_model.get_review_decision(self._current_row)
+        self._tag_interactive = mode == "image_level" and decision == "reject"
+
+    def _on_dataset_data_changed(self, top_left, bottom_right, roles=None) -> None:
+        if self._current_row < 0:
+            return
+        if top_left.row() <= self._current_row <= bottom_right.row():
+            self._update_tag_interactive()
+            self._table_model.set_current_row(self._current_row)
+
+    def _on_mode_btn_clicked(self, mode: str) -> None:
+        self.set_annotation_mode(mode)
+        self.annotation_mode_changed.emit(mode)
+
+    def set_annotation_mode(self, mode: str) -> None:
+        """Sync the mode buttons without re-emitting the signal."""
+        is_image = mode == "image_level"
+        self._pixel_btn.blockSignals(True)
+        self._image_btn.blockSignals(True)
+        self._pixel_btn.setChecked(not is_image)
+        self._image_btn.setChecked(is_image)
+        self._pixel_btn.blockSignals(False)
+        self._image_btn.blockSignals(False)
+        self._table.setColumnHidden(ClassColumns.IMAGE, is_image)
+        self._table.setColumnHidden(ClassColumns.VISIBILITY, is_image)
+
+    def _on_annotation_mode_changed(self, mode: str) -> None:
+        self.set_annotation_mode(mode)
+        self._update_tag_interactive()
+        self._table_model.set_current_row(self._current_row)
 
     def _on_table_index_activated(self, proxy_index) -> None:
         if not proxy_index.isValid():
@@ -305,6 +475,10 @@ class ClassesSection(QWidget):
             return
 
         column = proxy_index.column()
+        if column == ClassColumns.IMAGE_TAG:
+            if self._tag_interactive:
+                self._toggle_image_tag(name)
+            return
         if column == ClassColumns.COLOR:
             self._change_color(name)
             return
@@ -315,6 +489,29 @@ class ClassesSection(QWidget):
             self._delete_class(name)
             return
         self._select_class(name, emit=True)
+
+    def _toggle_image_tag(self, name: str) -> None:
+        if self._current_row < 0:
+            return
+        current = self.dataset_model.get_image_classes(self._current_row)
+        if name in current:
+            pixel_count = self.dataset_model.get_pixel_annotation_count_for_class(
+                self._current_row, name
+            )
+            if pixel_count > 0:
+                QMessageBox.warning(
+                    self,
+                    "Cannot Remove Tag",
+                    f"'{name}' has {pixel_count} pixel-level annotation(s) on this image.\n"
+                    "To remove this class, switch to pixel-level mode and delete those "
+                    "annotations first.",
+                )
+                return
+            current.remove(name)
+        else:
+            current.append(name)
+        self.dataset_model.set_image_classes(self._current_row, current)
+        self._table_model.set_current_row(self._current_row)
 
     def _class_name_from_proxy(self, proxy_index) -> str:
         value = proxy_index.data(CLASS_NAME_ROLE)
@@ -386,12 +583,22 @@ class ClassesSection(QWidget):
         self._select_class(name, emit=False)
 
     def _delete_class(self, name: str) -> None:
-        count = self.dataset_model.get_class_annotation_count(name)
-        if count > 0:
+        pixel_count = self.dataset_model.get_class_annotation_count(name)
+        tag_count = sum(
+            1
+            for row in range(self.dataset_model.rowCount())
+            if name in self.dataset_model.get_image_classes(row)
+        )
+        if pixel_count > 0 or tag_count > 0:
+            parts = []
+            if pixel_count > 0:
+                parts.append(f"{pixel_count} annotation(s)")
+            if tag_count > 0:
+                parts.append(f"{tag_count} image-level tag(s)")
             choice = QMessageBox.question(
                 self,
                 "Delete Annotation Class",
-                f'Delete class "{name}" and its {count} annotation(s)?',
+                f'Delete class "{name}" and its {" and ".join(parts)}?',
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )

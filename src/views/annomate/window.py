@@ -448,6 +448,9 @@ class AnnoMateWindow(QWidget):
         self._saved_model_path: str = ""
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
+        self._session_timer = QTimer(self)
+        self._session_timer.setInterval(60_000)
+        self._session_timer.timeout.connect(self._update_session_display)
         self._init_ui()
         if calibration_model is not None:
             self.canvas.set_calibration_model(calibration_model)
@@ -480,6 +483,12 @@ class AnnoMateWindow(QWidget):
             self._refresh_canvas_render
         )
         self.right_panel.accept_polygons_requested.connect(self._on_accept_ai_polygons)
+        self.right_panel.annotation_mode_changed.connect(
+            self._on_annotation_mode_changed
+        )
+        self.dataset_model.annotation_mode_changed.connect(
+            self.right_panel.set_annotation_mode
+        )
 
         # Keep canvas in sync when annotations change outside the canvas
         self.dataset_model.dataChanged.connect(self._on_dataset_data_changed)
@@ -498,6 +507,9 @@ class AnnoMateWindow(QWidget):
         )
         self.viewport_actions.center_template_cleared.connect(
             self._on_center_template_cleared
+        )
+        self.viewport_actions.center_template_import_requested.connect(
+            self._on_center_template_import_requested
         )
         self.viewport_actions.crop_overlay_toggled.connect(
             self._on_crop_overlay_toggled
@@ -544,6 +556,20 @@ class AnnoMateWindow(QWidget):
             self._project_controller.project_opened.connect(
                 lambda _: self.refresh_inference_panel()
             )
+            self._project_controller.project_opened.connect(self._on_session_started)
+            self._project_controller.autosave_written.connect(
+                lambda _: self._update_session_display()
+            )
+            self._project_controller.dirty_changed.connect(
+                lambda _: self._update_microsentry_availability()
+            )
+            self._project_controller.project_opened.connect(
+                lambda _: self._update_microsentry_availability()
+            )
+            self._project_controller.project_saved.connect(
+                lambda _: self._update_microsentry_availability()
+            )
+        self._update_microsentry_availability()
 
         # Inference controller signals
         if self.inference_controller is not None:
@@ -682,6 +708,9 @@ class AnnoMateWindow(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_model_reset(self) -> None:
+        mode = self.dataset_model.get_annotation_mode()
+        self.right_panel.set_annotation_mode(mode)
+        self.tool_palette.set_drawing_enabled(mode == "pixel")
         if self.dataset_model.rowCount() > 0:
             self._load_row(0)
             self._start_pending_center_crop_preload()
@@ -700,6 +729,28 @@ class AnnoMateWindow(QWidget):
             self.right_panel.set_current_row(-1)
             self.status_bar.set_class("")
             self._set_start_screen_visible(True)
+        if (
+            self._project_controller is not None
+            and not self._project_controller.has_project
+        ):
+            self._session_timer.stop()
+            self.status_bar.clear_session_time()
+
+    def _on_session_started(self, _name: str) -> None:
+        self._update_session_display()
+        self._session_timer.start()
+
+    def _update_session_display(self) -> None:
+        if (
+            self._project_controller is not None
+            and self._project_controller.has_project
+        ):
+            self.status_bar.set_session_time(
+                self._project_controller.get_session_seconds()
+            )
+        else:
+            self._session_timer.stop()
+            self.status_bar.clear_session_time()
 
     def _load_row(self, row: int) -> None:
         bgr = self.io_controller.load_image_for_display(row)
@@ -738,42 +789,6 @@ class AnnoMateWindow(QWidget):
             self._navigate_to(row)
 
     def _navigate_to(self, row: int) -> None:
-        """Navigate to *row*, prompting if the current image has unresolved review state."""
-        if self._current_row >= 0 and row != self._current_row:
-            warning = self.dataset_model.get_navigation_warning(self._current_row)
-            if warning == "no_decision":
-                reply = QMessageBox.warning(
-                    self,
-                    "No Decision Made",
-                    "This image has annotations but no Accept or Reject decision was made.\n\n"
-                    "Press OK to continue (image will be marked as Omitted), "
-                    "or Cancel to stay and make a decision.",
-                    QMessageBox.Ok | QMessageBox.Cancel,
-                    QMessageBox.Cancel,
-                )
-                if reply == QMessageBox.Ok:
-                    self.dataset_model.set_review_decision(
-                        self._current_row, "omitted", "no_decision"
-                    )
-                else:
-                    return
-            elif warning == "no_annotation":
-                reply = QMessageBox.warning(
-                    self,
-                    "No Annotations",
-                    "This image has been marked as rejected but has no annotations.\n"
-                    "Rejections should include annotations identifying the issue.\n\n"
-                    "Press OK to continue (image will be marked as Omitted), "
-                    "or Cancel to stay and annotate.",
-                    QMessageBox.Ok | QMessageBox.Cancel,
-                    QMessageBox.Cancel,
-                )
-                if reply == QMessageBox.Ok:
-                    self.dataset_model.set_review_decision(
-                        self._current_row, "omitted", "no_annotation"
-                    )
-                else:
-                    return
         self._load_row(row)
 
     # ------------------------------------------------------------------ #
@@ -956,6 +971,30 @@ class AnnoMateWindow(QWidget):
         if checked and self._current_bgr is not None:
             self._apply_center_template_match(self._current_bgr)
 
+    def _on_center_template_import_requested(self, png_path: str) -> None:
+        if self._center_template_controller is None:
+            return
+        project_dir = (
+            self._project_controller.project_dir
+            if self._project_controller is not None
+            else ""
+        )
+        try:
+            self._center_template_controller.import_template_from_png(
+                project_dir, png_path
+            )
+        except Exception as exc:
+            logger.warning("Center template import failed: %s", exc)
+            QMessageBox.warning(
+                self,
+                "Import Template",
+                f"Could not import template:\n{exc}",
+            )
+            return
+        if self._current_bgr is not None:
+            self._apply_center_template_match(self._current_bgr)
+            self._start_pending_center_crop_preload()
+
     def _on_center_template_cleared(self) -> None:
         if self._center_template_controller is None:
             logger.debug("Center template clear ignored: no controller bound.")
@@ -1090,7 +1129,13 @@ class AnnoMateWindow(QWidget):
 
     def _on_review_decision(self, decision) -> None:
         if self._current_row >= 0:
+            if decision == "accept":
+                self.dataset_model.set_image_classes(self._current_row, [])
             self.dataset_model.set_review_decision(self._current_row, decision)
+
+    def _on_annotation_mode_changed(self, mode: str) -> None:
+        self.dataset_model.set_annotation_mode(mode)
+        self.tool_palette.set_drawing_enabled(mode == "pixel")
 
     def _on_annotation_selected(self, idx: int) -> None:
         """Apply selection to the canvas and sync the UI slider to match the polygon's thickness."""
@@ -1156,6 +1201,25 @@ class AnnoMateWindow(QWidget):
     # ------------------------------------------------------------------ #
     # Microsentry toggle & rendering
     # ------------------------------------------------------------------ #
+
+    def _update_microsentry_availability(self) -> None:
+        has_project = (
+            self._project_controller is not None
+            and self._project_controller.has_project
+        )
+        self.right_panel.set_project_saved(has_project)
+
+    def reset_model_state(self) -> None:
+        """Unload the current model and reset the inference panel to no-model state.
+
+        Called by AppWindow on new project or direct folder load so a stale
+        model cannot auto-run inference on an unrelated dataset.
+        """
+        if self.inference_controller is not None:
+            self.inference_controller.unload_model()
+        self.inference_model.clear()
+        self.right_panel.set_no_model()
+        self._saved_model_path = ""
 
     def set_saved_model_path(self, path: str) -> None:
         """Called by AppWindow after opening a project to record the saved model path."""
@@ -1492,9 +1556,11 @@ class AnnoMateWindow(QWidget):
         elif event.key() == Qt.Key_D and not calibrating:
             self._next_image()
         elif event.key() == Qt.Key_P:
-            self.tool_palette.toggle_polygon()
+            if self.dataset_model.get_annotation_mode() == "pixel":
+                self.tool_palette.toggle_polygon()
         elif event.key() == Qt.Key_S:
-            self.tool_palette.toggle_sam()
+            if self.dataset_model.get_annotation_mode() == "pixel":
+                self.tool_palette.toggle_sam()
         elif event.key() == Qt.Key_C:
             self.viewport_actions.toggle_calibrate()
         elif event.key() == Qt.Key_M:

@@ -1,5 +1,7 @@
-import os
+import json
 import logging
+import os
+import shutil
 
 import cv2
 from PySide6.QtCore import QObject, QThread, Signal
@@ -129,6 +131,93 @@ class CenterTemplateController(QObject):
         self._stop_worker()
         self.template_saved.emit(template_path)
         return template_path
+
+    def import_template_from_png(self, project_dir: str, png_path: str) -> str:
+        """Set an existing PNG file as the center template.
+
+        Looks for a companion ``template.annoproj`` in the same directory to
+        restore anchor and crop settings (as produced by Export Project Template).
+        Falls back to anchor = center of the PNG when no companion file is found.
+        Copies the PNG into ``project_dir`` as ``center_template.png`` when a
+        project directory is available; otherwise references the file in-place.
+
+        Returns the absolute path to the template PNG that was stored.
+        """
+        png_path = os.path.abspath(png_path)
+        template = cv2.imread(png_path, cv2.IMREAD_COLOR)
+        if template is None:
+            raise OSError(f"Could not read template image: {png_path}")
+
+        tpl_h, tpl_w = template.shape[:2]
+        anchor_x = tpl_w // 2
+        anchor_y = tpl_h // 2
+        crop_shape = "circle"
+        crop_width = tpl_w
+        crop_height = tpl_h
+        center_x = 0.0
+        center_y = 0.0
+
+        companion = os.path.join(os.path.dirname(png_path), "template.annoproj")
+        if os.path.isfile(companion):
+            try:
+                with open(companion, "r", encoding="utf-8") as f:
+                    tmpl_data = json.load(f)
+                ct = tmpl_data.get("center_template", {})
+                if ct:
+                    anchor_x = int(ct.get("anchor_x", anchor_x))
+                    anchor_y = int(ct.get("anchor_y", anchor_y))
+                    crop_shape = ct.get("crop_shape", crop_shape)
+                    crop_width = int(ct.get("crop_width", crop_width))
+                    crop_height = int(ct.get("crop_height", crop_height))
+                    cx = ct.get("center_x")
+                    cy = ct.get("center_y")
+                    if cx is not None:
+                        center_x = float(cx)
+                    if cy is not None:
+                        center_y = float(cy)
+                    logger.info(
+                        "Loaded center template settings from companion annoproj: %s",
+                        companion,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Could not read companion annoproj %s: %s", companion, exc
+                )
+
+        if project_dir:
+            os.makedirs(project_dir, exist_ok=True)
+            dest = os.path.join(project_dir, _TEMPLATE_FILENAME)
+            if os.path.abspath(png_path) != os.path.abspath(dest):
+                shutil.copy2(png_path, dest)
+            stored_path = dest
+        else:
+            stored_path = png_path
+
+        self._model.set_template(
+            os.path.basename(stored_path),
+            stored_path,
+            anchor_x,
+            anchor_y,
+            crop_shape,
+            crop_width,
+            crop_height,
+            center_x,
+            center_y,
+        )
+        self._loaded_template = cv2.imread(stored_path, cv2.IMREAD_COLOR)
+        self._match_cache.clear()
+        self._stop_worker()
+        self.template_saved.emit(stored_path)
+        logger.info(
+            "Center template imported: path=%s anchor=(%d, %d) crop=%s %dx%d",
+            stored_path,
+            anchor_x,
+            anchor_y,
+            crop_shape,
+            crop_width,
+            crop_height,
+        )
+        return stored_path
 
     def clear_template(self) -> None:
         logger.info("Clearing center template state.")

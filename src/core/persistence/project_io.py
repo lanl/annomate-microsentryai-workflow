@@ -56,6 +56,7 @@ class ProjectIO:
         calibration_state=None,
         center_template_state=None,
         anomaly_constraint_state=None,
+        session_seconds: float = 0.0,
     ) -> str:
         """Write .annoproj + annotations.coco.json to project_dir.
 
@@ -71,6 +72,7 @@ class ProjectIO:
             created_at: ISO timestamp from the original save; if None, uses now.
             save_score_maps: When True, write inference score maps to NPZ.
             model_path: Absolute path to the inference model file (informational).
+            session_seconds: Cumulative seconds spent in this project across all sessions.
         """
         _t0 = time.perf_counter()
 
@@ -133,7 +135,6 @@ class ProjectIO:
             decision_at = dataset_state.decision_timestamps.get(fname, "")
             inspector = dataset_state.inspectors.get(fname, "")
             note = dataset_state.notes.get(fname, "")
-            omit_reason = dataset_state.omit_reasons.get(fname, "")
             if score is not None:
                 entry["score"] = score
             if label is not None:
@@ -146,8 +147,14 @@ class ProjectIO:
                 entry["inspector"] = inspector
             if note:
                 entry["note"] = note
-            if omit_reason:
-                entry["omit_reason"] = omit_reason
+            pixel_classes = sorted(
+                {a["category_name"] for a in dataset_state.annotations.get(fname, [])}
+            )
+            if pixel_classes:
+                entry["pixel_classes"] = pixel_classes
+            img_classes = dataset_state.image_classes.get(fname, [])
+            if img_classes:
+                entry["image_classes"] = img_classes
             if entry:
                 per_image[fname] = entry
         _t4 = time.perf_counter()
@@ -157,7 +164,9 @@ class ProjectIO:
             "version": _SCHEMA_VERSION,
             "created_at": created_at,
             "modified_at": now,
+            "session_seconds": session_seconds,
             "project_name": project_name,
+            "annotation_mode": dataset_state.annotation_mode,
             "dataset": {
                 "image_dir": self._as_relative_path(
                     dataset_state.image_dir or "", project_dir
@@ -328,6 +337,18 @@ class ProjectIO:
         logger.debug("Project template exported to: %s", template_path)
         return template_path
 
+    def patch_session_seconds(self, annoproj_path: str, seconds: float) -> None:
+        """Update only the session_seconds field in an existing .annoproj file.
+
+        Used by autosave to keep the main project file's session time current
+        without triggering a full project write.
+        """
+        with open(annoproj_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        data["session_seconds"] = seconds
+        with open(annoproj_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
     # ------------------------------------------------------------------ #
     # Load
     # ------------------------------------------------------------------ #
@@ -404,6 +425,9 @@ class ProjectIO:
         """
         ds = project_data.get("dataset", {})
 
+        # Annotation mode (absent in old files → default "pixel")
+        dataset_state.annotation_mode = project_data.get("annotation_mode", "pixel")
+
         # Class registry
         class_names = ds.get("class_names", [])
         if class_names:
@@ -447,14 +471,21 @@ class ProjectIO:
                     inference_state.scores[abs_path] = score
                 if label is not None:
                     inference_state.labels[abs_path] = label
-                if info.get("decision"):
-                    dataset_state.review_decisions[fname] = info["decision"]
+                decision = info.get("decision")
+                if decision:
+                    # "omitted" was the old blocking-popup state; treat as reject
+                    dataset_state.review_decisions[fname] = (
+                        "reject" if decision == "omitted" else decision
+                    )
                 if info.get("decision_at"):
                     dataset_state.decision_timestamps[fname] = info["decision_at"]
-                if info.get("omit_reason"):
-                    dataset_state.omit_reasons[fname] = info["omit_reason"]
                 dataset_state.inspectors[fname] = info.get("inspector", "")
                 dataset_state.notes[fname] = info.get("note", "")
+                img_classes = info.get("image_classes", [])
+                if img_classes:
+                    dataset_state.image_classes[fname] = [
+                        c.lower() for c in img_classes
+                    ]
         else:
             # Legacy format: separate review_status, review_decisions, score_cache, label_cache
             for fname, info in project_data.get("review_status", {}).items():
@@ -620,9 +651,11 @@ class ProjectIO:
                 )
                 w, h = self._read_image_size(img_path)
                 dataset_state.image_sizes[fname] = (w, h)
-            coco["images"].append(
-                {"id": img_id, "file_name": fname, "width": w, "height": h}
-            )
+            img_entry = {"id": img_id, "file_name": fname, "width": w, "height": h}
+            tags = dataset_state.image_classes.get(fname, [])
+            if tags:
+                img_entry["image_classes"] = tags
+            coco["images"].append(img_entry)
 
             for ann_rec in dataset_state.annotations.get(fname, []):
                 polygon = ann_rec["polygon"]

@@ -34,6 +34,7 @@ class RightPanel(QWidget):
     load_previous_model_requested = Signal()
     microsentry_settings_changed = Signal()
     accept_polygons_requested = Signal()
+    annotation_mode_changed = Signal(str)  # "pixel" | "image_level"
 
     def __init__(
         self,
@@ -110,14 +111,16 @@ class RightPanel(QWidget):
         classes_sec = _CollapsibleSection("Annotation Classes")
         self.classes = ClassesSection(dataset_model)
         self.classes.class_selected.connect(self.class_selected)
+        self.classes.annotation_mode_changed.connect(self.annotation_mode_changed)
+        classes_sec.body_layout().setContentsMargins(8, 0, 8, 8)
         classes_sec.body_layout().addWidget(self.classes)
         cl.addWidget(classes_sec)
 
-        annos_sec = _CollapsibleSection("Current Image Annotations")
+        self._annos_sec = _CollapsibleSection("Current Image Annotations")
         self.annotations = AnnotationsSection(dataset_model, calibration_model)
         self.annotations.annotation_selected.connect(self.annotation_selected)
-        annos_sec.body_layout().addWidget(self.annotations)
-        cl.addWidget(annos_sec)
+        self._annos_sec.body_layout().addWidget(self.annotations)
+        cl.addWidget(self._annos_sec)
 
         meta_sec = _CollapsibleSection("Inspector/Notes")
         self.metadata = MetadataSection(dataset_model)
@@ -171,6 +174,9 @@ class RightPanel(QWidget):
     # Microsentry pass-throughs
     # ------------------------------------------------------------------ #
 
+    def set_project_saved(self, has_project: bool) -> None:
+        self._ms_section.set_project_saved(has_project)
+
     def set_model_loaded(self, name: str, path: str = "") -> None:
         self._ms_section.set_model_loaded(name, path)
 
@@ -191,3 +197,12 @@ class RightPanel(QWidget):
 
     def navigator_enable_inference_columns(self) -> None:
         self.navigator.enable_inference_columns()
+
+    # ------------------------------------------------------------------ #
+    # Annotation mode
+    # ------------------------------------------------------------------ #
+
+    def set_annotation_mode(self, mode: str) -> None:
+        """Sync the mode button state without re-emitting the signal."""
+        self.classes.set_annotation_mode(mode)
+        self._annos_sec.setVisible(mode == "pixel")

@@ -30,13 +30,16 @@ class DatasetState:
         self.image_dir = ""
         self.image_files = []
 
+        # Annotation workflow mode — "pixel" (default) or "image_level"
+        self.annotation_mode: str = "pixel"
+
         # Annotations & Metadata
         self.annotations = {}  # { "img.jpg": [ { "category_name": str, "polygon": [...] } ] }
+        self.image_classes = {}  # { "img.jpg": ["crack", "void"] } — image-level class tags
         self.inspectors = {}  # { "img.jpg": "John Doe" }
         self.notes = {}  # { "img.jpg": "Needs review" }
-        self.review_decisions = {}  # { "img.jpg": "accept" | "reject" | "omitted" }
+        self.review_decisions = {}  # { "img.jpg": "accept" | "reject" }
         self.decision_timestamps = {}  # { "img.jpg": ISO-8601 UTC string }
-        self.omit_reasons = {}  # { "img.jpg": "no_decision" | "no_annotation" }
         self.image_sizes = {}  # { "img.jpg": (width, height) } — cached to avoid PIL reads on save
 
         # Class registry — initialized from defaults, NOT cleared on folder load
@@ -48,12 +51,13 @@ class DatasetState:
         """Reset per-folder data. Class registry is intentionally preserved."""
         self.image_dir = ""
         self.image_files = []
+        self.annotation_mode = "pixel"
         self.annotations.clear()
+        self.image_classes.clear()
         self.inspectors.clear()
         self.notes.clear()
         self.review_decisions.clear()
         self.decision_timestamps.clear()
-        self.omit_reasons.clear()
         self.image_sizes.clear()
 
     def reset_classes(self) -> None:
@@ -66,7 +70,8 @@ class DatasetState:
         """Return whether an image has been fully reviewed.
 
         Accept decisions are reviewed unconditionally. Reject decisions require
-        at least one annotation to be considered reviewed.
+        evidence appropriate to the current annotation_mode: at least one polygon
+        annotation in pixel mode, or at least one image-level class tag in image_level mode.
 
         Args:
             img_name (str): Image filename to check.
@@ -78,6 +83,8 @@ class DatasetState:
         if decision == "accept":
             return True
         if decision == "reject":
+            if self.annotation_mode == "image_level":
+                return bool(self.image_classes.get(img_name))
             return bool(self.annotations.get(img_name))
         return False
 
@@ -192,6 +199,12 @@ class DatasetState:
                 self.annotations[img] = [
                     a for a in self.annotations[img] if a.get("category_name") != name
                 ]
+            for img in list(self.image_classes):
+                tags = [t for t in self.image_classes[img] if t != name]
+                if tags:
+                    self.image_classes[img] = tags
+                else:
+                    del self.image_classes[img]
 
     def set_class_visible(self, name: str, visible: bool) -> None:
         """Set viewport visibility for an annotation class."""
@@ -201,6 +214,58 @@ class DatasetState:
     def is_class_visible(self, name: str) -> bool:
         """Return whether an annotation class should render in the viewport."""
         return self.class_visibility.get(name, True)
+
+    # --- Annotation Mode ---
+
+    def set_annotation_mode(self, mode: str) -> None:
+        """Switch the annotation workflow mode.
+
+        Args:
+            mode (str): ``"pixel"`` for polygon annotation or ``"image_level"``
+                for image-level class tag assignment.
+        """
+        if mode not in ("pixel", "image_level"):
+            raise ValueError(f"Invalid annotation_mode: {mode!r}")
+        self.annotation_mode = mode
+
+    # --- Image-Level Class Tags ---
+
+    def set_image_classes(self, image_name: str, names: list) -> None:
+        """Set image-level defect class tags for *image_name*.
+
+        Stores a deduplicated, lowercased copy. An empty list clears the entry.
+
+        Args:
+            image_name (str): Target image filename.
+            names (list[str]): Class names to assign at the image level.
+        """
+        cleaned = list(dict.fromkeys(n.lower() for n in names))
+        if cleaned:
+            self.image_classes[image_name] = cleaned
+        else:
+            self.image_classes.pop(image_name, None)
+
+    def get_image_classes(self, image_name: str) -> list:
+        """Return image-level defect class tags, or an empty list if none set."""
+        return list(self.image_classes.get(image_name, []))
+
+    def merge_pixel_classes_to_image_level(self) -> None:
+        """Add pixel annotation classes to image_classes for each image (non-destructive).
+
+        Only adds classes that are not already present — never removes existing tags.
+        Images with no polygon annotations are left unchanged.
+        """
+        for fname in self.image_files:
+            pixel_classes = {
+                a["category_name"] for a in self.annotations.get(fname, [])
+            }
+            if not pixel_classes:
+                continue
+            existing = self.image_classes.get(fname, [])
+            existing_set = set(existing)
+            new_classes = [c for c in pixel_classes if c not in existing_set]
+            if new_classes:
+                self.image_classes[fname] = existing + new_classes
 
     # --- Per-image Metadata ---
 
@@ -222,36 +287,22 @@ class DatasetState:
         """
         self.notes[image_name] = value
 
-    def set_review_decision(
-        self, image_name: str, decision, omit_reason: str | None = None
-    ) -> None:
+    def set_review_decision(self, image_name: str, decision) -> None:
         """Set the image-level review decision.
 
         Args:
             image_name (str): Target image filename.
-            decision (str | None): ``"accept"``, ``"reject"``, ``"omitted"``, or
-                ``None`` to clear.
-            omit_reason (str | None): Reason key stored when decision is
-                ``"omitted"`` (``"no_decision"`` or ``"no_annotation"``).
+            decision (str | None): ``"accept"``, ``"reject"``, or ``None`` to clear.
         """
         if decision is None:
             self.review_decisions.pop(image_name, None)
             self.decision_timestamps.pop(image_name, None)
-            self.omit_reasons.pop(image_name, None)
         else:
             self.review_decisions[image_name] = decision
             self.decision_timestamps[image_name] = datetime.now(
                 timezone.utc
             ).isoformat()
-            if decision == "omitted" and omit_reason:
-                self.omit_reasons[image_name] = omit_reason
-            elif decision in ("accept", "reject"):
-                self.omit_reasons.pop(image_name, None)
 
     def get_review_decision(self, image_name: str):
         """Return the image-level review decision, or None if not set."""
         return self.review_decisions.get(image_name)
-
-    def get_omit_reason(self, image_name: str) -> str | None:
-        """Return the omit reason key for *image_name*, or None if not omitted."""
-        return self.omit_reasons.get(image_name)

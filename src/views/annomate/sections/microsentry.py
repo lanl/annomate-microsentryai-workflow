@@ -76,13 +76,21 @@ class MicrosentrySection(QWidget):
         btn_row.setSpacing(4)
         self._btn_load_prev = QPushButton("Load Previous")
         self._btn_load_prev.setToolTip("Reload the model saved with this project")
+        self._btn_load_prev.setEnabled(False)
         self._btn_load_prev.clicked.connect(self.load_previous_model_requested)
         self._btn_load_new = QPushButton("Load New")
         self._btn_load_new.setToolTip("Browse for a new .pt model file")
+        self._btn_load_new.setEnabled(False)
         self._btn_load_new.clicked.connect(self.load_model_requested)
         btn_row.addWidget(self._btn_load_prev)
         btn_row.addWidget(self._btn_load_new)
         layout.addLayout(btn_row)
+
+        # Save-project hint (shown when no project is saved)
+        self._lbl_save_hint = QLabel("Save the project first to enable model loading.")
+        self._lbl_save_hint.setStyleSheet("color: #b05000; font-size: 11px;")
+        self._lbl_save_hint.setWordWrap(True)
+        layout.addWidget(self._lbl_save_hint)
 
         # No-model label
         self._lbl_no_model = QLabel("No model loaded")
@@ -248,6 +256,11 @@ class MicrosentrySection(QWidget):
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
+
+    def set_project_saved(self, has_project: bool) -> None:
+        self._btn_load_prev.setEnabled(has_project)
+        self._btn_load_new.setEnabled(has_project)
+        self._lbl_save_hint.setVisible(not has_project)
 
     def set_model_loaded(self, name: str, path: str = "") -> None:
         filename = os.path.basename(path) if path else name

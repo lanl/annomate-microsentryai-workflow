@@ -29,6 +29,7 @@ class DatasetTableModel(QAbstractTableModel):
     """
 
     classVisibilityChanged = Signal(str, bool)
+    annotation_mode_changed = Signal(str)  # "pixel" | "image_level"
 
     def __init__(self, state: DatasetState, parent: object = None) -> None:
         """Initialize DatasetTableModel with a domain state object.
@@ -503,22 +504,16 @@ class DatasetTableModel(QAbstractTableModel):
             return False
         return self.state.is_reviewed(self.state.image_files[row])
 
-    def set_review_decision(
-        self, row: int, decision, omit_reason: str | None = None
-    ) -> None:
+    def set_review_decision(self, row: int, decision) -> None:
         """Set the image-level review decision for the image at *row*.
 
         Args:
             row (int): Zero-based row index of the target image.
-            decision (str | None): ``"accept"``, ``"reject"``, ``"omitted"``, or
-                ``None`` to clear.
-            omit_reason (str | None): Reason key when decision is ``"omitted"``.
+            decision (str | None): ``"accept"``, ``"reject"``, or ``None`` to clear.
         """
         if not (0 <= row < self.rowCount()):
             return
-        self.state.set_review_decision(
-            self.state.image_files[row], decision, omit_reason
-        )
+        self.state.set_review_decision(self.state.image_files[row], decision)
         self._emit_row(row)
 
     def get_review_decision(self, row: int):
@@ -531,28 +526,76 @@ class DatasetTableModel(QAbstractTableModel):
             return None
         return self.state.get_review_decision(self.state.image_files[row])
 
-    def get_omit_reason(self, row: int) -> str | None:
-        """Return the omit reason key for the image at *row*, or None."""
-        if not (0 <= row < self.rowCount()):
-            return None
-        return self.state.get_omit_reason(self.state.image_files[row])
+    # --- Annotation Mode ---
 
-    def get_navigation_warning(self, row: int) -> str | None:
-        """Return the omit reason key if navigating away from *row* should warn the user.
+    def set_annotation_mode(self, mode: str) -> None:
+        """Switch the annotation workflow mode and refresh all status indicators.
 
-        Returns ``"no_decision"`` when the image has annotations but no decision,
-        ``"no_annotation"`` when it is rejected without annotations, or ``None``
-        when no warning is needed.
+        When switching to image_level, pixel annotation classes are merged into
+        image_classes for each image (non-destructive — existing tags are kept).
+
+        Args:
+            mode (str): ``"pixel"`` or ``"image_level"``.
+        """
+        self.state.set_annotation_mode(mode)
+        if mode == "image_level":
+            self.state.merge_pixel_classes_to_image_level()
+        self.annotation_mode_changed.emit(mode)
+        if self.rowCount() > 0:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(self.rowCount() - 1, self.columnCount() - 1),
+            )
+
+    def get_annotation_mode(self) -> str:
+        """Return the current annotation mode (``"pixel"`` or ``"image_level"``)."""
+        return self.state.annotation_mode
+
+    # --- Image-Level Class Tags ---
+
+    def set_image_classes(self, row: int, names: list) -> None:
+        """Set image-level defect class tags for the image at *row*.
+
+        Args:
+            row (int): Zero-based row index of the target image.
+            names (list[str]): Class names to assign. An empty list clears tags.
         """
         if not (0 <= row < self.rowCount()):
-            return None
-        decision = self.get_review_decision(row)
-        count = self.get_annotation_count(row)
-        if count > 0 and not decision:
-            return "no_decision"
-        if decision == "reject" and count == 0:
-            return "no_annotation"
-        return None
+            return
+        self.state.set_image_classes(self.state.image_files[row], names)
+        self._emit_row(row)
+
+    def get_image_classes(self, row: int) -> list:
+        """Return image-level defect class tags for the image at *row*.
+
+        Args:
+            row (int): Zero-based row index of the target image.
+
+        Returns:
+            list[str]: Assigned class tags, or an empty list if none or out of bounds.
+        """
+        if not (0 <= row < self.rowCount()):
+            return []
+        return self.state.get_image_classes(self.state.image_files[row])
+
+    def get_pixel_annotation_count_for_class(self, row: int, class_name: str) -> int:
+        """Count polygon annotations of class_name on the image at row.
+
+        Args:
+            row (int): Zero-based row index of the target image.
+            class_name (str): Class label to count (case-sensitive; store in lowercase).
+
+        Returns:
+            int: Number of annotations matching class_name, or 0 for out-of-bounds rows.
+        """
+        if not (0 <= row < self.rowCount()):
+            return 0
+        fname = self.state.image_files[row]
+        return sum(
+            1
+            for a in self.state.annotations.get(fname, [])
+            if a.get("category_name") == class_name
+        )
 
     def get_annotation_count(self, row: int) -> int:
         """Return the number of polygon annotations for the image at *row*.

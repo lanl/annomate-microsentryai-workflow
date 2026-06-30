@@ -491,6 +491,33 @@ class TestProjectRoundTrip:
         assert "created_at" in raw
         assert "modified_at" in raw
 
+    def test_session_seconds_round_trip(self, pio, tmp_path):
+        """Verify that session_seconds is saved to and loaded from the project file.
+
+        Saves with session_seconds=3665.0, loads back, and checks the value is preserved
+        exactly. Success means the field survives the save/load cycle unchanged.
+        """
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(
+            proj_dir, "myproject", ds, InferenceState(), session_seconds=3665.0
+        )
+        data = pio.load_project(path)
+        assert data["session_seconds"] == 3665.0
+
+    def test_session_seconds_defaults_to_zero(self, pio, tmp_path):
+        """Verify that session_seconds is always written to the project file, defaulting to 0.0.
+
+        Saves without passing session_seconds, then checks the raw JSON contains
+        session_seconds=0.0. Success means the field is always present so old-project
+        loaders never have to handle a missing key.
+        """
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+        raw = json.loads(Path(path).read_text())
+        assert raw["session_seconds"] == 0.0
+
     def test_calibration_pixel_defaults_round_trip(self, pio, tmp_path):
         """Verify that a default (pixel-scale) CalibrationState survives a project save/load cycle.
 
@@ -835,3 +862,160 @@ class TestProjectRoundTrip:
         saved_dir = raw["dataset"]["image_dir"]
         assert not saved_dir.startswith("/"), "image_dir should be relative"
         assert saved_dir == "../images"
+
+
+class TestAnnotationModeRoundTrip:
+    def test_annotation_mode_saved_and_restored(self, pio, tmp_path):
+        """annotation_mode 'image_level' round-trips through save/load."""
+        ds = _make_dataset(tmp_path)
+        ds.set_annotation_mode("image_level")
+        inf = InferenceState()
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["annotation_mode"] == "image_level"
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.annotation_mode == "image_level"
+
+    def test_missing_annotation_mode_key_defaults_to_pixel(self, pio, tmp_path):
+        """Old .annoproj files without annotation_mode load as 'pixel'."""
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        del raw["annotation_mode"]
+        Path(path).write_text(json.dumps(raw))
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.annotation_mode == "pixel"
+
+
+class TestImageClassesRoundTrip:
+    def test_image_classes_saved_and_restored(self, pio, tmp_path):
+        """image_classes round-trip: saved in per_image, restored on load."""
+        ds = _make_dataset(tmp_path)
+        ds.set_image_classes("img001.jpg", ["crack", "void"])
+        inf = InferenceState()
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["per_image"]["img001.jpg"]["image_classes"] == ["crack", "void"]
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.get_image_classes("img001.jpg") == ["crack", "void"]
+
+    def test_missing_image_classes_key_is_safe(self, pio, tmp_path):
+        """Old .annoproj files without image_classes load without error."""
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, inf)
+
+        loaded = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(loaded, ds2, InferenceState())
+        assert ds2.image_classes == {}
+
+    def test_coco_export_includes_image_classes_extension(self, pio, tmp_path):
+        """COCO images array gets image_classes when tags are present."""
+        ds = _make_dataset(tmp_path)
+        ds.set_image_classes("img001.jpg", ["crack"])
+        coco_path = str(tmp_path / "out.coco.json")
+        pio.export_coco(coco_path, ds)
+        data = json.loads(Path(coco_path).read_text())
+        assert data["images"][0]["image_classes"] == ["crack"]
+
+    def test_coco_export_omits_image_classes_when_absent(self, pio, tmp_path):
+        """COCO images array has no image_classes key when no tags set."""
+        ds = _make_dataset(tmp_path)
+        coco_path = str(tmp_path / "out.coco.json")
+        pio.export_coco(coco_path, ds)
+        data = json.loads(Path(coco_path).read_text())
+        assert "image_classes" not in data["images"][0]
+
+
+class TestPixelClassesInPerImage:
+    def test_pixel_classes_written_when_annotations_exist(self, pio, tmp_path):
+        """pixel_classes appears in per_image when the image has polygon annotations."""
+        ds = _make_dataset(tmp_path)  # has a 'defect' annotation on img001.jpg
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        assert "pixel_classes" in raw["per_image"]["img001.jpg"]
+        assert raw["per_image"]["img001.jpg"]["pixel_classes"] == ["defect"]
+
+    def test_pixel_classes_absent_when_no_annotations(self, pio, tmp_path):
+        """pixel_classes is omitted from per_image when the image has no polygon annotations."""
+        from PIL import Image as PILImage
+
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        PILImage.new("RGB", (10, 10)).save(img_dir / "img001.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img001.jpg"]
+        ds.set_review_decision("img001.jpg", "accept")
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        assert "pixel_classes" not in raw["per_image"].get("img001.jpg", {})
+
+    def test_pixel_classes_sorted_and_deduplicated(self, pio, tmp_path):
+        """pixel_classes contains sorted unique class names even with multiple annotations."""
+        from PIL import Image as PILImage
+
+        img_dir = tmp_path / "images"
+        img_dir.mkdir()
+        PILImage.new("RGB", (100, 100)).save(img_dir / "img001.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["img001.jpg"]
+        ds.add_annotation("img001.jpg", "crack", [(0, 0), (1, 0), (1, 1)])
+        ds.add_annotation("img001.jpg", "void", [(0, 0), (1, 0), (1, 1)])
+        ds.add_annotation("img001.jpg", "crack", [(2, 2), (3, 2), (3, 3)])
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        pixel_classes = raw["per_image"]["img001.jpg"]["pixel_classes"]
+        assert pixel_classes == ["crack", "void"]  # sorted, no duplicates
+
+    def test_pixel_and_image_classes_coexist(self, pio, tmp_path):
+        """pixel_classes and image_classes can both be present on the same image."""
+        ds = _make_dataset(tmp_path)  # has 'defect' pixel annotation
+        ds.set_image_classes("img001.jpg", ["defect", "scratch"])
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "proj", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        entry = raw["per_image"]["img001.jpg"]
+        assert entry["pixel_classes"] == ["defect"]
+        assert entry["image_classes"] == ["defect", "scratch"]

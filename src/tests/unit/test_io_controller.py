@@ -55,13 +55,7 @@ class TestLoadFolder:
 
 class TestExportCsv:
     def test_csv_has_correct_columns(self, setup, tmp_path):
-        """Verify that export_csv writes a file with the expected column names and values.
-
-        Loads a folder with one image, sets an inspector name, and exports to CSV.
-        The resulting file should be parseable as a dict and contain 'inspector' and
-        'image_name' columns with the correct values. Success means both field values
-        match what was set in the model.
-        """
+        """Verify that export_csv writes all expected column names."""
         model, controller, _ = setup
         (tmp_path / "img.jpg").touch()
         controller.load_folder(str(tmp_path))
@@ -73,6 +67,35 @@ class TestExportCsv:
             rows = list(reader)
         assert rows[0]["inspector"] == "Bob"
         assert rows[0]["image_name"] == "img.jpg"
+        assert "pixel_classes" in rows[0]
+        assert "image_classes" in rows[0]
+
+    def test_csv_pixel_classes_from_polygon_annotations(self, setup, tmp_path):
+        """pixel_classes column reflects polygon annotation class names."""
+        model, controller, _ = setup
+        (tmp_path / "img.jpg").touch()
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.add_annotation(0, "void", [(0, 0), (1, 0), (1, 1)])
+        out_path = str(tmp_path / "out.csv")
+        controller.export_csv(out_path)
+        with open(out_path) as f:
+            row = list(csv.DictReader(f))[0]
+        assert row["pixel_classes"] == "crack,void"
+        assert row["image_classes"] == ""
+
+    def test_csv_image_classes_from_image_level_tags(self, setup, tmp_path):
+        """image_classes column reflects image-level tags set on the model."""
+        model, controller, _ = setup
+        (tmp_path / "img.jpg").touch()
+        controller.load_folder(str(tmp_path))
+        model.set_image_classes(0, ["scratch", "dent"])
+        out_path = str(tmp_path / "out.csv")
+        controller.export_csv(out_path)
+        with open(out_path) as f:
+            row = list(csv.DictReader(f))[0]
+        assert row["image_classes"] == "scratch,dent"
+        assert row["pixel_classes"] == ""
 
 
 class TestAnnotationClassFiles:
@@ -166,3 +189,118 @@ class TestAnnotationClassFiles:
         class_file = out_dir / "annotation_classes.txt"
         assert class_file.exists()
         assert str(class_file) in msg
+
+
+class TestExportPixelTrainStructure:
+    def _make_jpg(self, path):
+        from PIL import Image as PILImage
+
+        PILImage.new("RGB", (10, 10)).save(path)
+
+    def test_accepted_image_goes_to_train_good(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_review_decision(0, "accept")
+        out = str(tmp_path / "out")
+        controller.export_pixel_train_structure(out)
+        assert (tmp_path / "out" / "train" / "good" / "img.jpg").exists()
+
+    def test_rejected_with_polygons_goes_to_test_and_mask(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "crack", [(0, 0), (5, 0), (5, 5)])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_pixel_train_structure(out)
+        assert (tmp_path / "out" / "test" / "crack" / "img.jpg").exists()
+        assert (tmp_path / "out" / "ground_truth" / "crack" / "img.png").exists()
+
+    def test_rejected_image_level_only_is_skipped(self, setup, tmp_path):
+        """Image with image_classes but no polygons must not land in train/good."""
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_image_classes(0, ["crack"])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_pixel_train_structure(out)
+        assert not (tmp_path / "out" / "train" / "good" / "img.jpg").exists()
+        assert not (tmp_path / "out" / "test").exists()
+
+    def test_multi_class_folder_name_is_sorted_and_joined(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "void", [(0, 0), (5, 0), (5, 5)])
+        model.add_annotation(0, "crack", [(0, 0), (5, 0), (5, 5)])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_pixel_train_structure(out)
+        assert (tmp_path / "out" / "test" / "crack-void" / "img.jpg").exists()
+
+    def test_unreviewed_image_is_skipped(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        out = str(tmp_path / "out")
+        controller.export_pixel_train_structure(out)
+        assert not (tmp_path / "out").exists() or not any(
+            (tmp_path / "out").rglob("img.jpg")
+        )
+
+
+class TestExportImageLevelTrainStructure:
+    def _make_jpg(self, path):
+        from PIL import Image as PILImage
+
+        PILImage.new("RGB", (10, 10)).save(path)
+
+    def test_accepted_image_goes_to_train_good(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_review_decision(0, "accept")
+        out = str(tmp_path / "out")
+        controller.export_image_level_train_structure(out)
+        assert (tmp_path / "out" / "train" / "good" / "img.jpg").exists()
+
+    def test_rejected_with_image_classes_goes_to_test(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_image_classes(0, ["crack"])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_image_level_train_structure(out)
+        assert (tmp_path / "out" / "test" / "crack" / "img.jpg").exists()
+
+    def test_no_ground_truth_folder_written(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_image_classes(0, ["crack"])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_image_level_train_structure(out)
+        assert not (tmp_path / "out" / "ground_truth").exists()
+
+    def test_multi_class_folder_name_is_sorted_and_joined(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_image_classes(0, ["void", "crack"])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_image_level_train_structure(out)
+        assert (tmp_path / "out" / "test" / "crack-void" / "img.jpg").exists()
+
+    def test_rejected_without_image_classes_is_skipped(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_image_level_train_structure(out)
+        assert not (tmp_path / "out" / "test").exists()

@@ -71,6 +71,7 @@ class ViewportActionsBar(QFrame):
     center_calibration_started = Signal()
     center_calibration_accepted = Signal()
     center_template_cleared = Signal()
+    center_template_import_requested = Signal(str)
     crop_overlay_toggled = Signal(bool)
 
     _MARGIN = 12
@@ -714,17 +715,25 @@ class ViewportActionsBar(QFrame):
         self._btn_calibrate_center.clicked.connect(self._on_calibrate_center_clicked)
         panel_layout.addWidget(self._btn_calibrate_center)
 
-        accept_clear_row = QHBoxLayout()
-        accept_clear_row.setSpacing(6)
         self._btn_accept_center = QPushButton("Accept")
         self._btn_accept_center.setToolTip("Save this center as the matching template")
         self._btn_accept_center.clicked.connect(self._on_accept_center_clicked)
-        accept_clear_row.addWidget(self._btn_accept_center)
-        self._btn_clear_template = QPushButton("Clear Template")
+        panel_layout.addWidget(self._btn_accept_center)
+
+        import_clear_row = QHBoxLayout()
+        import_clear_row.setSpacing(6)
+        self._btn_import_template = QPushButton("Import")
+        self._btn_import_template.setToolTip(
+            "Import a PNG file as the center template (looks for a companion "
+            "template.annoproj in the same folder to restore all settings)"
+        )
+        self._btn_import_template.clicked.connect(self._on_import_template_clicked)
+        import_clear_row.addWidget(self._btn_import_template)
+        self._btn_clear_template = QPushButton("Clear")
         self._btn_clear_template.setToolTip("Clear saved center template")
         self._btn_clear_template.clicked.connect(self._on_clear_template_clicked)
-        accept_clear_row.addWidget(self._btn_clear_template)
-        panel_layout.addLayout(accept_clear_row)
+        import_clear_row.addWidget(self._btn_clear_template)
+        panel_layout.addLayout(import_clear_row)
 
         # Reset at the bottom
         self._btn_reset_crop = QPushButton("Reset Defaults")
@@ -1026,6 +1035,18 @@ class ViewportActionsBar(QFrame):
             return
         self.center_calibration_accepted.emit()
 
+    def _on_import_template_clicked(self) -> None:
+        if self._refreshing:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import Center Template",
+            "",
+            "PNG Image (*.png)",
+        )
+        if path:
+            self.center_template_import_requested.emit(path)
+
     def _on_clear_template_clicked(self) -> None:
         if self._refreshing:
             return
@@ -1235,6 +1256,7 @@ class ViewportActionsBar(QFrame):
         self._btn_reset_crop.setEnabled(self._has_image)
         self._btn_calibrate_center.setEnabled(self._has_image)
         self._btn_accept_center.setEnabled(self._has_image and self._center_calibrating)
+        self._btn_import_template.setEnabled(self._has_image)
         self._btn_clear_template.setEnabled(
             self._center_template_model is not None
             and self._center_template_model.has_template()

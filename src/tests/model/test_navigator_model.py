@@ -14,6 +14,8 @@ from models.navigator_model import (
     SORT_ROLE,
 )
 
+_POLY = [(0, 0), (1, 0), (1, 1)]
+
 
 @pytest.fixture
 def dataset_model(tmp_path):
@@ -146,3 +148,209 @@ class TestNavigatorSortProxyModel:
 
         proxy.sort(NavigatorColumns.SCORE, Qt.DescendingOrder)
         assert proxy_source_rows(proxy) == [2, 0, 1]
+
+
+class TestImageState:
+    @pytest.fixture
+    def nav(self, dataset_model, inference_model):
+        return NavigatorTableModel(dataset_model, inference_model)
+
+    def test_no_decision_no_work_is_undecided(self, nav):
+        assert nav._image_state(0) == "undecided"
+
+    def test_no_decision_with_annotation_is_undecided_work(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        assert nav._image_state(0) == "undecided_work"
+
+    def test_no_decision_with_image_class_is_undecided_work_in_image_level_mode(
+        self, nav, dataset_model
+    ):
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["crack"])
+        assert nav._image_state(0) == "undecided_work"
+
+    def test_no_decision_with_image_class_is_undecided_in_pixel_mode(
+        self, nav, dataset_model
+    ):
+        dataset_model.set_image_classes(0, ["crack"])
+        assert nav._image_state(0) == "undecided"
+
+    def test_accept_no_work_is_accept_clean(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_clean"
+
+    def test_accept_with_annotation_is_accept_conflict(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_conflict"
+
+    def test_accept_with_image_class_is_accept_conflict_in_image_level_mode(
+        self, nav, dataset_model
+    ):
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_conflict"
+
+    def test_accept_with_image_class_is_accept_clean_in_pixel_mode(
+        self, nav, dataset_model
+    ):
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "accept")
+        assert nav._image_state(0) == "accept_clean"
+
+    def test_reject_no_work_is_reject_incomplete(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_incomplete"
+
+    def test_reject_with_annotation_is_reject_reviewed(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_reviewed"
+
+    def test_reject_with_image_class_is_reject_reviewed_in_image_level_mode(
+        self, nav, dataset_model
+    ):
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_reviewed"
+
+    def test_reject_with_image_class_is_reject_incomplete_in_pixel_mode(
+        self, nav, dataset_model
+    ):
+        dataset_model.set_image_classes(0, ["crack"])
+        dataset_model.set_review_decision(0, "reject")
+        assert nav._image_state(0) == "reject_incomplete"
+
+
+class TestStatusTooltip:
+    @pytest.fixture
+    def nav(self, dataset_model, inference_model):
+        return NavigatorTableModel(dataset_model, inference_model)
+
+    def test_undecided_tooltip(self, nav):
+        tip = nav._status_tooltip(0)
+        assert "No decision" in tip
+        assert "Accept or Reject" in tip
+
+    def test_undecided_work_tooltip_mentions_annotation(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        tip = nav._status_tooltip(0)
+        assert "No decision" in tip
+        assert "polygon annotation" in tip
+
+    def test_undecided_work_tooltip_mentions_class_tag(self, nav, dataset_model):
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["void"])
+        tip = nav._status_tooltip(0)
+        assert "No decision" in tip
+        assert "void" in tip
+
+    def test_accept_clean_tooltip(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        tip = nav._status_tooltip(0)
+        assert "defect-free" in tip
+
+    def test_accept_conflict_tooltip_mentions_annotation(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")
+        tip = nav._status_tooltip(0)
+        assert "Accepted but" in tip
+        assert "polygon annotation" in tip
+        assert "Reject" in tip
+
+    def test_reject_incomplete_tooltip(self, nav, dataset_model):
+        dataset_model.set_review_decision(0, "reject")
+        tip = nav._status_tooltip(0)
+        assert "no supporting evidence" in tip
+
+    def test_reject_reviewed_tooltip_mentions_class(self, nav, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "reject")
+        tip = nav._status_tooltip(0)
+        assert "Reviewed" in tip
+        assert "crack" in tip
+
+    def test_tooltips_contain_no_emdash(self, nav, dataset_model):
+        states = [
+            lambda: None,
+            lambda: dataset_model.add_annotation(0, "crack", _POLY),
+            lambda: dataset_model.set_review_decision(0, "accept"),
+            lambda: dataset_model.set_review_decision(0, "reject"),
+        ]
+        for setup in states:
+            setup()
+            tip = nav._status_tooltip(0)
+            assert "—" not in tip, f"Em dash found in tooltip: {tip!r}"
+
+
+class TestProxyFilter:
+    @pytest.fixture
+    def nav_model(self, dataset_model, inference_model):
+        return NavigatorTableModel(dataset_model, inference_model)
+
+    @pytest.fixture
+    def proxy(self, nav_model):
+        p = NavigatorSortProxyModel()
+        p.setSourceModel(nav_model)
+        return p
+
+    def _visible_source_rows(self, proxy):
+        return [
+            proxy.mapToSource(proxy.index(r, 0)).row() for r in range(proxy.rowCount())
+        ]
+
+    def test_all_shows_every_row(self, proxy, dataset_model):
+        proxy.set_filter_mode("all")
+        assert proxy.rowCount() == 3
+
+    def test_accept_filter(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        proxy.set_filter_mode("accept")
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_reject_filter(self, proxy, dataset_model):
+        dataset_model.set_review_decision(1, "reject")
+        proxy.set_filter_mode("reject")
+        assert self._visible_source_rows(proxy) == [1]
+
+    def test_undecided_filter(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.set_review_decision(1, "reject")
+        proxy.set_filter_mode("undecided")
+        assert self._visible_source_rows(proxy) == [2]
+
+    def test_incomplete_filter_catches_reject_without_annotation(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "reject")  # incomplete — no work
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")  # reviewed
+        proxy.set_filter_mode("incomplete")
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_incomplete_filter_catches_accept_conflict(self, proxy, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")  # accept_conflict
+        proxy.set_filter_mode("incomplete")
+        assert 0 in self._visible_source_rows(proxy)
+
+    def test_incomplete_filter_catches_undecided_with_work(self, proxy, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        # no decision set — undecided_work
+        proxy.set_filter_mode("incomplete")
+        assert 0 in self._visible_source_rows(proxy)
+
+    def test_conflicting_filter_shows_only_accept_conflict(self, proxy, dataset_model):
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")  # accept_conflict
+        dataset_model.set_review_decision(1, "reject")  # reject_incomplete
+        dataset_model.add_annotation(2, "crack", _POLY)  # undecided_work
+        proxy.set_filter_mode("conflicting")
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_conflicting_filter_excludes_reject_incomplete(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "reject")
+        proxy.set_filter_mode("conflicting")
+        assert self._visible_source_rows(proxy) == []

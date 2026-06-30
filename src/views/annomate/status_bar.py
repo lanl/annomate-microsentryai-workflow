@@ -61,6 +61,10 @@ class AnnoMateStatusBar(QWidget):
         self._lbl_class = QLabel("Class: —")
         h.addWidget(self._lbl_class)
 
+        h.addWidget(self._pipe())
+        self._lbl_session = QLabel("Session: —")
+        h.addWidget(self._lbl_session)
+
         h.addStretch()
 
         self._lbl_loading = QLabel("Loading model…")
@@ -119,6 +123,19 @@ class AnnoMateStatusBar(QWidget):
 
     def set_class(self, name: str) -> None:
         self._lbl_class.setText(f"Class: {name}" if name else "Class: —")
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        total_minutes = int(seconds) // 60
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        return f"{hours}h {minutes}m"
+
+    def set_session_time(self, seconds: float) -> None:
+        self._lbl_session.setText(f"Session: {self._format_duration(seconds)}")
+
+    def clear_session_time(self) -> None:
+        self._lbl_session.setText("Session: —")
 
     def set_model_loading(self, loading: bool) -> None:
         self._lbl_loading.setVisible(loading)

@@ -241,3 +241,93 @@ class TestQueryAPI:
         annos = model.get_annotations(0)
         # Large polygon should be first after sort
         assert len(annos[0]["polygon"]) == 4
+
+
+class TestAnnotationModeModel:
+    def test_default_mode_is_pixel(self, model):
+        assert model.get_annotation_mode() == "pixel"
+
+    def test_set_annotation_mode_emits_signal(self, qtbot, model):
+        with qtbot.waitSignal(model.annotation_mode_changed, timeout=1000) as blocker:
+            model.set_annotation_mode("image_level")
+        assert blocker.args == ["image_level"]
+
+    def test_set_annotation_mode_emits_data_changed(self, qtbot, model):
+        model.load_folder("/fake", ["img.jpg"])
+        with qtbot.waitSignal(model.dataChanged, timeout=1000):
+            model.set_annotation_mode("image_level")
+
+    def test_set_annotation_mode_updates_get(self, model):
+        model.set_annotation_mode("image_level")
+        assert model.get_annotation_mode() == "image_level"
+
+
+class TestPixelAnnotationCountForClass:
+    def test_returns_zero_for_empty_image(self, model):
+        model.load_folder("/fake", ["img.jpg"])
+        assert model.get_pixel_annotation_count_for_class(0, "crack") == 0
+
+    def test_counts_matching_class_only(self, model):
+        model.load_folder("/fake", ["img.jpg"])
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.add_annotation(0, "void", [(0, 0), (1, 0), (1, 1)])
+        assert model.get_pixel_annotation_count_for_class(0, "crack") == 2
+        assert model.get_pixel_annotation_count_for_class(0, "void") == 1
+
+    def test_returns_zero_for_out_of_bounds_row(self, model):
+        assert model.get_pixel_annotation_count_for_class(-1, "crack") == 0
+        assert model.get_pixel_annotation_count_for_class(99, "crack") == 0
+
+
+class TestAnnotationModeMerge:
+    def test_switching_to_image_level_populates_image_classes(self, model):
+        model.load_folder("/fake", ["img.jpg"])
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.set_annotation_mode("image_level")
+        assert "crack" in model.get_image_classes(0)
+
+    def test_switching_to_image_level_merges_new_pixel_class(self, model):
+        model.load_folder("/fake", ["img.jpg"])
+        model.set_image_classes(0, ["scratch"])
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.set_annotation_mode("image_level")
+        result = set(model.get_image_classes(0))
+        assert "scratch" in result
+        assert "crack" in result
+
+    def test_switching_to_image_level_does_not_duplicate_tags(self, model):
+        model.load_folder("/fake", ["img.jpg"])
+        model.set_image_classes(0, ["crack"])
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.set_annotation_mode("image_level")
+        assert model.get_image_classes(0).count("crack") == 1
+
+    def test_switching_to_pixel_does_not_trigger_merge(self, model):
+        model.load_folder("/fake", ["img.jpg"])
+        model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+        model.set_annotation_mode("pixel")
+        assert model.get_image_classes(0) == []
+
+
+class TestImageClassesModel:
+    def test_get_image_classes_returns_empty_initially(self, model, tmp_path):
+        model.load_folder(str(tmp_path), ["img.jpg"])
+        assert model.get_image_classes(0) == []
+
+    def test_set_get_image_classes_round_trip(self, model, tmp_path):
+        model.load_folder(str(tmp_path), ["img.jpg"])
+        model.set_image_classes(0, ["crack", "void"])
+        assert model.get_image_classes(0) == ["crack", "void"]
+
+    def test_set_image_classes_emits_dataChanged(self, qtbot, model, tmp_path):
+        model.load_folder(str(tmp_path), ["img.jpg"])
+        with qtbot.waitSignal(model.dataChanged, timeout=1000):
+            model.set_image_classes(0, ["crack"])
+
+    def test_get_image_classes_out_of_bounds_returns_empty(self, model):
+        assert model.get_image_classes(-1) == []
+        assert model.get_image_classes(999) == []
+
+    def test_set_image_classes_out_of_bounds_is_safe(self, model):
+        model.set_image_classes(99, ["crack"])  # should not raise

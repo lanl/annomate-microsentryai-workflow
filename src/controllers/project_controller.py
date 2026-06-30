@@ -11,6 +11,7 @@ Rules (consistent with existing controllers):
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -88,6 +89,8 @@ class ProjectController(QObject):
         # Preserved from the last loaded project so that saving without loading
         # a model doesn't erase a model path that was previously persisted.
         self._last_project_model_path: str = ""
+        self._accumulated_seconds: float = 0.0
+        self._session_start: Optional[float] = None
 
         # Connect model signals for dirty tracking. The _loading guard
         # suppresses spurious dirty events fired during our own load sequence.
@@ -127,6 +130,12 @@ class ProjectController(QObject):
     def autosave_manager(self) -> AutosaveManager:
         return self._autosave_manager
 
+    def get_session_seconds(self) -> float:
+        """Return cumulative seconds spent in this project, including the current session."""
+        if self._session_start is None:
+            return self._accumulated_seconds
+        return self._accumulated_seconds + (time.monotonic() - self._session_start)
+
     # ------------------------------------------------------------------ #
     # Dirty tracking
     # ------------------------------------------------------------------ #
@@ -164,6 +173,14 @@ class ProjectController(QObject):
         if self._center_template_model is not None:
             self._center_template_model.clear_template()
 
+        self._project_dir = None
+        self._project_name = ""
+        self._created_at = None
+        self._last_project_model_path = ""
+        self._accumulated_seconds = 0.0
+        self._session_start = None
+        self._autosave_manager.stop()
+
         self._loading = True
         try:
             if self._calibration_model is not None:
@@ -173,11 +190,6 @@ class ProjectController(QObject):
         finally:
             self._loading = False
 
-        self._project_dir = None
-        self._project_name = ""
-        self._created_at = None
-        self._last_project_model_path = ""
-        self._autosave_manager.stop()
         self.clear_dirty()
 
     def open_project(self, annoproj_path: str) -> Tuple[dict, List[str]]:
@@ -288,6 +300,8 @@ class ProjectController(QObject):
         self._last_project_model_path = project_data.get("inference", {}).get(
             "model_path", ""
         )
+        self._accumulated_seconds = project_data.get("session_seconds", 0.0)
+        self._session_start = time.monotonic()
         self.clear_dirty()
         self.project_opened.emit(self._project_name)
 
@@ -308,10 +322,15 @@ class ProjectController(QObject):
 
         Returns the absolute path to the written .annoproj file.
         """
+        is_new_session = self._session_start is None
         self._project_dir = project_dir
         self._project_name = project_name
+        if is_new_session:
+            self._session_start = time.monotonic()
         path = self._write_project(project_dir, project_name)
         self._autosave_manager.set_project_dir(project_dir)
+        if is_new_session:
+            self.project_opened.emit(self._project_name)
         return path
 
     def _resolve_model_path(self) -> str:
@@ -360,6 +379,7 @@ class ProjectController(QObject):
             calibration_state=calib_state,
             center_template_state=center_template_state,
             anomaly_constraint_state=anomaly_constraint_state,
+            session_seconds=self.get_session_seconds(),
         )
         if self._created_at is None:
             self._created_at = datetime.now(timezone.utc).isoformat()
@@ -372,8 +392,8 @@ class ProjectController(QObject):
     # ------------------------------------------------------------------ #
 
     def _do_autosave(self, project_dir: str) -> None:
-        """Write an autosave snapshot. Skips NPZ to keep the write fast."""
-        if not self._is_dirty:
+        """Write an autosave snapshot. Score maps are excluded — manual save only."""
+        if not self._is_dirty and self._session_start is None:
             return
         autosave_dir = os.path.join(project_dir, "autosave")
         try:
@@ -401,7 +421,13 @@ class ProjectController(QObject):
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
                 anomaly_constraint_state=anomaly_constraint_state,
+                session_seconds=self.get_session_seconds(),
             )
+            main_annoproj = os.path.join(project_dir, f"{self._project_name}.annoproj")
+            if os.path.exists(main_annoproj):
+                self._project_io.patch_session_seconds(
+                    main_annoproj, self.get_session_seconds()
+                )
             self.autosave_written.emit(path)
         except Exception as exc:
             self.autosave_failed.emit(str(exc))

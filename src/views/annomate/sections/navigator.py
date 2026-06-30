@@ -1,5 +1,5 @@
-from PySide6.QtCore import QItemSelectionModel, QRect, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QPainter
+from PySide6.QtCore import QEvent, QItemSelectionModel, QPoint, QRect, Qt, Signal
+from PySide6.QtGui import QAction, QActionGroup, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -14,25 +14,27 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
     QTableView,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
 
 from models.navigator_model import (
+    IMAGE_STATE_ROLE,
     NavigatorColumns,
     NavigatorSortProxyModel,
     NavigatorTableModel,
     SOURCE_ROW_ROLE,
     STATUS_COLOR_ROLE,
-    STATUS_OMIT_ROLE,
 )
 
 from ._shared import (
-    _COLOR_IN_REVIEW,
-    _COLOR_OMITTED,
+    _COLOR_INCOMPLETE,
     _COLOR_REVIEWED,
+    _COLOR_UNDECIDED,
     _dot,
-    _omit_badge,
+    _incomplete_badge,
+    _ring_undecided,
 )
 
 
@@ -50,6 +52,14 @@ _OPTIONAL_COLUMNS = (
     (NavigatorColumns.CLASS, "Class"),
 )
 _INFERENCE_COLUMNS = {NavigatorColumns.SCORE, NavigatorColumns.CLASS}
+_FILTER_OPTIONS = (
+    ("All images", "all"),
+    ("Accept only", "accept"),
+    ("Reject only", "reject"),
+    ("Undecided only", "undecided"),
+    ("Incomplete only", "incomplete"),
+    ("Conflicting only", "conflicting"),
+)
 
 
 class _StatusDotDelegate(QStyledItemDelegate):
@@ -70,18 +80,24 @@ class _StatusDotDelegate(QStyledItemDelegate):
         rect = option.rect
         x = rect.x() + (rect.width() - _DOT_W) // 2
         y = rect.y() + (rect.height() - _DOT_W) // 2
+        state = index.data(IMAGE_STATE_ROLE)
+
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
-        if index.data(STATUS_OMIT_ROLE):
-            painter.setPen(QColor(_COLOR_OMITTED))
+        if state in ("reject_incomplete", "accept_conflict", "undecided_work"):
+            painter.setPen(QColor(_COLOR_INCOMPLETE))
             f = painter.font()
             f.setPixelSize(_DOT_W + 2)
             f.setBold(True)
             painter.setFont(f)
             painter.drawText(QRect(x, y, _DOT_W, _DOT_W), Qt.AlignCenter, "!")
-        else:
+        elif state in ("accept_clean", "reject_reviewed"):
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor(color))
+            painter.setBrush(QColor(_COLOR_REVIEWED))
+            painter.drawEllipse(x, y, _DOT_W, _DOT_W)
+        else:  # undecided
+            painter.setPen(QPen(QColor(_COLOR_UNDECIDED), 1.5))
+            painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(x, y, _DOT_W, _DOT_W)
         painter.restore()
 
@@ -106,9 +122,11 @@ class DataNavigatorSection(QWidget):
         self._table_model = NavigatorTableModel(dataset_model, inference_model, self)
         self._proxy = NavigatorSortProxyModel(self)
         self._proxy.setSourceModel(self._table_model)
+        self._filter_group: QActionGroup | None = None
 
         self._init_ui()
         self.dataset_model.modelReset.connect(self._on_model_reset)
+        self.dataset_model.dataChanged.connect(self._refresh_counts)
         self._proxy.layoutChanged.connect(self._on_proxy_order_changed)
         self._proxy.rowsMoved.connect(self._on_proxy_order_changed)
         self._proxy.modelReset.connect(self._on_proxy_order_changed)
@@ -116,6 +134,9 @@ class DataNavigatorSection(QWidget):
         self._on_model_reset()
 
     def _init_ui(self) -> None:
+        self.setStyleSheet(
+            "QToolTip { padding: 2px 4px; border-radius: 4px; border: 1px solid palette(shadow); }"
+        )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -140,22 +161,48 @@ class DataNavigatorSection(QWidget):
         self._lbl_counter = QLabel("No images loaded")
         nav_h.addWidget(self._lbl_counter)
         nav_h.addStretch()
-        nav_h.addWidget(_dot(_COLOR_IN_REVIEW))
-        nav_h.addWidget(QLabel("In Review"))
-        nav_h.addSpacing(4)
-        nav_h.addWidget(_dot(_COLOR_REVIEWED))
-        nav_h.addWidget(QLabel("Reviewed"))
-        nav_h.addSpacing(4)
-        nav_h.addWidget(_omit_badge())
-        nav_h.addWidget(QLabel("Omitted"))
+        _TIP_UNDECIDED = "Undecided: no Accept or Reject decision has been set."
+        _TIP_REVIEWED = (
+            "Reviewed: accepted, or rejected with a polygon annotation or class tag."
+        )
+        _TIP_INCOMPLETE = "Incomplete: action needed. Reject missing evidence, accepted image has annotations, or work present with no decision."
+
+        icon_undecided = _ring_undecided()
+        icon_undecided.setToolTip(_TIP_UNDECIDED)
+        icon_undecided.installEventFilter(self)
+        nav_h.addWidget(icon_undecided)
+        self._lbl_count_undecided = QLabel("0")
+        self._lbl_count_undecided.setToolTip(_TIP_UNDECIDED)
+        self._lbl_count_undecided.installEventFilter(self)
+        nav_h.addWidget(self._lbl_count_undecided)
+        nav_h.addSpacing(6)
+
+        icon_reviewed = _dot(_COLOR_REVIEWED)
+        icon_reviewed.setToolTip(_TIP_REVIEWED)
+        icon_reviewed.installEventFilter(self)
+        nav_h.addWidget(icon_reviewed)
+        self._lbl_count_reviewed = QLabel("0")
+        self._lbl_count_reviewed.setToolTip(_TIP_REVIEWED)
+        self._lbl_count_reviewed.installEventFilter(self)
+        nav_h.addWidget(self._lbl_count_reviewed)
+        nav_h.addSpacing(6)
+
+        icon_incomplete = _incomplete_badge()
+        icon_incomplete.setToolTip(_TIP_INCOMPLETE)
+        icon_incomplete.installEventFilter(self)
+        nav_h.addWidget(icon_incomplete)
+        self._lbl_count_incomplete = QLabel("0")
+        self._lbl_count_incomplete.setToolTip(_TIP_INCOMPLETE)
+        self._lbl_count_incomplete.installEventFilter(self)
+        nav_h.addWidget(self._lbl_count_incomplete)
         nav_h.addSpacing(4)
 
-        self._btn_columns = QToolButton()
-        self._btn_columns.setText("Columns")
-        self._btn_columns.setToolTip("Choose navigator columns")
-        self._btn_columns.setPopupMode(QToolButton.InstantPopup)
-        self._btn_columns.setMenu(self._build_column_menu())
-        nav_h.addWidget(self._btn_columns)
+        self._btn_settings = QToolButton()
+        self._btn_settings.setText("Settings")
+        self._btn_settings.setToolTip("Filter images and toggle columns")
+        self._btn_settings.setPopupMode(QToolButton.InstantPopup)
+        self._btn_settings.setMenu(self._build_settings_menu())
+        nav_h.addWidget(self._btn_settings)
 
         layout.addWidget(nav_row)
 
@@ -223,8 +270,21 @@ class DataNavigatorSection(QWidget):
 
         layout.addWidget(self._table)
 
-    def _build_column_menu(self) -> QMenu:
+    def _build_settings_menu(self) -> QMenu:
         menu = QMenu(self)
+
+        menu.addSection("Filter")
+        self._filter_group = QActionGroup(menu)
+        self._filter_group.setExclusive(True)
+        for label, mode in _FILTER_OPTIONS:
+            action = QAction(label, self._filter_group)
+            action.setCheckable(True)
+            action.setData(mode)
+            menu.addAction(action)
+        self._filter_group.actions()[0].setChecked(True)
+        self._filter_group.triggered.connect(self._on_filter_action_triggered)
+
+        menu.addSection("Columns")
         for column, label in _OPTIONAL_COLUMNS:
             action = QAction(label, self)
             action.setCheckable(True)
@@ -234,7 +294,13 @@ class DataNavigatorSection(QWidget):
             )
             menu.addAction(action)
             self._column_actions[column] = action
+
         return menu
+
+    def _on_filter_action_triggered(self, action) -> None:
+        mode = action.data()
+        self._proxy.set_filter_mode(mode)
+        self._btn_settings.setText("• Settings" if mode != "all" else "Settings")
 
     def _on_model_reset(self) -> None:
         has_images = self.dataset_model.rowCount() > 0
@@ -249,7 +315,30 @@ class DataNavigatorSection(QWidget):
             )
         else:
             self._lbl_counter.setText("No images loaded")
+        if self._filter_group:
+            self._filter_group.actions()[0].setChecked(True)
+        self._proxy.set_filter_mode("all")
+        self._btn_settings.setText("Settings")
         self._sync_visible_columns()
+        self._refresh_counts()
+
+    def _refresh_counts(self, *args) -> None:
+        counts = self._table_model.get_state_counts()
+        self._lbl_count_reviewed.setText(str(counts["reviewed"]))
+        self._lbl_count_incomplete.setText(str(counts["incomplete"]))
+        self._lbl_count_undecided.setText(str(counts["undecided"]))
+
+    def get_image_state_label(self, source_row: int) -> str:
+        return self._table_model.get_image_state_label(source_row)
+
+    def eventFilter(self, obj, e: QEvent) -> bool:
+        if e.type() == QEvent.ToolTip:
+            tip = obj.toolTip()
+            if tip:
+                pos = obj.mapToGlobal(QPoint(obj.width(), obj.height() // 2))
+                QToolTip.showText(QPoint(pos.x() - 300, pos.y()), tip, obj)
+                return True
+        return super().eventFilter(obj, e)
 
     def _on_proxy_order_changed(self, *args) -> None:
         if self._selected_row >= 0:
