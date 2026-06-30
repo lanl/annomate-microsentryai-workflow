@@ -592,7 +592,8 @@ class DatasetTableModel(QAbstractTableModel):
             return 0
         fname = self.state.image_files[row]
         return sum(
-            1 for a in self.state.annotations.get(fname, [])
+            1
+            for a in self.state.annotations.get(fname, [])
             if a.get("category_name") == class_name
         )
 

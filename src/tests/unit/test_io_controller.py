@@ -98,7 +98,6 @@ class TestExportCsv:
         assert row["pixel_classes"] == ""
 
 
-
 class TestAnnotationClassFiles:
     def test_import_simple_class_file_adds_classes_in_order(self, setup, tmp_path):
         """Verify that import_annotation_classes reads all class names in file order.
@@ -195,6 +194,7 @@ class TestAnnotationClassFiles:
 class TestExportPixelTrainStructure:
     def _make_jpg(self, path):
         from PIL import Image as PILImage
+
         PILImage.new("RGB", (10, 10)).save(path)
 
     def test_accepted_image_goes_to_train_good(self, setup, tmp_path):
@@ -254,6 +254,7 @@ class TestExportPixelTrainStructure:
 class TestExportImageLevelTrainStructure:
     def _make_jpg(self, path):
         from PIL import Image as PILImage
+
         PILImage.new("RGB", (10, 10)).save(path)
 
     def test_accepted_image_goes_to_train_good(self, setup, tmp_path):

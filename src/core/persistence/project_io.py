@@ -147,10 +147,9 @@ class ProjectIO:
                 entry["inspector"] = inspector
             if note:
                 entry["note"] = note
-            pixel_classes = sorted({
-                a["category_name"]
-                for a in dataset_state.annotations.get(fname, [])
-            })
+            pixel_classes = sorted(
+                {a["category_name"] for a in dataset_state.annotations.get(fname, [])}
+            )
             if pixel_classes:
                 entry["pixel_classes"] = pixel_classes
             img_classes = dataset_state.image_classes.get(fname, [])

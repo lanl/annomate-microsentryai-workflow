@@ -306,4 +306,3 @@ class DatasetState:
     def get_review_decision(self, image_name: str):
         """Return the image-level review decision, or None if not set."""
         return self.review_decisions.get(image_name)
-

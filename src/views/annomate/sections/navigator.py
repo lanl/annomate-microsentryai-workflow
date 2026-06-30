@@ -20,8 +20,6 @@ from PySide6.QtWidgets import (
 )
 
 from models.navigator_model import (
-    FILTER_COMPLETE_ROLE,
-    FILTER_DECISION_ROLE,
     IMAGE_STATE_ROLE,
     NavigatorColumns,
     NavigatorSortProxyModel,
@@ -163,8 +161,10 @@ class DataNavigatorSection(QWidget):
         self._lbl_counter = QLabel("No images loaded")
         nav_h.addWidget(self._lbl_counter)
         nav_h.addStretch()
-        _TIP_UNDECIDED  = "Undecided: no Accept or Reject decision has been set."
-        _TIP_REVIEWED   = "Reviewed: accepted, or rejected with a polygon annotation or class tag."
+        _TIP_UNDECIDED = "Undecided: no Accept or Reject decision has been set."
+        _TIP_REVIEWED = (
+            "Reviewed: accepted, or rejected with a polygon annotation or class tag."
+        )
         _TIP_INCOMPLETE = "Incomplete: action needed. Reject missing evidence, accepted image has annotations, or work present with no decision."
 
         icon_undecided = _ring_undecided()

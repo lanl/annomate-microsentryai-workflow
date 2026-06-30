@@ -344,7 +344,9 @@ class IOController:
                 shutil.copy2(src, test_dest / name)
                 counts["test"] += 1
 
-        logger.debug("Exported image-level train structure to: %s — %s", out_dir, counts)
+        logger.debug(
+            "Exported image-level train structure to: %s — %s", out_dir, counts
+        )
         return (
             f"Image-level train structure exported to:\n{out_dir}\n"
             f"  train/good:  {counts['train_good']} images\n"

@@ -232,6 +232,7 @@ class TestAnnotationMode:
 
     def test_set_annotation_mode_invalid_raises(self, state):
         import pytest
+
         with pytest.raises(ValueError):
             state.set_annotation_mode("bad")
 
@@ -368,4 +369,3 @@ class TestIsReviewedWithMode:
             state.set_annotation_mode(mode)
             state.set_review_decision("img.jpg", "accept")
             assert state.is_reviewed("img.jpg")
-

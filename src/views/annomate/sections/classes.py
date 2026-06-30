@@ -25,7 +25,6 @@ from models.classes_model import (
     COLOR_ROLE,
     IMAGE_LEVEL_MODE_ROLE,
     IMAGE_TAG_KIND_ROLE,
-    IMAGE_TAG_ROLE,
     VISIBLE_ROLE,
     ClassColumns,
     ClassSortProxyModel,
@@ -34,7 +33,7 @@ from models.classes_model import (
 
 
 _TAG_COL_W = 28
-_COLOR_TAG_ACTIVE = QColor("#ff9800")    # amber — current mode's tags
+_COLOR_TAG_ACTIVE = QColor("#ff9800")  # amber — current mode's tags
 _COLOR_TAG_INACTIVE = QColor("#4a90d9")  # blue  — other mode's tags
 _COLOR_COL_W = 44
 _SWATCH_W = 24
@@ -232,10 +231,10 @@ class _ImageTagDelegate(QStyledItemDelegate):
 
     def _draw_check(self, painter: QPainter, sq: QRectF) -> None:
         x, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
-        painter.drawLine(int(x + 2), int(t + h * 0.55),
-                         int(x + w * 0.4), int(t + h - 2))
-        painter.drawLine(int(x + w * 0.4), int(t + h - 2),
-                         int(x + w - 1), int(t + 2))
+        painter.drawLine(
+            int(x + 2), int(t + h * 0.55), int(x + w * 0.4), int(t + h - 2)
+        )
+        painter.drawLine(int(x + w * 0.4), int(t + h - 2), int(x + w - 1), int(t + 2))
 
 
 class ClassesSection(QWidget):
@@ -317,7 +316,9 @@ class ClassesSection(QWidget):
             _seg_base
             + "QPushButton { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }"
         )
-        self._image_btn.clicked.connect(lambda: self._on_mode_btn_clicked("image_level"))
+        self._image_btn.clicked.connect(
+            lambda: self._on_mode_btn_clicked("image_level")
+        )
 
         mode_h.addWidget(self._pixel_btn, stretch=1)
         mode_h.addWidget(self._image_btn, stretch=1)
@@ -436,7 +437,7 @@ class ClassesSection(QWidget):
     def _update_tag_interactive(self) -> None:
         mode = self.dataset_model.get_annotation_mode()
         decision = self.dataset_model.get_review_decision(self._current_row)
-        self._tag_interactive = (mode == "image_level" and decision == "reject")
+        self._tag_interactive = mode == "image_level" and decision == "reject"
 
     def _on_dataset_data_changed(self, top_left, bottom_right, roles=None) -> None:
         if self._current_row < 0:
@@ -451,7 +452,7 @@ class ClassesSection(QWidget):
 
     def set_annotation_mode(self, mode: str) -> None:
         """Sync the mode buttons without re-emitting the signal."""
-        is_image = (mode == "image_level")
+        is_image = mode == "image_level"
         self._pixel_btn.blockSignals(True)
         self._image_btn.blockSignals(True)
         self._pixel_btn.setChecked(not is_image)
@@ -584,7 +585,8 @@ class ClassesSection(QWidget):
     def _delete_class(self, name: str) -> None:
         pixel_count = self.dataset_model.get_class_annotation_count(name)
         tag_count = sum(
-            1 for row in range(self.dataset_model.rowCount())
+            1
+            for row in range(self.dataset_model.rowCount())
             if name in self.dataset_model.get_image_classes(row)
         )
         if pixel_count > 0 or tag_count > 0:

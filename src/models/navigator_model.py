@@ -16,9 +16,11 @@ class NavigatorColumns:
 SOURCE_ROW_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 STATUS_COLOR_ROLE = Qt.UserRole + 3
-FILTER_DECISION_ROLE = Qt.UserRole + 5   # raw decision string for proxy filtering
-FILTER_COMPLETE_ROLE = Qt.UserRole + 6   # bool: reject + sufficient work for current mode
-IMAGE_STATE_ROLE = Qt.UserRole + 7       # str: one of the six _image_state() keys
+FILTER_DECISION_ROLE = Qt.UserRole + 5  # raw decision string for proxy filtering
+FILTER_COMPLETE_ROLE = (
+    Qt.UserRole + 6
+)  # bool: reject + sufficient work for current mode
+IMAGE_STATE_ROLE = Qt.UserRole + 7  # str: one of the six _image_state() keys
 
 
 _HEADERS = ["", "Img ID", "Annots", "Decision", "Score", "Class"]
@@ -148,12 +150,12 @@ class NavigatorTableModel(QAbstractTableModel):
         )
 
     _STATE_LABELS = {
-        "undecided":         "No decision",
-        "undecided_work":    "Has work, no decision",
-        "accept_clean":      "Accepted",
-        "accept_conflict":   "Accepted with annotations",
+        "undecided": "No decision",
+        "undecided_work": "Has work, no decision",
+        "accept_clean": "Accepted",
+        "accept_conflict": "Accepted with annotations",
         "reject_incomplete": "Reject incomplete",
-        "reject_reviewed":   "Reviewed",
+        "reject_reviewed": "Reviewed",
     }
 
     def get_image_state_label(self, row: int) -> str:
@@ -258,7 +260,9 @@ class NavigatorTableModel(QAbstractTableModel):
         img_classes = self._dataset_model.get_image_classes(row)
 
         if state == "undecided":
-            return "No decision set. Mark this image Accept or Reject to complete review."
+            return (
+                "No decision set. Mark this image Accept or Reject to complete review."
+            )
 
         if state == "undecided_work":
             parts = []
@@ -287,10 +291,9 @@ class NavigatorTableModel(QAbstractTableModel):
         # reject_reviewed
         parts = []
         if ann_count:
-            classes = sorted({
-                a["category_name"]
-                for a in self._dataset_model.get_annotations(row)
-            })
+            classes = sorted(
+                {a["category_name"] for a in self._dataset_model.get_annotations(row)}
+            )
             parts.append(f"{ann_count} polygon annotation(s): {', '.join(classes)}")
         if img_classes:
             parts.append(f"class tag(s): {', '.join(img_classes)}")

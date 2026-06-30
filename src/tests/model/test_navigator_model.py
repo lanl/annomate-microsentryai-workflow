@@ -162,12 +162,16 @@ class TestImageState:
         dataset_model.add_annotation(0, "crack", _POLY)
         assert nav._image_state(0) == "undecided_work"
 
-    def test_no_decision_with_image_class_is_undecided_work_in_image_level_mode(self, nav, dataset_model):
+    def test_no_decision_with_image_class_is_undecided_work_in_image_level_mode(
+        self, nav, dataset_model
+    ):
         dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["crack"])
         assert nav._image_state(0) == "undecided_work"
 
-    def test_no_decision_with_image_class_is_undecided_in_pixel_mode(self, nav, dataset_model):
+    def test_no_decision_with_image_class_is_undecided_in_pixel_mode(
+        self, nav, dataset_model
+    ):
         dataset_model.set_image_classes(0, ["crack"])
         assert nav._image_state(0) == "undecided"
 
@@ -180,13 +184,17 @@ class TestImageState:
         dataset_model.set_review_decision(0, "accept")
         assert nav._image_state(0) == "accept_conflict"
 
-    def test_accept_with_image_class_is_accept_conflict_in_image_level_mode(self, nav, dataset_model):
+    def test_accept_with_image_class_is_accept_conflict_in_image_level_mode(
+        self, nav, dataset_model
+    ):
         dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["crack"])
         dataset_model.set_review_decision(0, "accept")
         assert nav._image_state(0) == "accept_conflict"
 
-    def test_accept_with_image_class_is_accept_clean_in_pixel_mode(self, nav, dataset_model):
+    def test_accept_with_image_class_is_accept_clean_in_pixel_mode(
+        self, nav, dataset_model
+    ):
         dataset_model.set_image_classes(0, ["crack"])
         dataset_model.set_review_decision(0, "accept")
         assert nav._image_state(0) == "accept_clean"
@@ -200,13 +208,17 @@ class TestImageState:
         dataset_model.set_review_decision(0, "reject")
         assert nav._image_state(0) == "reject_reviewed"
 
-    def test_reject_with_image_class_is_reject_reviewed_in_image_level_mode(self, nav, dataset_model):
+    def test_reject_with_image_class_is_reject_reviewed_in_image_level_mode(
+        self, nav, dataset_model
+    ):
         dataset_model.set_annotation_mode("image_level")
         dataset_model.set_image_classes(0, ["crack"])
         dataset_model.set_review_decision(0, "reject")
         assert nav._image_state(0) == "reject_reviewed"
 
-    def test_reject_with_image_class_is_reject_incomplete_in_pixel_mode(self, nav, dataset_model):
+    def test_reject_with_image_class_is_reject_incomplete_in_pixel_mode(
+        self, nav, dataset_model
+    ):
         dataset_model.set_image_classes(0, ["crack"])
         dataset_model.set_review_decision(0, "reject")
         assert nav._image_state(0) == "reject_incomplete"
@@ -286,8 +298,7 @@ class TestProxyFilter:
 
     def _visible_source_rows(self, proxy):
         return [
-            proxy.mapToSource(proxy.index(r, 0)).row()
-            for r in range(proxy.rowCount())
+            proxy.mapToSource(proxy.index(r, 0)).row() for r in range(proxy.rowCount())
         ]
 
     def test_all_shows_every_row(self, proxy, dataset_model):
@@ -310,7 +321,9 @@ class TestProxyFilter:
         proxy.set_filter_mode("undecided")
         assert self._visible_source_rows(proxy) == [2]
 
-    def test_incomplete_filter_catches_reject_without_annotation(self, proxy, dataset_model):
+    def test_incomplete_filter_catches_reject_without_annotation(
+        self, proxy, dataset_model
+    ):
         dataset_model.set_review_decision(0, "reject")  # incomplete — no work
         dataset_model.add_annotation(1, "crack", _POLY)
         dataset_model.set_review_decision(1, "reject")  # reviewed
@@ -331,8 +344,8 @@ class TestProxyFilter:
 
     def test_conflicting_filter_shows_only_accept_conflict(self, proxy, dataset_model):
         dataset_model.add_annotation(0, "crack", _POLY)
-        dataset_model.set_review_decision(0, "accept")   # accept_conflict
-        dataset_model.set_review_decision(1, "reject")   # reject_incomplete
+        dataset_model.set_review_decision(0, "accept")  # accept_conflict
+        dataset_model.set_review_decision(1, "reject")  # reject_incomplete
         dataset_model.add_annotation(2, "crack", _POLY)  # undecided_work
         proxy.set_filter_mode("conflicting")
         assert self._visible_source_rows(proxy) == [0]

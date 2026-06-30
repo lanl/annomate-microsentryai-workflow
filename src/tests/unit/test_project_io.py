@@ -499,7 +499,9 @@ class TestProjectRoundTrip:
         """
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(proj_dir, "myproject", ds, InferenceState(), session_seconds=3665.0)
+        path = pio.save_project(
+            proj_dir, "myproject", ds, InferenceState(), session_seconds=3665.0
+        )
         data = pio.load_project(path)
         assert data["session_seconds"] == 3665.0
 

@@ -145,8 +145,18 @@ class AppWindow(QMainWindow):
         )
         add(data_menu, "Export Binary Masks…", "", self._export_binary_masks)
         add(data_menu, "Export CSV…", "", self._export_csv)
-        add(data_menu, "Export Pixel-Level Train Structure…", "", self._export_pixel_train_structure)
-        add(data_menu, "Export Image-Level Train Structure…", "", self._export_image_level_train_structure)
+        add(
+            data_menu,
+            "Export Pixel-Level Train Structure…",
+            "",
+            self._export_pixel_train_structure,
+        )
+        add(
+            data_menu,
+            "Export Image-Level Train Structure…",
+            "",
+            self._export_image_level_train_structure,
+        )
         data_menu.addSeparator()
         add(data_menu, "Export Project Template…", "", self._export_project_template)
 
@@ -429,7 +439,9 @@ class AppWindow(QMainWindow):
 
     def _export_image_level_train_structure(self) -> None:
         parent_dir = QFileDialog.getExistingDirectory(
-            self, "Choose Image-Level Train Structure Output Folder", self._export_start_dir()
+            self,
+            "Choose Image-Level Train Structure Output Folder",
+            self._export_start_dir(),
         )
         if not parent_dir:
             return

@@ -15,8 +15,12 @@ CLASS_NAME_ROLE = Qt.UserRole + 1
 SORT_ROLE = Qt.UserRole + 2
 COLOR_ROLE = Qt.UserRole + 3
 VISIBLE_ROLE = Qt.UserRole + 4
-IMAGE_TAG_ROLE = Qt.UserRole + 5  # bool — tagged in any mode (union of pixel and image-level)
-IMAGE_LEVEL_MODE_ROLE = Qt.UserRole + 6  # bool — whether image-level annotation mode is active
+IMAGE_TAG_ROLE = (
+    Qt.UserRole + 5
+)  # bool — tagged in any mode (union of pixel and image-level)
+IMAGE_LEVEL_MODE_ROLE = (
+    Qt.UserRole + 6
+)  # bool — whether image-level annotation mode is active
 IMAGE_TAG_KIND_ROLE = Qt.UserRole + 7  # str — "active" | "inactive" | "none"
 
 _HEADERS = ["", "", "Class", "Img", "Tot", "", ""]
@@ -127,8 +131,8 @@ class ClassTableModel(QAbstractTableModel):
         if self._current_row >= 0:
             mode = self._dataset_model.get_annotation_mode()
             decision = self._dataset_model.get_review_decision(self._current_row)
-            self._tag_interactive = (mode == "image_level" and decision == "reject")
-            self._in_image_level_mode = (mode == "image_level")
+            self._tag_interactive = mode == "image_level" and decision == "reject"
+            self._in_image_level_mode = mode == "image_level"
             self._pixel_tags = {
                 a["category_name"]
                 for a in self._dataset_model.get_annotations(self._current_row)
@@ -147,7 +151,12 @@ class ClassTableModel(QAbstractTableModel):
             self.dataChanged.emit(
                 self.index(0, ClassColumns.IMAGE_TAG),
                 self.index(self.rowCount() - 1, ClassColumns.IMAGE_TAG),
-                [Qt.DisplayRole, IMAGE_TAG_ROLE, IMAGE_TAG_KIND_ROLE, IMAGE_LEVEL_MODE_ROLE],
+                [
+                    Qt.DisplayRole,
+                    IMAGE_TAG_ROLE,
+                    IMAGE_TAG_KIND_ROLE,
+                    IMAGE_LEVEL_MODE_ROLE,
+                ],
             )
 
     def refresh_classes(self) -> None:
@@ -225,8 +234,15 @@ class ClassTableModel(QAbstractTableModel):
         self.dataChanged.emit(
             self.index(0, 0),
             self.index(self.rowCount() - 1, self.columnCount() - 1),
-            [Qt.DisplayRole, SORT_ROLE, COLOR_ROLE, VISIBLE_ROLE,
-             IMAGE_TAG_ROLE, IMAGE_TAG_KIND_ROLE, Qt.ToolTipRole],
+            [
+                Qt.DisplayRole,
+                SORT_ROLE,
+                COLOR_ROLE,
+                VISIBLE_ROLE,
+                IMAGE_TAG_ROLE,
+                IMAGE_TAG_KIND_ROLE,
+                Qt.ToolTipRole,
+            ],
         )
 
     def _on_annotation_mode_changed(self, mode: str) -> None:
@@ -274,12 +290,12 @@ class ClassTableModel(QAbstractTableModel):
                 if name in self._image_level_tags:
                     return (
                         f'"{name}" has {pixel_n} pixel-level annotation(s) and an '
-                        f'image-level tag. To untag, remove the pixel annotations in '
-                        f'Pixel Level mode first.'
+                        f"image-level tag. To untag, remove the pixel annotations in "
+                        f"Pixel Level mode first."
                     )
                 return (
                     f'"{name}" has {pixel_n} pixel-level annotation(s) on this image. '
-                    f'Click to also add an image-level tag.'
+                    f"Click to also add an image-level tag."
                 )
             else:
                 if kind == "active":
@@ -302,7 +318,12 @@ class ClassTableModel(QAbstractTableModel):
     def _alignment(self, col: int) -> Qt.AlignmentFlag:
         if col in (ClassColumns.IMAGE, ClassColumns.TOTAL):
             return Qt.AlignRight | Qt.AlignVCenter
-        if col in (ClassColumns.IMAGE_TAG, ClassColumns.COLOR, ClassColumns.VISIBILITY, ClassColumns.DELETE):
+        if col in (
+            ClassColumns.IMAGE_TAG,
+            ClassColumns.COLOR,
+            ClassColumns.VISIBILITY,
+            ClassColumns.DELETE,
+        ):
             return Qt.AlignCenter
         return Qt.AlignLeft | Qt.AlignVCenter
 

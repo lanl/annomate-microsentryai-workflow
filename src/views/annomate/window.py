@@ -483,8 +483,12 @@ class AnnoMateWindow(QWidget):
             self._refresh_canvas_render
         )
         self.right_panel.accept_polygons_requested.connect(self._on_accept_ai_polygons)
-        self.right_panel.annotation_mode_changed.connect(self._on_annotation_mode_changed)
-        self.dataset_model.annotation_mode_changed.connect(self.right_panel.set_annotation_mode)
+        self.right_panel.annotation_mode_changed.connect(
+            self._on_annotation_mode_changed
+        )
+        self.dataset_model.annotation_mode_changed.connect(
+            self.right_panel.set_annotation_mode
+        )
 
         # Keep canvas in sync when annotations change outside the canvas
         self.dataset_model.dataChanged.connect(self._on_dataset_data_changed)
@@ -725,7 +729,10 @@ class AnnoMateWindow(QWidget):
             self.right_panel.set_current_row(-1)
             self.status_bar.set_class("")
             self._set_start_screen_visible(True)
-        if self._project_controller is not None and not self._project_controller.has_project:
+        if (
+            self._project_controller is not None
+            and not self._project_controller.has_project
+        ):
             self._session_timer.stop()
             self.status_bar.clear_session_time()
 
@@ -734,8 +741,13 @@ class AnnoMateWindow(QWidget):
         self._session_timer.start()
 
     def _update_session_display(self) -> None:
-        if self._project_controller is not None and self._project_controller.has_project:
-            self.status_bar.set_session_time(self._project_controller.get_session_seconds())
+        if (
+            self._project_controller is not None
+            and self._project_controller.has_project
+        ):
+            self.status_bar.set_session_time(
+                self._project_controller.get_session_seconds()
+            )
         else:
             self._session_timer.stop()
             self.status_bar.clear_session_time()
