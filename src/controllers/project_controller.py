@@ -321,10 +321,15 @@ class ProjectController(QObject):
 
         Returns the absolute path to the written .annoproj file.
         """
+        is_new_session = self._session_start is None
         self._project_dir = project_dir
         self._project_name = project_name
+        if is_new_session:
+            self._session_start = time.monotonic()
         path = self._write_project(project_dir, project_name)
         self._autosave_manager.set_project_dir(project_dir)
+        if is_new_session:
+            self.project_opened.emit(self._project_name)
         return path
 
     def _resolve_model_path(self) -> str:
