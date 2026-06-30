@@ -220,6 +220,7 @@ class AppWindow(QMainWindow):
                 f"Recent image folder no longer exists:\n{directory}",
             )
             return
+        self.annomate_view.reset_model_state()
         self.io_controller.load_folder(directory)
         self._remember_recent_image_dir(directory)
         self._refresh_project_start_state()
@@ -231,6 +232,7 @@ class AppWindow(QMainWindow):
     def _new_project(self) -> None:
         if self.project_controller.is_dirty and not self._confirm_discard():
             return
+        self.annomate_view.reset_model_state()
         self.project_controller.new_project()
         self._refresh_project_start_state()
 
@@ -305,6 +307,7 @@ class AppWindow(QMainWindow):
         )
         if not directory:
             return
+        self.annomate_view.reset_model_state()
         self.io_controller.load_folder(directory)
 
     def _relocate_images(self) -> None:

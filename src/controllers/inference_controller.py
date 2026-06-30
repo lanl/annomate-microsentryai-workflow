@@ -231,6 +231,12 @@ class InferenceController(QObject):
         self._worker.finished.connect(self.batch_done)
         self._worker.start()
 
+    def unload_model(self) -> None:
+        """Stop any running inference and clear the loaded model."""
+        self._stop_worker()
+        self._strategy = None
+        self._model_path = ""
+
     def shutdown(self) -> None:
         self._stop_worker()
 

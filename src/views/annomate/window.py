@@ -1197,6 +1197,18 @@ class AnnoMateWindow(QWidget):
         )
         self.right_panel.set_project_saved(has_project)
 
+    def reset_model_state(self) -> None:
+        """Unload the current model and reset the inference panel to no-model state.
+
+        Called by AppWindow on new project or direct folder load so a stale
+        model cannot auto-run inference on an unrelated dataset.
+        """
+        if self.inference_controller is not None:
+            self.inference_controller.unload_model()
+        self.inference_model.clear()
+        self.right_panel.set_no_model()
+        self._saved_model_path = ""
+
     def set_saved_model_path(self, path: str) -> None:
         """Called by AppWindow after opening a project to record the saved model path."""
         self._saved_model_path = path
