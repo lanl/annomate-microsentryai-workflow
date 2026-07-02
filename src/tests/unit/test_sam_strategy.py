@@ -66,22 +66,28 @@ def test_load_guard_raises_before_load():
 
 def test_set_variant_resets_loaded_state():
     """Changing the variant should mark the strategy as not loaded."""
-    strategy = SAMStrategy("sam2_t.pt")
+    strategy = SAMStrategy("sam2_t")
     strategy.is_loaded = True  # simulate a loaded state
-    strategy._predictor = object()
+    strategy._encoder = object()
+    strategy._decoder = object()
+    strategy._cached_image = np.zeros((4, 4, 3), dtype=np.uint8)
+    strategy._cached_embedding = {"image_embed": None}
 
-    strategy.set_variant("sam2_b.pt")
+    strategy.set_variant("sam2_b")
 
     assert not strategy.is_loaded
-    assert strategy._predictor is None
-    assert strategy._variant == "sam2_b.pt"
+    assert strategy._encoder is None
+    assert strategy._decoder is None
+    assert strategy._cached_image is None
+    assert strategy._cached_embedding is None
+    assert strategy._variant == "sam2_b"
 
 
 def test_set_variant_same_variant_no_reset():
     """Setting the same variant should not reset loaded state."""
-    strategy = SAMStrategy("sam2_t.pt")
+    strategy = SAMStrategy("sam2_t")
     strategy.is_loaded = True
-    strategy.set_variant("sam2_t.pt")
+    strategy.set_variant("sam2_t")
     assert strategy.is_loaded
 
 

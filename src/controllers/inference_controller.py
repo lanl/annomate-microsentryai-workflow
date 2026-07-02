@@ -128,7 +128,7 @@ class InferenceController(QObject):
             inference_model (InferenceModel): Model for storing score maps.
             strategy_class (Optional[Type]): Inference strategy class to
                 instantiate on :meth:`load_model`. Defaults to
-                ``AnomalibStrategy`` when ``None``.
+                ``OnnxAnomalyStrategy`` when ``None``.
             parent (Optional[QObject]): Qt parent object. Defaults to ``None``.
         """
         super().__init__(parent)
@@ -144,12 +144,13 @@ class InferenceController(QObject):
     # ------------------------------------------------------------------ #
 
     def load_model(self, model_path: str, device: str = "auto") -> str:
-        """Load a ``.pt`` or ``.ckpt`` model file and prepare the strategy.
+        """Load a ``.onnx`` model file and prepare the strategy.
 
         Args:
-            model_path (str): Absolute path to the model checkpoint file.
-            device (str): Target device — ``"auto"`` (default) detects CUDA →
-                MPS → CPU in that order; or pass ``"cpu"``/``"cuda"``/``"mps"``.
+            model_path (str): Absolute path to the ONNX model file.
+            device (str): Target device — ``"auto"`` (default) picks the best
+                available execution provider (CUDA → DirectML → CoreML → CPU);
+                or pass ``"cpu"``/``"cuda"``.
 
         Returns:
             str: The loaded model's name as reported by the strategy.
@@ -158,9 +159,9 @@ class InferenceController(QObject):
             RuntimeError: If the strategy fails to load the model file.
         """
         if self._strategy_class is None:
-            from ai_strategies.anomalib_strategy import AnomalibStrategy
+            from ai_strategies.onnx_anomaly_strategy import OnnxAnomalyStrategy
 
-            strategy_class = AnomalibStrategy
+            strategy_class = OnnxAnomalyStrategy
         else:
             strategy_class = self._strategy_class
         strategy = strategy_class()

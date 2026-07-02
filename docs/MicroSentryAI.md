@@ -3,12 +3,12 @@
 MicroSentryAI is the integrated inference engine. It allows you to load trained anomaly detection models, run them across your dataset, and project defect heatmaps directly onto your images.
 
 ## 1. Supported Models
-The system currently supports PyTorch (`.pt`) models, specifically those trained via **Anomalib** (e.g., PatchCore, EfficientAD, Padim).
+The system supports ONNX (`.onnx`) models exported from **Anomalib** (e.g., PatchCore, EfficientAD, Padim) via `Engine.export(..., export_type=ExportType.ONNX)`. PyTorch checkpoints (`.pt`) are not supported — export them to ONNX from your training pipeline first.
 
 ## 2. Loading an AI Model
 1. In the right panel, expand the **Microsentry** section.
 2. Click **Load New** and select your trained model file.
-3. The system will automatically detect your best hardware (NVIDIA CUDA, Apple MPS, or CPU).
+3. The system will automatically pick the best available hardware (NVIDIA CUDA, DirectML, Apple CoreML, or CPU).
 4. **Batch Inference:** Upon loading, the system will process all loaded images in the background. A progress bar will appear at the bottom. Doing this upfront ensures instant, smooth navigation between images later.
 
 *Note: If you save your `.annoproj` project, the application remembers your model path. Next time you open the project, simply click **Load Previous**.*

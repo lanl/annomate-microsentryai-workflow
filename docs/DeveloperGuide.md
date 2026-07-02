@@ -33,7 +33,7 @@ AnnoMate & MicroSentryAI is a desktop application for annotating images with pol
 1. **Load a folder of images** (e.g., photos of industrial parts on a tray).
 2. **Define annotation classes** (e.g., "crack", "scratch", "corrosion") and pick a color for each.
 3. **Draw polygon annotations** on images manually, or use SAM2 (Segment Anything Model 2) to auto-segment an object from a drawn bounding box.
-4. **Load a MicroSentryAI model** (a `.pt` file trained with Anomalib) to get a heatmap of anomalous regions overlaid on each image.
+4. **Load a MicroSentryAI model** (a `.onnx` file exported from Anomalib) to get a heatmap of anomalous regions overlaid on each image.
 5. **Accept AI-suggested polygons** into the annotation set.
 6. **Mark images as Accept or Reject** during review.
 7. **Export** annotations as COCO JSON, polygon overlay images, binary mask PNGs, or a CSV summary.
@@ -78,7 +78,7 @@ conda env create --file environment-cpu.yml
 conda activate annomate-cpu
 ```
 
-Each yml file specifies its own environment name, Python version (3.10), and all required pip packages including PyTorch, Anomalib, SAM2, and PySide6. You do **not** need to create a base environment manually first — `conda env create` handles everything.
+Each yml file specifies its own environment name, Python version (3.10), and all required pip packages including ONNX Runtime, huggingface_hub, and PySide6. You do **not** need to create a base environment manually first — `conda env create` handles everything.
 
 ### Running the Application
 
@@ -140,8 +140,9 @@ annomate-microsentryai-workflow/
     │
     ├── ai_strategies/          # Qt-free AI backend wrappers
     │   ├── interface.py                # Abstract base class for strategies
-    │   ├── anomalib_strategy.py        # Wraps Anomalib for inference scoring
-    │   └── sam_strategy.py             # Wraps Meta SAM2 for bbox segmentation
+    │   ├── ort_backend.py              # Shared ONNX Runtime session/provider plumbing
+    │   ├── onnx_anomaly_strategy.py    # Runs Anomalib ONNX exports for inference scoring
+    │   └── sam_strategy.py             # Wraps SAM2 (ONNX) for bbox segmentation
     │
     ├── views/                  # All Qt widgets — the visible application
     │   ├── app_window.py               # Top-level QMainWindow shell + menu bar
@@ -360,7 +361,7 @@ Manages the MicroSentryAI anomaly detection pipeline:
 
 **Model loading:**
 ```python
-controller.load_model("/path/to/model.pt")  # returns the model name string
+controller.load_model("/path/to/model.onnx")  # returns the model name string
 controller.has_model()                       # returns True/False
 ```
 
@@ -386,7 +387,7 @@ Manages the SAM2 (Segment Anything Model 2) pipeline. SAM is a large neural netw
 
 ```python
 # On app startup, SAMController checks if weights are already on disk:
-controller.try_autoload("sam2_t.pt")   # returns True if started
+controller.try_autoload("sam2_t")   # returns True if started
 
 # When the user activates the SAM tool:
 controller.ensure_loaded_async()        # starts background load if not already loaded
@@ -719,17 +720,17 @@ Understanding the full path an action takes helps you know where to make a chang
 
 Both AI systems follow the same structural pattern. There is an abstract base class (`ai_strategies/interface.py`) and two concrete implementations:
 
-- `AnomalibStrategy` — wraps Anomalib for anomaly scoring
-- `SAMStrategy` — wraps Meta SAM2 for bounding-box segmentation
+- `OnnxAnomalyStrategy` — runs Anomalib ONNX exports for anomaly scoring
+- `SAMStrategy` — wraps SAM2 (ONNX) for bounding-box segmentation
 
 The strategy classes have **zero Qt imports**. They are instantiated and used by their respective controllers. This means the AI backends can be swapped out, tested in isolation, or used from a plain Python script without any GUI.
 
 ### MicroSentryAI (Anomalib)
 
-The `AnomalibStrategy` loads a `.pt` model file trained with the Anomalib library. Calling `strategy.predict(image_path)` returns a score map — a 2D NumPy float array aligned with the image where higher values indicate more anomalous pixels.
+The `OnnxAnomalyStrategy` loads a `.onnx` model file exported from the Anomalib library (`Engine.export(..., export_type=ExportType.ONNX)`). Calling `strategy.predict(image_path)` returns a score map — a 2D NumPy float array aligned with the image where higher values indicate more anomalous pixels.
 
 The `InferenceController` orchestrates the full pipeline:
-1. Loads the model from a `.pt` file
+1. Loads the model from a `.onnx` file
 2. Runs all images in a background thread (so the UI stays responsive)
 3. Stores score maps in `InferenceModel`
 4. Provides visualization helpers (heatmap rendering, polygon extraction)
@@ -782,7 +783,7 @@ This is a JSON file with:
     "image_dir": "/absolute/path/to/images"
   },
   "inference": {
-    "model_path": "/path/to/model.pt"
+    "model_path": "/path/to/model.onnx"
   }
 }
 ```

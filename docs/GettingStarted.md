@@ -3,7 +3,7 @@
 This guide covers the technical installation, environment setup, and the basic workflow to get your first project up and running.
 
 ## 1. Prerequisites
-Because this suite relies on heavy machine learning libraries (PyTorch, Anomalib, SAM 2), we highly recommend running it inside an isolated environment.
+We highly recommend running the suite inside an isolated environment.
 * **OS:** macOS, Linux, or Windows.
 * **Python:** Version **3.10** is highly recommended.
 * **Environment Manager:** Anaconda or Miniconda.
@@ -68,8 +68,8 @@ pyinstaller --name "AnnoMate" --windowed --add-data "logos:logos" src/main.py
 ```
 
 **Important Build Notes:**
-* **File Size**: Because the application bundles PySide6, PyTorch, and Anomalib, the resulting build folder (dist/AnnoMate/) will be quite large (often several gigabytes).
+* **File Size**: The application bundles PySide6 and ONNX Runtime; the CPU build is a few hundred megabytes.
 
-* **Console Flag**: The --windowed (or --noconsole) flag hides the terminal window in the final build. If your compiled app crashes on startup, try removing the --windowed flag and rebuilding; this will allow you to see the terminal output and identify any missing hidden imports required by PyTorch or Anomalib.
+* **Console Flag**: The --windowed (or --noconsole) flag hides the terminal window in the final build. If your compiled app crashes on startup, try removing the --windowed flag and rebuilding; this will allow you to see the terminal output and identify any missing hidden imports required by onnxruntime.
 
-* **SAM 2 Weights**: The SAM 2 model downloads its checkpoint weights to a local sam_weights/ folder upon first use. You may need to manually copy this folder into the final dist/AnnoMate/ directory if you want it pre-packaged for offline users.
+* **SAM 2 Weights**: The SAM 2 model downloads its ONNX weights to a local sam_weights/ folder upon first use. You may need to manually copy this folder into the final dist/AnnoMate/ directory if you want it pre-packaged for offline users.

@@ -1272,7 +1272,7 @@ class AnnoMateWindow(QWidget):
             self,
             "Load AI Model",
             os.getcwd(),
-            "PyTorch Model (*.pt *.pth);;All Files (*)",
+            "ONNX Model (*.onnx);;All Files (*)",
         )
         if not path:
             return

@@ -79,7 +79,7 @@ class MicrosentrySection(QWidget):
         self._btn_load_prev.setEnabled(False)
         self._btn_load_prev.clicked.connect(self.load_previous_model_requested)
         self._btn_load_new = QPushButton("Load New")
-        self._btn_load_new.setToolTip("Browse for a new .pt model file")
+        self._btn_load_new.setToolTip("Browse for a new .onnx model file")
         self._btn_load_new.setEnabled(False)
         self._btn_load_new.clicked.connect(self.load_model_requested)
         btn_row.addWidget(self._btn_load_prev)

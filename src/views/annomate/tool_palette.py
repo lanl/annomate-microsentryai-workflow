@@ -28,10 +28,10 @@ from PySide6.QtGui import QFont
 
 # Maps human-readable combo label → internal variant key used by SAMStrategy
 _SAM_VARIANT_MAP = {
-    "SAM2.1 Tiny": "sam2_t.pt",
-    "SAM2.1 Small": "sam2_s.pt",
-    "SAM2.1 Base+": "sam2_b.pt",
-    "SAM2.1 Large": "sam2_l.pt",
+    "SAM2 Tiny": "sam2_t",
+    "SAM2 Small": "sam2_s",
+    "SAM2 Base+": "sam2_b",
+    "SAM2 Large": "sam2_l",
 }
 
 _BTN_W = 44
@@ -190,7 +190,7 @@ class ToolPalette(QFrame):
 
     def current_sam_variant(self) -> str:
         """Return the internal variant key for the currently selected SAM model."""
-        return _SAM_VARIANT_MAP.get(self.sam_variant_combo.currentText(), "sam2_t.pt")
+        return _SAM_VARIANT_MAP.get(self.sam_variant_combo.currentText(), "sam2_t")
 
     def deselect_all(self) -> None:
         """Uncheck all tool buttons (called when the canvas cancels a tool)."""
@@ -225,7 +225,7 @@ class ToolPalette(QFrame):
     # ------------------------------------------------------------------ #
 
     def _on_sam_combo_changed(self, display_name: str) -> None:
-        self.sam_variant_changed.emit(_SAM_VARIANT_MAP.get(display_name, "sam2_t.pt"))
+        self.sam_variant_changed.emit(_SAM_VARIANT_MAP.get(display_name, "sam2_t"))
 
     def _on_btn_clicked(self, btn: QToolButton) -> None:
         tool_name = self._btn_tool.get(btn, "")

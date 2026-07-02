@@ -12,7 +12,8 @@ from models.inference_model import InferenceModel
 from core.states.dataset_state import DatasetState
 from core.states.inference_state import InferenceState
 from controllers.inference_controller import InferenceController, InferenceWorker
-from ai_strategies.anomalib_strategy import AnomalibStrategy
+from ai_strategies.onnx_anomaly_strategy import OnnxAnomalyStrategy
+from ai_strategies.ort_backend import resolve_providers
 
 
 class MockStrategy:
@@ -80,45 +81,77 @@ class TestInferenceController:
 
 
 class TestDeviceResolution:
-    """Test the AnomalibStrategy device fallback logic for cross-platform ML."""
+    """Test the ONNX Runtime execution-provider resolution for cross-platform ML."""
 
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_resolve_device_cuda(self, mock_cuda):
+    @patch(
+        "ai_strategies.ort_backend.ort.get_available_providers",
+        return_value=["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    def test_resolve_auto_cuda(self, mock_providers):
         """Verify that CUDA is selected when available."""
-        # Arrange
-        strategy = AnomalibStrategy()
-        strategy.device = "auto"
+        providers, label = resolve_providers("auto")
 
-        # Act
-        resolved = strategy._resolve_device()
+        assert providers[0] == "CUDAExecutionProvider"
+        assert label == "CUDA", "Should resolve to CUDA when available."
 
-        # Assert
-        assert resolved == "cuda", "Should resolve to CUDA when available."
+    @patch(
+        "ai_strategies.ort_backend.ort.get_available_providers",
+        return_value=["DmlExecutionProvider", "CPUExecutionProvider"],
+    )
+    def test_resolve_auto_directml(self, mock_providers):
+        """Verify that DirectML is selected when CUDA is not available."""
+        providers, label = resolve_providers("auto")
 
-    @patch("torch.cuda.is_available", return_value=False)
-    @patch("torch.backends.mps.is_available", return_value=True, create=True)
-    def test_resolve_device_mps(self, mock_mps, mock_cuda):
-        """Verify that Apple Silicon MPS is selected when available and CUDA is not."""
-        # Arrange
-        strategy = AnomalibStrategy()
-        strategy.device = "auto"
+        assert providers[0] == "DmlExecutionProvider"
+        assert label == "DirectML", "Should resolve to DirectML when CUDA is absent."
 
-        # Act
-        resolved = strategy._resolve_device()
-
-        # Assert
-        assert resolved == "mps", "Should resolve to MPS on Apple Silicon."
-
-    @patch("torch.cuda.is_available", return_value=False)
-    @patch("torch.backends.mps.is_available", return_value=False, create=True)
-    def test_resolve_device_cpu_fallback(self, mock_mps, mock_cuda):
+    @patch(
+        "ai_strategies.ort_backend.ort.get_available_providers",
+        return_value=["CPUExecutionProvider"],
+    )
+    def test_resolve_auto_cpu_fallback(self, mock_providers):
         """Verify CPU is the ultimate fallback."""
-        # Arrange
-        strategy = AnomalibStrategy()
-        strategy.device = "auto"
+        providers, label = resolve_providers("auto")
 
-        # Act
-        resolved = strategy._resolve_device()
+        assert providers == ["CPUExecutionProvider"]
+        assert label == "CPU", "Should fallback to CPU if no accelerators exist."
 
-        # Assert
-        assert resolved == "cpu", "Should fallback to CPU if no accelerators exist."
+    @patch(
+        "ai_strategies.ort_backend.ort.get_available_providers",
+        return_value=["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    def test_resolve_explicit_cpu(self, mock_providers):
+        """Verify explicit 'cpu' ignores available accelerators."""
+        providers, label = resolve_providers("cpu")
+
+        assert providers == ["CPUExecutionProvider"]
+        assert label == "CPU", "Explicit cpu should not use accelerators."
+
+    @patch(
+        "ai_strategies.ort_backend.ort.get_available_providers",
+        return_value=["CPUExecutionProvider"],
+    )
+    def test_resolve_cuda_unavailable_falls_back(self, mock_providers):
+        """Verify requesting CUDA in a CPU-only build falls back gracefully."""
+        providers, label = resolve_providers("cuda")
+
+        assert providers == ["CPUExecutionProvider"]
+        assert label == "CPU", "Missing CUDA provider should fall back to CPU."
+
+
+class TestOnnxAnomalyStrategyLoading:
+    """Test the OnnxAnomalyStrategy file-type validation."""
+
+    def test_load_pt_checkpoint_rejected(self):
+        """Verify a PyTorch checkpoint is rejected with an ONNX-export hint."""
+        strategy = OnnxAnomalyStrategy()
+
+        with pytest.raises(RuntimeError, match="no longer supported"):
+            strategy.load_from_file("some_model.pt")
+
+    def test_load_unknown_extension_rejected(self):
+        """Verify unsupported file types are rejected."""
+        strategy = OnnxAnomalyStrategy()
+
+        with pytest.raises(RuntimeError, match="Unsupported file type"):
+            strategy.load_from_file("some_model.bin")

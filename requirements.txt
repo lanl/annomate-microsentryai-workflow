@@ -2,11 +2,11 @@
 PySide6>=6.11.0
 
 # --- Core AI & Vision ---
-# Anomalib installs PyTorch/Lightning automatically; specified versions ensure compatibility.
-anomalib>=2.2.0
-torch>=2.0.0
-torchvision>=0.15.0
-lightning>=2.0.0
+# ONNX Runtime (CPU). For GPU builds substitute onnxruntime-gpu (system
+# CUDA 12 + cuDNN 9 required) or onnxruntime-directml (Windows, any DX12 GPU).
+onnxruntime>=1.23.0
+# Downloads SAM 2 ONNX weights from Hugging Face on first use.
+huggingface_hub
 
 # --- Image Processing & Math ---
 opencv-python>=4.8.0
@@ -16,5 +16,5 @@ scipy>=1.10.0
 matplotlib>=3.7.0
 
 # --- Packaging (Optional) ---
-# Only needed you want to build standalone executable.
-nuitka>=2.0
+# Only needed if you want to build a standalone executable.
+pyinstaller

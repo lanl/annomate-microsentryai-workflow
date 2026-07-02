@@ -2,7 +2,7 @@
 SAMController — Qt infrastructure for SAM 2 inference.
 
 Two QThreads:
-  _ModelLoadWorker  — downloads / initialises the SAM checkpoint off the
+  _ModelLoadWorker  — downloads / initialises the SAM ONNX weights off the
                       main thread (can take 30+ s on first run).
   SAMWorker         — runs a single predict_bbox() call off the main thread.
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class _ModelLoadWorker(QThread):
-    """Loads (and optionally downloads) a SAM checkpoint off the main thread."""
+    """Loads (and optionally downloads) the SAM ONNX weights off the main thread."""
 
     done = Signal()
     failed = Signal(str)
