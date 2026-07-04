@@ -13,7 +13,6 @@ from typing import Optional, List, Tuple, Type
 import numpy as np
 import cv2
 from PIL import Image
-from scipy.ndimage import gaussian_filter
 from matplotlib import colormaps as mpl_cmaps
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -312,7 +311,13 @@ class InferenceController(QObject):
         if score_map is None:
             return left_image, left_image.copy(), scale, offset, None
 
-        s = gaussian_filter(score_map, sigma=sigma) if sigma > 0 else score_map.copy()
+        # cv2 with ksize=(0, 0) derives the kernel from sigma like scipy's
+        # gaussian_filter; BORDER_REFLECT matches scipy's default edge mode.
+        s = (
+            cv2.GaussianBlur(score_map, (0, 0), sigmaX=sigma, borderType=cv2.BORDER_REFLECT)
+            if sigma > 0
+            else score_map.copy()
+        )
 
         # Suppress the background noise floor using the percentile slider, then
         # keep the absolute [0, 1] scale intact. Re-normalizing per image (old
