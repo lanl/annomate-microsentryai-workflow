@@ -16,6 +16,31 @@ import onnxruntime as ort
 
 logger = logging.getLogger("MicroSentryAI.OrtBackend")
 
+# In CUDA builds the cuBLAS/cuDNN/cudart DLLs come from the nvidia-*-cu12 pip
+# packages, whose site-packages/nvidia/*/bin directories are not on the OS DLL
+# search path. preload_dlls() loads the core DLLs by absolute path, but cuDNN
+# also lazy-loads engine sub-DLLs by bare name at kernel-execution time (e.g.
+# cudnn_engines_tensor_ir64_9.dll, which is missing from preload_dlls()'s
+# hard-coded list), so the bin directories must also be on the search path.
+# No-op on CPU/DirectML builds (guarded) and when the packages are absent.
+if platform.system() == "Windows" and "CUDAExecutionProvider" in ort.get_available_providers():
+    _nvidia_root = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(ort.__file__))), "nvidia"
+    )
+    _found_nvidia_bin = False
+    if os.path.isdir(_nvidia_root):
+        for _pkg in sorted(os.listdir(_nvidia_root)):
+            _bin_dir = os.path.join(_nvidia_root, _pkg, "bin")
+            if os.path.isdir(_bin_dir):
+                _found_nvidia_bin = True
+                os.add_dll_directory(_bin_dir)
+                os.environ["PATH"] = _bin_dir + os.pathsep + os.environ.get("PATH", "")
+    # Without the pip packages (e.g. system-wide CUDA/cuDNN found via PATH by
+    # the native loader), preload_dlls would only print noise: ctypes does not
+    # search PATH on Python 3.8+.
+    if _found_nvidia_bin and hasattr(ort, "preload_dlls"):
+        ort.preload_dlls()
+
 # Preferred execution providers, best first. CPU is always appended as the
 # final fallback so a session can be created in any build.
 _EP_PRIORITY = [
