@@ -25,9 +25,9 @@ _ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
 
 _BADGE_ICON_SIZE = 14
 _BADGE_ICON_COLOR = "#888888"
-_ANNOTATIONS_ICON = "polyline"
+_ANNOTATIONS_ICON = "pentagon"
 _INSPECTOR_ICON = "person"
-_NOTE_ICON = "note_add"
+_NOTE_ICON = "comment"
 
 _STATUS_DOT_W = 10
 _INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
