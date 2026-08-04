@@ -114,6 +114,12 @@ class _CollapsedNavigatorRail(QWidget):
             label.setText(str(count))
             glyph.parentWidget().setToolTip(f"{count} {name} images")
 
+    def set_has_data(self, has_data: bool) -> None:
+        """Grey out expand/prev/next until a dataset is actually loaded."""
+        self._btn_expand.setEnabled(has_data)
+        self._btn_prev.setEnabled(has_data)
+        self._btn_next.setEnabled(has_data)
+
 
 class LeftPanel(QWidget):
     """Left panel hosting the dataset navigator, to the left of the tool palette.
@@ -197,6 +203,10 @@ class LeftPanel(QWidget):
             int(self.navigator._lbl_count_incomplete.text()),
         )
 
+        self._dataset_model = dataset_model
+        dataset_model.modelReset.connect(self._on_dataset_reset)
+        self._on_dataset_reset()
+
     def set_collapsed(self, collapsed: bool) -> None:
         if self._collapsed == collapsed:
             return
@@ -215,6 +225,12 @@ class LeftPanel(QWidget):
 
     def is_collapsed(self) -> bool:
         return self._collapsed
+
+    def _on_dataset_reset(self) -> None:
+        """Collapsed with greyed-out controls until a dataset loads, then expanded."""
+        has_data = self._dataset_model.rowCount() > 0
+        self._collapsed_rail.set_has_data(has_data)
+        self.set_collapsed(not has_data)
 
     def _on_state_counts_changed(
         self, undecided: int, reviewed: int, incomplete: int

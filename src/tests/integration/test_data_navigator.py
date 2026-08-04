@@ -325,3 +325,40 @@ def test_collapsed_navigation_buttons_forward_requests(qtbot):
         qtbot.mouseClick(panel._collapsed_rail._btn_prev, Qt.LeftButton)
     with qtbot.waitSignal(panel.next_requested, timeout=1000):
         qtbot.mouseClick(panel._collapsed_rail._btn_next, Qt.LeftButton)
+
+
+def test_left_panel_defaults_to_collapsed_with_greyed_controls_when_no_data(qtbot):
+    """No dataset loaded yet -- panel starts collapsed with disabled rail buttons."""
+    dataset_model = DatasetTableModel(DatasetState())
+    panel = LeftPanel(dataset_model)
+    qtbot.addWidget(panel)
+
+    assert panel.is_collapsed()
+    assert not panel._collapsed_rail._btn_expand.isEnabled()
+    assert not panel._collapsed_rail._btn_prev.isEnabled()
+    assert not panel._collapsed_rail._btn_next.isEnabled()
+
+
+def test_left_panel_expands_and_enables_controls_once_data_loads(qtbot):
+    """Loading a dataset into an empty panel flips it to expanded with live controls."""
+    dataset_model = DatasetTableModel(DatasetState())
+    panel = LeftPanel(dataset_model)
+    qtbot.addWidget(panel)
+    assert panel.is_collapsed()
+
+    dataset_model.load_folder("/fake", ["a.jpg"])
+
+    assert not panel.is_collapsed()
+    assert panel._collapsed_rail._btn_expand.isEnabled()
+    assert panel._collapsed_rail._btn_prev.isEnabled()
+    assert panel._collapsed_rail._btn_next.isEnabled()
+
+
+def test_left_panel_defaults_to_expanded_when_data_already_present(qtbot):
+    """Constructing the panel against an already-loaded dataset skips the collapsed default."""
+    dataset_model = DatasetTableModel(DatasetState())
+    dataset_model.load_folder("/fake", ["a.jpg"])
+    panel = LeftPanel(dataset_model)
+    qtbot.addWidget(panel)
+
+    assert not panel.is_collapsed()

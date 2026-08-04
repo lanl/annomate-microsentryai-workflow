@@ -624,7 +624,6 @@ class AnnoMateWindow(QWidget):
         self.left_panel = LeftPanel(
             self.dataset_model, self.inference_model, self._calib_model, self
         )
-        self.left_panel.setMinimumWidth(160)
         self.left_panel.collapsed_changed.connect(
             self._on_navigator_collapsed_changed
         )
@@ -691,6 +690,7 @@ class AnnoMateWindow(QWidget):
 
         outer_splitter.addWidget(canvas_area)
         outer_splitter.setSizes([220, 1000])
+        outer_splitter.handle(1).set_suppressed(self.left_panel.is_collapsed())
         h_layout.addWidget(outer_splitter, stretch=1)
 
         return workspace
@@ -706,6 +706,7 @@ class AnnoMateWindow(QWidget):
         else:
             left_width = max(160, self._expanded_left_panel_width)
         self._outer_splitter.setSizes([left_width, max(1, total - left_width)])
+        self._outer_splitter.handle(1).set_suppressed(collapsed)
 
     # ------------------------------------------------------------------ #
     # Floating canvas controls

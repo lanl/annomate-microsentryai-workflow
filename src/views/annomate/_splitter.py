@@ -6,7 +6,7 @@ Handle colors (plain RGB tuples — converted to QColor only at paint time):
   HANDLE_DRAG     dark grey    — actively dragging
 """
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPainter, QColor, QPalette
 from PySide6.QtWidgets import QSplitter, QSplitterHandle
 
@@ -33,6 +33,25 @@ class _StyledHandle(QSplitterHandle):
         self._hovered = False
         self._dragging = False
         self._margin = margin
+        self._suppressed = False
+
+    def set_suppressed(self, suppressed: bool) -> None:
+        """Collapse this handle to zero width and disable dragging.
+
+        A plain setVisible(False) doesn't stick -- QSplitter re-shows its
+        handles on every relayout. Reporting a zero sizeHint is what
+        actually keeps the space (and the drag affordance) gone.
+        """
+        if self._suppressed == suppressed:
+            return
+        self._suppressed = suppressed
+        self.setEnabled(not suppressed)
+        self.updateGeometry()
+
+    def sizeHint(self) -> QSize:
+        if self._suppressed:
+            return QSize(0, 0)
+        return super().sizeHint()
 
     # ── State transitions ─────────────────────────────────────────────────────
 
@@ -60,6 +79,8 @@ class _StyledHandle(QSplitterHandle):
     # ── Rendering ─────────────────────────────────────────────────────────────
 
     def paintEvent(self, event) -> None:
+        if self._suppressed:
+            return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
