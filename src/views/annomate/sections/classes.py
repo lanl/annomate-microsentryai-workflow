@@ -1,5 +1,5 @@
 from PySide6.QtCore import QItemSelectionModel, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -31,7 +31,9 @@ from models.classes_model import (
     ClassTableModel,
 )
 
+from views.icons import material_icon
 
+_ICON_BTN_SIZE = 16
 _TAG_COL_W = 28
 _COLOR_TAG_ACTIVE = QColor("#ff9800")  # amber — current mode's tags
 _COLOR_TAG_INACTIVE = QColor("#4a90d9")  # blue  — other mode's tags
@@ -96,77 +98,17 @@ class _IconButtonDelegate(QStyledItemDelegate):
         self._paint_icon(painter, button.rect, opt.palette, index)
 
     def _paint_icon(self, painter: QPainter, rect, palette, index) -> None:
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        color = palette.buttonText().color()
-        painter.setPen(QPen(color, 1.4))
-        painter.setBrush(Qt.NoBrush)
-
         if self._action == "visibility":
-            self._paint_eye_icon(painter, QRectF(rect).adjusted(8, 8, -8, -8), index)
+            name = "visibility" if bool(index.data(VISIBLE_ROLE)) else "visibility_off"
         else:
-            self._paint_trash_icon(painter, QRectF(rect).adjusted(9, 7, -9, -7))
-        painter.restore()
-
-    def _paint_eye_icon(self, painter: QPainter, rect: QRectF, index) -> None:
-        center = rect.center()
-        eye = QPainterPath()
-        eye.moveTo(rect.left(), center.y())
-        eye.cubicTo(
-            rect.left() + rect.width() * 0.25,
-            rect.top(),
-            rect.right() - rect.width() * 0.25,
-            rect.top(),
-            rect.right(),
-            center.y(),
+            name = "delete"
+        color = palette.buttonText().color().name()
+        pixmap = material_icon(name, size=_ICON_BTN_SIZE, color=color).pixmap(
+            _ICON_BTN_SIZE, _ICON_BTN_SIZE
         )
-        eye.cubicTo(
-            rect.right() - rect.width() * 0.25,
-            rect.bottom(),
-            rect.left() + rect.width() * 0.25,
-            rect.bottom(),
-            rect.left(),
-            center.y(),
-        )
-        painter.drawPath(eye)
-        painter.setBrush(painter.pen().color())
-        radius = max(2.0, min(rect.width(), rect.height()) * 0.18)
-        painter.drawEllipse(center, radius, radius)
-        painter.setBrush(Qt.NoBrush)
-
-        if not bool(index.data(VISIBLE_ROLE)):
-            painter.drawLine(rect.topRight(), rect.bottomLeft())
-
-    def _paint_trash_icon(self, painter: QPainter, rect: QRectF) -> None:
-        w = rect.width()
-        h = rect.height()
-        lid_y = rect.top() + h * 0.22
-        body = QRectF(
-            rect.left() + w * 0.18,
-            lid_y + h * 0.16,
-            w * 0.64,
-            h * 0.62,
-        )
-        painter.drawLine(rect.left() + w * 0.12, lid_y, rect.right() - w * 0.12, lid_y)
-        painter.drawLine(
-            rect.left() + w * 0.38,
-            rect.top() + h * 0.08,
-            rect.right() - w * 0.38,
-            rect.top() + h * 0.08,
-        )
-        painter.drawRect(body)
-        painter.drawLine(
-            body.left() + body.width() * 0.35,
-            body.top() + body.height() * 0.2,
-            body.left() + body.width() * 0.35,
-            body.bottom() - body.height() * 0.15,
-        )
-        painter.drawLine(
-            body.right() - body.width() * 0.35,
-            body.top() + body.height() * 0.2,
-            body.right() - body.width() * 0.35,
-            body.bottom() - body.height() * 0.15,
-        )
+        x = rect.x() + (rect.width() - _ICON_BTN_SIZE) // 2
+        y = rect.y() + (rect.height() - _ICON_BTN_SIZE) // 2
+        painter.drawPixmap(x, y, pixmap)
 
 
 class _ImageTagDelegate(QStyledItemDelegate):
@@ -411,7 +353,7 @@ class ClassesSection(QWidget):
         self._name_input.returnPressed.connect(self._add_class)
         add_h.addWidget(self._name_input, stretch=1)
 
-        btn_add = QPushButton("Add Class")
+        btn_add = QPushButton(material_icon("add"), "Add Class")
         btn_add.clicked.connect(self._add_class)
         add_h.addWidget(btn_add)
 

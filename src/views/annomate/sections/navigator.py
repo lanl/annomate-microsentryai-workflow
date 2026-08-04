@@ -18,6 +18,8 @@ from models.navigator_model import (
     SOURCE_ROW_ROLE,
 )
 
+from views.icons import material_icon
+
 from .annotations import AnnotationsSection
 from .metadata import MetadataSection
 from ._navigator_card import _NavigatorCard
@@ -112,13 +114,18 @@ class DataNavigatorSection(QWidget):
         nav_h.setSpacing(4)
 
         self._btn_prev = QToolButton()
-        self._btn_prev.setText("<(A) Prev")
+        self._btn_prev.setIcon(material_icon("chevron_left", size=16))
+        self._btn_prev.setText("Prev (A)")
+        self._btn_prev.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_prev.setToolTip("Previous image")
         self._btn_prev.clicked.connect(self.prev_requested)
         nav_h.addWidget(self._btn_prev)
 
         self._btn_next = QToolButton()
-        self._btn_next.setText("Next (D)>")
+        self._btn_next.setIcon(material_icon("chevron_right", size=16))
+        self._btn_next.setLayoutDirection(Qt.RightToLeft)
+        self._btn_next.setText("Next (D)")
+        self._btn_next.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_next.setToolTip("Next image")
         self._btn_next.clicked.connect(self.next_requested)
         nav_h.addWidget(self._btn_next)
@@ -164,7 +171,7 @@ class DataNavigatorSection(QWidget):
         filter_h.addWidget(self._btn_sort)
 
         self._btn_overflow = QToolButton()
-        self._btn_overflow.setText("\U0001f39a")
+        self._btn_overflow.setIcon(material_icon("tune", size=16))
         self._btn_overflow.setToolTip("More filters")
         self._btn_overflow.setPopupMode(QToolButton.InstantPopup)
         self._btn_overflow.setMenu(self._build_overflow_menu())

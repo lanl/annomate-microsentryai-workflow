@@ -1,4 +1,4 @@
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QFrame,
@@ -6,6 +6,12 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
 )
+
+from views.icons import material_icon
+
+_ICON_SIZE = QSize(16, 16)
+_ICON_EXPANDED = "expand_more"  # chevron down -- body visible
+_ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
 
 
 class _CollapsibleSection(QWidget):
@@ -40,8 +46,11 @@ class _CollapsibleSection(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        arrow = "▾" if expanded else "▸"
-        self._toggle_btn = QPushButton(f"{arrow}  {title}")
+        self._toggle_btn = QPushButton(f"  {title}")
+        self._toggle_btn.setIcon(
+            material_icon(_ICON_EXPANDED if expanded else _ICON_COLLAPSED)
+        )
+        self._toggle_btn.setIconSize(_ICON_SIZE)
         self._toggle_btn.setCheckable(True)
         self._toggle_btn.setChecked(expanded)
         self._toggle_btn.setStyleSheet(
@@ -74,6 +83,7 @@ class _CollapsibleSection(QWidget):
     def _on_toggle(self, checked: bool) -> None:
         self._expanded = checked
         self._body.setVisible(checked)
-        arrow = "▾" if checked else "▸"
-        self._toggle_btn.setText(f"{arrow}  {self._title}")
+        self._toggle_btn.setIcon(
+            material_icon(_ICON_EXPANDED if checked else _ICON_COLLAPSED)
+        )
         self.toggled.emit(checked)

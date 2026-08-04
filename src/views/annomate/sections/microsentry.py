@@ -7,7 +7,7 @@ Layout (when model loaded):
   [Heatmap] toggle  +  Transparency slider
   [Segmentation] toggle  +  Threshold slider
   [Accept AI Polygons] button
-  ▸ Advanced Settings (collapsible)
+  chevron_right  Advanced Settings (collapsible)
       Simplify Tolerance slider
       Heatmap Minimum slider
 """
@@ -24,6 +24,11 @@ from PySide6.QtWidgets import (
     QSlider,
     QToolButton,
 )
+
+from views.icons import material_icon
+
+_ICON_ADVANCED_EXPANDED = "expand_more"
+_ICON_ADVANCED_COLLAPSED = "chevron_right"
 
 
 def _slider_row(label_text: str, value_label: QLabel, slider: QSlider) -> QWidget:
@@ -74,11 +79,11 @@ class MicrosentrySection(QWidget):
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(4)
-        self._btn_load_prev = QPushButton("Load Previous")
+        self._btn_load_prev = QPushButton(material_icon("folder_open"), "Load Previous")
         self._btn_load_prev.setToolTip("Reload the model saved with this project")
         self._btn_load_prev.setEnabled(False)
         self._btn_load_prev.clicked.connect(self.load_previous_model_requested)
-        self._btn_load_new = QPushButton("Load New")
+        self._btn_load_new = QPushButton(material_icon("folder_open"), "Load New")
         self._btn_load_new.setToolTip("Browse for a new .pt model file")
         self._btn_load_new.setEnabled(False)
         self._btn_load_new.clicked.connect(self.load_model_requested)
@@ -122,7 +127,9 @@ class MicrosentrySection(QWidget):
 
         # Heatmap toggle + transparency slider inline
         self._btn_heatmap = QToolButton()
+        self._btn_heatmap.setIcon(material_icon("local_fire_department", size=16))
         self._btn_heatmap.setText("Heatmap")
+        self._btn_heatmap.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_heatmap.setCheckable(True)
         self._btn_heatmap.setToolTip("Overlay anomaly heatmap on the canvas image")
         self._btn_heatmap.toggled.connect(self._debounce.start)
@@ -145,7 +152,9 @@ class MicrosentrySection(QWidget):
 
         # Segmentation toggle + threshold slider inline
         self._btn_seg = QToolButton()
+        self._btn_seg.setIcon(material_icon("layers", size=16))
         self._btn_seg.setText("Segmentation")
+        self._btn_seg.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_seg.setCheckable(True)
         self._btn_seg.setToolTip("Show AI segmentation polygons on the canvas")
         self._btn_seg.toggled.connect(self._on_seg_toggled)
@@ -161,12 +170,12 @@ class MicrosentrySection(QWidget):
                 self._debounce.start(),
             )
         )
-        self._thresh_dec = QPushButton("<")
+        self._thresh_dec = QPushButton(material_icon("chevron_left", size=12), "")
         self._thresh_dec.setFixedWidth(20)
         self._thresh_dec.clicked.connect(
             lambda: self._thresh.setValue(self._thresh.value() - 1)
         )
-        self._thresh_inc = QPushButton(">")
+        self._thresh_inc = QPushButton(material_icon("chevron_right", size=12), "")
         self._thresh_inc.setFixedWidth(20)
         self._thresh_inc.clicked.connect(
             lambda: self._thresh.setValue(self._thresh.value() + 1)
@@ -182,7 +191,7 @@ class MicrosentrySection(QWidget):
         lw.addLayout(seg_row)
 
         # Accept AI Polygons button
-        self._btn_accept = QPushButton("Accept AI Polygons")
+        self._btn_accept = QPushButton(material_icon("check"), "Accept AI Polygons")
         self._btn_accept.setToolTip(
             "Add AI segmentation polygons as annotations on the active class"
         )
@@ -192,13 +201,14 @@ class MicrosentrySection(QWidget):
 
         # ── Advanced Settings (inline collapsible) ──────────────────────── #
         self._btn_advanced = QToolButton()
-        self._btn_advanced.setText("▸  Advanced Settings")
+        self._btn_advanced.setIcon(material_icon(_ICON_ADVANCED_COLLAPSED, size=14))
+        self._btn_advanced.setText("  Advanced Settings")
         self._btn_advanced.setCheckable(True)
         self._btn_advanced.setChecked(False)
         self._btn_advanced.setStyleSheet(
             "text-align: left; font-size: 11px; border: none;"
         )
-        self._btn_advanced.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self._btn_advanced.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_advanced.setSizePolicy(
             self._btn_advanced.sizePolicy().horizontalPolicy(),
             self._btn_advanced.sizePolicy().verticalPolicy(),
@@ -251,7 +261,12 @@ class MicrosentrySection(QWidget):
 
     def _on_advanced_toggled(self, checked: bool) -> None:
         self._advanced_widget.setVisible(checked)
-        self._btn_advanced.setText(f"{'▾' if checked else '▸'}  Advanced Settings")
+        self._btn_advanced.setIcon(
+            material_icon(
+                _ICON_ADVANCED_EXPANDED if checked else _ICON_ADVANCED_COLLAPSED,
+                size=14,
+            )
+        )
 
     # ------------------------------------------------------------------ #
     # Public API

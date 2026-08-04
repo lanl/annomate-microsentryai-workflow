@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QTextEdit,
 )
 
+from views.icons import material_icon
+
 
 class _SetAllInspectorDialog(QDialog):
     """Dialog for bulk-assigning an inspector name across a filtered set of images."""
@@ -143,16 +145,16 @@ class MetadataSection(QWidget):
         self._inspector_edit.editingFinished.connect(self._store_inspector)
         inspector_row.addWidget(self._inspector_edit)
 
-        self._set_inspector_btn = QPushButton("Set Inspector")
-        self._set_inspector_btn.setFixedWidth(95)
+        self._set_inspector_btn = QPushButton(material_icon("person"), "Set Inspector")
+        self._set_inspector_btn.setFixedWidth(115)
         self._set_inspector_btn.setToolTip(
             "Set as session inspector - auto-fills new images as you navigate"
         )
         self._set_inspector_btn.clicked.connect(self._on_set_inspector)
         inspector_row.addWidget(self._set_inspector_btn)
 
-        self._set_all_btn = QPushButton("Set All")
-        self._set_all_btn.setFixedWidth(60)
+        self._set_all_btn = QPushButton(material_icon("groups"), "Set All")
+        self._set_all_btn.setFixedWidth(78)
         self._set_all_btn.setToolTip(
             "Bulk-assign an inspector name to a filtered set of images"
         )

@@ -8,41 +8,40 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from models.navigator_model import IMAGE_STATE_ROLE, NavigatorColumns
+from models.navigator_model import HAS_INSPECTOR_ROLE, HAS_NOTE_ROLE, NavigatorColumns
 
-from ._shared import _ClickableFrame, _COLOR_INCOMPLETE, _COLOR_REVIEWED, _COLOR_UNDECIDED
+from views.icons import material_icon
 
-_DOT_W = 10
-_INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
-_REVIEWED_STATES = ("accept_clean", "reject_reviewed")
+from ._shared import _ClickableFrame
+
+_CHEVRON_SIZE = 16
+_ICON_EXPANDED = "expand_more"  # chevron down -- body visible
+_ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
+
+_BADGE_ICON_SIZE = 14
+_BADGE_ICON_COLOR = "#888888"
+_ANNOTATIONS_ICON = "polyline"
+_INSPECTOR_ICON = "person"
+_NOTE_ICON = "note_add"
 
 
-def _apply_status_icon(label: QLabel, state: str) -> None:
-    """Style *label* in place to match the status dot/ring/badge for *state*."""
-    label.setFixedSize(_DOT_W, _DOT_W)
-    label.setAlignment(Qt.AlignCenter)
-    if state in _INCOMPLETE_STATES:
-        label.setText("!")
-        label.setStyleSheet(
-            f"QLabel {{ color: {_COLOR_INCOMPLETE}; font-size: {_DOT_W}px; "
-            "font-weight: bold; background: transparent; border: none; }"
+def _badge_icon_label(name: str, tooltip: str) -> QLabel:
+    lbl = QLabel()
+    lbl.setPixmap(
+        material_icon(name, size=_BADGE_ICON_SIZE, color=_BADGE_ICON_COLOR).pixmap(
+            _BADGE_ICON_SIZE, _BADGE_ICON_SIZE
         )
-    elif state in _REVIEWED_STATES:
-        label.setText("")
-        label.setStyleSheet(
-            f"QLabel {{ background-color: {_COLOR_REVIEWED}; border-radius: "
-            f"{_DOT_W // 2}px; }}"
-        )
-    else:
-        label.setText("")
-        label.setStyleSheet(
-            f"QLabel {{ border: 1.5px solid {_COLOR_UNDECIDED}; border-radius: "
-            f"{_DOT_W // 2}px; background: transparent; }}"
-        )
+    )
+    lbl.setToolTip(tooltip)
+    return lbl
 
 
 class _NavigatorCard(QWidget):
     """One row of the dataset navigator: a clickable header, expandable in place.
+
+    The collapsed header is a two-line at-a-glance summary:
+        Row 1: filename (left)               annotation/inspector/note badges (right)
+        Row 2: decision -- Accept/Reject/Undecided (left)     MicroSentry score (right)
 
     Signals:
         clicked (int): Emitted with this card's source row when its header is clicked.
@@ -74,35 +73,60 @@ class _NavigatorCard(QWidget):
             lambda: self.clicked.emit(self._source_row)
         )
         h = QHBoxLayout(self._header)
-        h.setContentsMargins(2, 4, 6, 4)
+        h.setContentsMargins(6, 4, 6, 4)
         h.setSpacing(6)
-
-        self._status_lbl = QLabel()
-        h.addWidget(self._status_lbl)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(1)
 
+        # Row 1: filename (left) -- annotation/inspector/note badges (right)
+        row1 = QHBoxLayout()
+        row1.setSpacing(4)
+
         self._filename_lbl = QLabel()
         self._filename_lbl.setStyleSheet("font-weight: bold;")
-        text_col.addWidget(self._filename_lbl)
+        row1.addWidget(self._filename_lbl)
+        row1.addStretch()
 
-        second_row = QHBoxLayout()
-        second_row.setSpacing(8)
+        self._annot_count_lbl = QLabel()
+        self._annot_count_lbl.setStyleSheet("color: palette(mid); font-size: 11px;")
+        row1.addWidget(self._annot_count_lbl)
+        self._annot_icon_lbl = _badge_icon_label(_ANNOTATIONS_ICON, "Has annotations")
+        row1.addWidget(self._annot_icon_lbl)
+
+        row1.addSpacing(4)
+        self._inspector_icon_lbl = _badge_icon_label(
+            _INSPECTOR_ICON, "Has an assigned inspector"
+        )
+        row1.addWidget(self._inspector_icon_lbl)
+
+        self._note_icon_lbl = _badge_icon_label(_NOTE_ICON, "Has a note")
+        row1.addWidget(self._note_icon_lbl)
+
+        text_col.addLayout(row1)
+
+        # Row 2: decision (left) -- MicroSentry score (right)
+        row2 = QHBoxLayout()
+        row2.setSpacing(8)
+
         self._decision_lbl = QLabel()
-        second_row.addWidget(self._decision_lbl)
-        self._annots_lbl = QLabel()
-        self._annots_lbl.setStyleSheet("color: palette(mid);")
-        second_row.addWidget(self._annots_lbl)
-        second_row.addStretch()
-        text_col.addLayout(second_row)
+        row2.addWidget(self._decision_lbl)
+        row2.addStretch()
+
+        self._score_lbl = QLabel()
+        self._score_lbl.setStyleSheet("color: palette(mid);")
+        row2.addWidget(self._score_lbl)
+
+        text_col.addLayout(row2)
 
         h.addLayout(text_col, 1)
 
-        self._score_lbl = QLabel()
-        h.addWidget(self._score_lbl)
-
-        self._arrow_lbl = QLabel("▸")
+        self._arrow_lbl = QLabel()
+        self._arrow_lbl.setPixmap(
+            material_icon(_ICON_COLLAPSED, size=_CHEVRON_SIZE).pixmap(
+                _CHEVRON_SIZE, _CHEVRON_SIZE
+            )
+        )
         h.addWidget(self._arrow_lbl)
 
         outer.addWidget(self._header)
@@ -125,7 +149,11 @@ class _NavigatorCard(QWidget):
     def set_expanded(self, expanded: bool) -> None:
         self._expanded = expanded
         self._body.setVisible(expanded)
-        self._arrow_lbl.setText("▾" if expanded else "▸")
+        self._arrow_lbl.setPixmap(
+            material_icon(
+                _ICON_EXPANDED if expanded else _ICON_COLLAPSED, size=_CHEVRON_SIZE
+            ).pixmap(_CHEVRON_SIZE, _CHEVRON_SIZE)
+        )
         self._header.setStyleSheet(
             "background-color: palette(highlight);" if expanded else ""
         )
@@ -144,26 +172,39 @@ class _NavigatorCard(QWidget):
         filename = model.data(model.index(row, NavigatorColumns.IMG_ID))
         self._filename_lbl.setText(filename or "")
 
-        decision = model.data(model.index(row, NavigatorColumns.DECISION))
-        self._decision_lbl.setText(decision or "")
-        self._decision_lbl.setVisible(bool(decision))
-        decision_color = model.data(
-            model.index(row, NavigatorColumns.DECISION), Qt.ForegroundRole
-        )
-        if decision_color is not None:
-            self._decision_lbl.setStyleSheet(
-                f"color: {decision_color.color().name()}; font-weight: bold;"
-            )
-
         annots = model.data(model.index(row, NavigatorColumns.ANNOTS))
-        self._annots_lbl.setText(f"{annots} annotation(s)" if annots else "")
+        has_annots = bool(annots)
+        self._annot_count_lbl.setText(str(annots) if has_annots else "")
+        self._annot_count_lbl.setVisible(has_annots)
+        self._annot_icon_lbl.setVisible(has_annots)
+
+        has_inspector = bool(
+            model.data(model.index(row, NavigatorColumns.STATUS), HAS_INSPECTOR_ROLE)
+        )
+        self._inspector_icon_lbl.setVisible(has_inspector)
+
+        has_note = bool(
+            model.data(model.index(row, NavigatorColumns.STATUS), HAS_NOTE_ROLE)
+        )
+        self._note_icon_lbl.setVisible(has_note)
+
+        decision = model.data(model.index(row, NavigatorColumns.DECISION))
+        if decision:
+            decision_color = model.data(
+                model.index(row, NavigatorColumns.DECISION), Qt.ForegroundRole
+            )
+            color = decision_color.color().name() if decision_color is not None else None
+            self._decision_lbl.setText(decision)
+            self._decision_lbl.setStyleSheet(
+                f"color: {color}; font-weight: bold;" if color else "font-weight: bold;"
+            )
+        else:
+            self._decision_lbl.setText("Undecided")
+            self._decision_lbl.setStyleSheet("color: palette(mid);")
 
         score = model.data(model.index(row, NavigatorColumns.SCORE))
         self._score_lbl.setVisible(self._microsentry_mode)
         self._score_lbl.setText(score or "")
-
-        state = model.data(model.index(row, NavigatorColumns.STATUS), IMAGE_STATE_ROLE)
-        _apply_status_icon(self._status_lbl, state)
 
         tooltip = model.data(model.index(row, NavigatorColumns.STATUS), Qt.ToolTipRole)
         self._header.setToolTip(tooltip or "")
