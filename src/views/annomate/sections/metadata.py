@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QToolButton,
     QTextEdit,
 )
 
@@ -143,10 +144,10 @@ class MetadataSection(QWidget):
         self._inspector_edit = QLineEdit()
         self._inspector_edit.setPlaceholderText("Inspector name…")
         self._inspector_edit.editingFinished.connect(self._store_inspector)
-        inspector_row.addWidget(self._inspector_edit)
+        inspector_row.addWidget(self._inspector_edit, stretch=1)
 
-        self._set_inspector_btn = QPushButton(material_icon("person"), "Set Inspector")
-        self._set_inspector_btn.setFixedWidth(115)
+        self._set_inspector_btn = QPushButton(material_icon("person"), "Set")
+        self._set_inspector_btn.setFixedWidth(58)
         self._set_inspector_btn.setToolTip(
             "Set as session inspector - auto-fills new images as you navigate"
         )
@@ -166,13 +167,43 @@ class MetadataSection(QWidget):
         self._session_lbl.setStyleSheet("color: grey; font-size: 11px;")
         layout.addWidget(self._session_lbl)
 
-        layout.addWidget(QLabel("Image note"))
+        note_header = QHBoxLayout()
+        note_header.setSpacing(4)
+        note_header.addWidget(QLabel("Image note"))
+        note_header.addStretch()
+
+        self._expand_note_btn = QToolButton()
+        self._expand_note_btn.setAutoRaise(True)
+        self._expand_note_btn.setCheckable(True)
+        self._expand_note_btn.setIcon(material_icon("expand_more"))
+        self._expand_note_btn.setToolTip("Expand inspector notes")
+        self._expand_note_btn.toggled.connect(self._set_note_expanded)
+        note_header.addWidget(self._expand_note_btn)
+        layout.addLayout(note_header)
 
         self._note_edit = QTextEdit()
         self._note_edit.setPlaceholderText("Add a note…")
-        self._note_edit.setMaximumHeight(80)
         self._note_edit.textChanged.connect(self._store_note)
+        self._set_note_expanded(False)
         layout.addWidget(self._note_edit)
+
+    def _note_height_for_lines(self, lines: int) -> int:
+        """Return an editor height that exposes approximately *lines* text rows."""
+        line_height = self._note_edit.fontMetrics().lineSpacing()
+        document_margins = round(self._note_edit.document().documentMargin() * 2)
+        frame = self._note_edit.frameWidth() * 2
+        return line_height * lines + document_margins + frame
+
+    def _set_note_expanded(self, expanded: bool) -> None:
+        """Toggle inspector notes between a compact two-line and expanded view."""
+        lines = 7 if expanded else 2
+        self._note_edit.setFixedHeight(self._note_height_for_lines(lines))
+        self._expand_note_btn.setIcon(
+            material_icon("expand_less" if expanded else "expand_more")
+        )
+        self._expand_note_btn.setToolTip(
+            "Collapse inspector notes" if expanded else "Expand inspector notes"
+        )
 
     def set_current_row(self, row: int) -> None:
         self._current_row = row

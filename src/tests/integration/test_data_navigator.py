@@ -232,6 +232,23 @@ def test_typed_inspector_edit_persists_when_switching_cards_without_blur(
     assert dataset_model.get_inspector(0) == "mike"
 
 
+def test_inspector_controls_use_compact_set_button_and_expandable_notes(navigator):
+    """Inspector controls start compact and allow notes to expand on demand."""
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    metadata = widget.metadata
+
+    assert metadata._set_inspector_btn.text() == "Set"
+    assert metadata._set_inspector_btn.width() == 58
+    compact_height = metadata._note_edit.height()
+    assert compact_height == metadata._note_height_for_lines(2)
+
+    metadata._expand_note_btn.setChecked(True)
+
+    assert metadata._note_edit.height() == metadata._note_height_for_lines(7)
+    assert metadata._note_edit.height() > compact_height
+    assert metadata._expand_note_btn.toolTip() == "Collapse inspector notes"
+
+
 def test_annotations_and_metadata_are_real_descendants_with_zero_images(qtbot):
     """Verify the shared Annotations/Metadata sections exist even with no images loaded.
 
