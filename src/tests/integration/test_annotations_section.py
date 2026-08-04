@@ -211,6 +211,23 @@ def test_column_widths_derive_from_header_text_not_a_fixed_number(annotations_se
     assert widget._area_col_w == _header_label_width(widget._area_header_lbl.text())
 
 
+def test_numeric_columns_expand_to_fit_largest_displayed_value(
+    annotations_section, qtbot
+):
+    """A large area widens the shared Area header and every Area cell."""
+    from views.annomate.sections.annotations import _cell_text_width
+
+    widget, model = annotations_section
+    model.add_annotation(
+        0, "crack", [(0, 0), (123000, 0), (123000, 1), (0, 1)]
+    )
+    qtbot.wait(20)
+
+    assert widget._area_col_w >= _cell_text_width("123000")
+    for row in widget._rows.values():
+        assert row.layout().itemAt(3).widget().width() == widget._area_col_w
+
+
 def test_area_unit_stays_in_tooltip_after_calibration_change(qtbot):
     """The compact Area header retains unit context when calibration changes."""
     model = DatasetTableModel(DatasetState())

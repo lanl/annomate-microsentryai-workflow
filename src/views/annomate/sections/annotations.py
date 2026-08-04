@@ -26,6 +26,7 @@ _DOT_W = 16
 _ICON_BTN_SIZE = 16
 _ICON_BTN_W = 28
 _HEADER_FONT_PX = 10
+_CELL_FONT_PX = 11
 _COLUMN_TEXT_PADDING = 4
 _VERTICES_HEADER_TEXT = "Pts"
 _AREA_HEADER_TEXT = "Area"
@@ -42,6 +43,13 @@ def _header_label_width(text: str) -> int:
     font = QFont()
     font.setPixelSize(_HEADER_FONT_PX)
     font.setBold(True)
+    return QFontMetrics(font).horizontalAdvance(text) + _COLUMN_TEXT_PADDING
+
+
+def _cell_text_width(text: str) -> int:
+    """Width needed for a numeric cell value without clipping."""
+    font = QFont()
+    font.setPixelSize(_CELL_FONT_PX)
     return QFontMetrics(font).horizontalAdvance(text) + _COLUMN_TEXT_PADDING
 
 
@@ -273,6 +281,7 @@ class AnnotationsSection(QWidget):
 
     def _on_model_reset(self) -> None:
         self._refresh_area_header()
+        self._refresh_numeric_column_widths()
         self._rebuild_rows()
         self._sync_empty_label()
         if self._selected_idx not in self._rows:
@@ -290,6 +299,7 @@ class AnnotationsSection(QWidget):
         if (
             top_left.column() <= AnnotationColumns.AREA <= bottom_right.column()
         ):
+            self._refresh_numeric_column_widths()
             self._rebuild_rows()
             self._sync_selection()
 
@@ -299,6 +309,24 @@ class AnnotationsSection(QWidget):
             AnnotationColumns.AREA, Qt.Horizontal
         )
         self._area_header_lbl.setToolTip(area_tooltip)
+
+    def _refresh_numeric_column_widths(self) -> None:
+        """Fit numeric columns to their header or widest visible value."""
+        self._vertices_col_w = self._widest_column_text(
+            AnnotationColumns.VERTICES, self._vertices_header_lbl.text()
+        )
+        self._area_col_w = self._widest_column_text(
+            AnnotationColumns.AREA, self._area_header_lbl.text()
+        )
+        self._vertices_header_lbl.setFixedWidth(self._vertices_col_w)
+        self._area_header_lbl.setFixedWidth(self._area_col_w)
+
+    def _widest_column_text(self, column: int, header_text: str) -> int:
+        width = _header_label_width(header_text)
+        for row in range(self._table_model.rowCount()):
+            value = self._table_model.index(row, column).data(Qt.DisplayRole)
+            width = max(width, _cell_text_width(str(value or "")))
+        return width
 
     def _rebuild_rows(self) -> None:
         while self._rows_layout.count():
