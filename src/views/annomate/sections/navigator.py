@@ -345,6 +345,16 @@ class DataNavigatorSection(QWidget):
                 card.deleteLater()
 
     def _on_card_clicked(self, source_row: int) -> None:
+        card = self._cards.get(source_row)
+        if (
+            source_row == self._selected_row
+            and card is not None
+            and card.is_expanded()
+        ):
+            self._release_shared_sections()
+            card.set_expanded(False)
+            return
+
         self._select_source_row(source_row, scroll=False)
         self._update_counter(source_row)
         self.image_selected.emit(source_row)

@@ -210,6 +210,29 @@ def test_clicking_a_second_card_collapses_the_first_accordion_style(navigator, q
     assert widget.metadata.parent() is widget._cards[1].body_container()
 
 
+def test_clicking_expanded_card_collapses_then_navigation_reexpands(
+    navigator, qtbot
+):
+    """A repeated card click collapses it; programmatic image navigation expands it."""
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    widget.select_row(0)
+    card = widget._cards[0]
+    assert card.is_expanded() is True
+
+    qtbot.mouseClick(card._header, Qt.LeftButton)
+
+    assert card.is_expanded() is False
+    assert widget.annotations.parent() is widget._shared_slot
+    assert widget.metadata.parent() is widget._shared_slot
+
+    # Window navigation (including A/D) calls select_row for the destination.
+    widget.select_row(0)
+
+    assert card.is_expanded() is True
+    assert widget.annotations.parent() is card.body_container()
+    assert widget.metadata.parent() is card.body_container()
+
+
 def test_typed_inspector_edit_persists_when_switching_cards_without_blur(
     navigator, qtbot
 ):
