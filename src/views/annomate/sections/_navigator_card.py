@@ -8,11 +8,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from models.navigator_model import HAS_INSPECTOR_ROLE, HAS_NOTE_ROLE, NavigatorColumns
+from models.navigator_model import (
+    HAS_INSPECTOR_ROLE,
+    HAS_NOTE_ROLE,
+    IMAGE_STATE_ROLE,
+    NavigatorColumns,
+)
 
 from views.icons import material_icon
 
-from ._shared import _ClickableFrame
+from ._shared import _ClickableFrame, _COLOR_INCOMPLETE, _COLOR_REVIEWED, _COLOR_UNDECIDED
 
 _CHEVRON_SIZE = 16
 _ICON_EXPANDED = "expand_more"  # chevron down -- body visible
@@ -24,6 +29,10 @@ _ANNOTATIONS_ICON = "polyline"
 _INSPECTOR_ICON = "person"
 _NOTE_ICON = "note_add"
 
+_STATUS_DOT_W = 10
+_INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
+_REVIEWED_STATES = ("accept_clean", "reject_reviewed")
+
 
 def _badge_icon_label(name: str, tooltip: str) -> QLabel:
     lbl = QLabel()
@@ -34,6 +43,30 @@ def _badge_icon_label(name: str, tooltip: str) -> QLabel:
     )
     lbl.setToolTip(tooltip)
     return lbl
+
+
+def _apply_status_icon(label: QLabel, state: str) -> None:
+    """Style *label* in place to match the status dot/ring/badge for *state*."""
+    label.setFixedSize(_STATUS_DOT_W, _STATUS_DOT_W)
+    label.setAlignment(Qt.AlignCenter)
+    if state in _INCOMPLETE_STATES:
+        label.setText("!")
+        label.setStyleSheet(
+            f"QLabel {{ color: {_COLOR_INCOMPLETE}; font-size: {_STATUS_DOT_W}px; "
+            "font-weight: bold; background: transparent; border: none; }"
+        )
+    elif state in _REVIEWED_STATES:
+        label.setText("")
+        label.setStyleSheet(
+            f"QLabel {{ background-color: {_COLOR_REVIEWED}; border-radius: "
+            f"{_STATUS_DOT_W // 2}px; }}"
+        )
+    else:
+        label.setText("")
+        label.setStyleSheet(
+            f"QLabel {{ border: 1.5px solid {_COLOR_UNDECIDED}; border-radius: "
+            f"{_STATUS_DOT_W // 2}px; background: transparent; }}"
+        )
 
 
 class _NavigatorCard(QWidget):
@@ -75,6 +108,9 @@ class _NavigatorCard(QWidget):
         h = QHBoxLayout(self._header)
         h.setContentsMargins(6, 4, 6, 4)
         h.setSpacing(6)
+
+        self._status_lbl = QLabel()
+        h.addWidget(self._status_lbl)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(1)
@@ -205,6 +241,9 @@ class _NavigatorCard(QWidget):
         score = model.data(model.index(row, NavigatorColumns.SCORE))
         self._score_lbl.setVisible(self._microsentry_mode)
         self._score_lbl.setText(score or "")
+
+        state = model.data(model.index(row, NavigatorColumns.STATUS), IMAGE_STATE_ROLE)
+        _apply_status_icon(self._status_lbl, state)
 
         tooltip = model.data(model.index(row, NavigatorColumns.STATUS), Qt.ToolTipRole)
         self._header.setToolTip(tooltip or "")
