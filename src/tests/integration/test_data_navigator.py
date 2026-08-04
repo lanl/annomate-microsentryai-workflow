@@ -7,6 +7,7 @@ from core.states.inference_state import InferenceState
 from models.dataset_model import DatasetTableModel
 from models.inference_model import InferenceModel
 from models.navigator_model import NavigatorColumns
+from views.annomate.left_panel import LeftPanel
 from views.annomate.sections.navigator import DataNavigatorSection
 
 
@@ -286,3 +287,41 @@ def test_annotations_and_metadata_are_real_descendants_with_zero_images(qtbot):
 
     assert widget.isAncestorOf(widget.annotations)
     assert widget.isAncestorOf(widget.metadata)
+
+
+def test_left_panel_collapses_to_summary_rail_and_restores(qtbot):
+    """The navigator swaps to a toolbar-width rail with synchronized summaries."""
+    dataset_model = DatasetTableModel(DatasetState())
+    dataset_model.load_folder("/fake", ["a.jpg", "b.jpg", "c.jpg"])
+    panel = LeftPanel(dataset_model)
+    qtbot.addWidget(panel)
+    panel.resize(220, 600)
+    panel.show()
+    panel.set_counter(1, 3)
+
+    panel.set_collapsed(True)
+
+    assert panel.is_collapsed()
+    assert panel.width() == 56
+    assert panel._collapsed_rail._counter_lbl.text() == "2/3"
+    assert panel._collapsed_rail._undecided_count.text() == "3"
+
+    panel.set_collapsed(False)
+
+    assert not panel.is_collapsed()
+    assert panel.minimumWidth() == 160
+    assert panel.maximumWidth() > 160
+
+
+def test_collapsed_navigation_buttons_forward_requests(qtbot):
+    """Collapsed previous/next controls use the normal navigation signals."""
+    dataset_model = DatasetTableModel(DatasetState())
+    dataset_model.load_folder("/fake", ["a.jpg"])
+    panel = LeftPanel(dataset_model)
+    qtbot.addWidget(panel)
+    panel.set_collapsed(True)
+
+    with qtbot.waitSignal(panel.prev_requested, timeout=1000):
+        qtbot.mouseClick(panel._collapsed_rail._btn_prev, Qt.LeftButton)
+    with qtbot.waitSignal(panel.next_requested, timeout=1000):
+        qtbot.mouseClick(panel._collapsed_rail._btn_next, Qt.LeftButton)

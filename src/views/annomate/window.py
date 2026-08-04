@@ -616,6 +616,8 @@ class AnnoMateWindow(QWidget):
         h_layout.setSpacing(0)
 
         outer_splitter = StyledSplitter(Qt.Horizontal, margin=0)
+        self._outer_splitter = outer_splitter
+        self._expanded_left_panel_width = 220
         outer_splitter.setHandleWidth(8)
         outer_splitter.setChildrenCollapsible(False)
 
@@ -623,6 +625,9 @@ class AnnoMateWindow(QWidget):
             self.dataset_model, self.inference_model, self._calib_model, self
         )
         self.left_panel.setMinimumWidth(160)
+        self.left_panel.collapsed_changed.connect(
+            self._on_navigator_collapsed_changed
+        )
         outer_splitter.addWidget(self.left_panel)
 
         canvas_area = QWidget()
@@ -689,6 +694,18 @@ class AnnoMateWindow(QWidget):
         h_layout.addWidget(outer_splitter, stretch=1)
 
         return workspace
+
+    def _on_navigator_collapsed_changed(self, collapsed: bool) -> None:
+        """Resize the outer splitter while preserving the expanded navigator width."""
+        sizes = self._outer_splitter.sizes()
+        total = sum(sizes)
+        if collapsed:
+            if sizes and sizes[0] > 56:
+                self._expanded_left_panel_width = sizes[0]
+            left_width = 56
+        else:
+            left_width = max(160, self._expanded_left_panel_width)
+        self._outer_splitter.setSizes([left_width, max(1, total - left_width)])
 
     # ------------------------------------------------------------------ #
     # Floating canvas controls

@@ -60,6 +60,7 @@ class DataNavigatorSection(QWidget):
     prev_requested = Signal()
     next_requested = Signal()
     annotation_selected = Signal(int)
+    state_counts_changed = Signal(int, int, int)
 
     def __init__(
         self,
@@ -300,6 +301,9 @@ class DataNavigatorSection(QWidget):
         self._lbl_count_reviewed.setText(str(counts["reviewed"]))
         self._lbl_count_incomplete.setText(str(counts["incomplete"]))
         self._lbl_count_undecided.setText(str(counts["undecided"]))
+        self.state_counts_changed.emit(
+            counts["undecided"], counts["reviewed"], counts["incomplete"]
+        )
 
     def get_image_state_label(self, source_row: int) -> str:
         return self._table_model.get_image_state_label(source_row)
