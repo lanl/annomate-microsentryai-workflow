@@ -17,11 +17,11 @@ SORT_ROLE = Qt.UserRole + 12
 COLOR_ROLE = Qt.UserRole + 13
 VISIBLE_ROLE = Qt.UserRole + 14
 
-_HEADERS = ["", "Class", "Points", "Area", "", ""]
+_HEADERS = ["", "Class", "Nodes", "Area", "", ""]
 _TOOLTIPS = {
     AnnotationColumns.COLOR: "Annotation class color",
     AnnotationColumns.CLASS: "Annotation class",
-    AnnotationColumns.VERTICES: "Point count",
+    AnnotationColumns.VERTICES: "Node count",
     AnnotationColumns.AREA: "Polygon area in current calibration units",
     AnnotationColumns.VISIBILITY: "Show or hide this annotation",
     AnnotationColumns.DELETE: "Delete annotation",
