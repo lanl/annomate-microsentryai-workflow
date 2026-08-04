@@ -10,7 +10,6 @@ class NavigatorColumns:
     ANNOTS = 2
     DECISION = 3
     SCORE = 4
-    CLASS = 5
 
 
 SOURCE_ROW_ROLE = Qt.UserRole + 1
@@ -21,20 +20,20 @@ FILTER_COMPLETE_ROLE = (
     Qt.UserRole + 6
 )  # bool: reject + sufficient work for current mode
 IMAGE_STATE_ROLE = Qt.UserRole + 7  # str: one of the six _image_state() keys
+HAS_INSPECTOR_ROLE = Qt.UserRole + 8  # bool: row has a non-empty inspector name
+HAS_NOTE_ROLE = Qt.UserRole + 9  # bool: row has a non-empty note
 
 
-_HEADERS = ["", "Img ID", "Annots", "Decision", "Score", "Class"]
+_HEADERS = ["", "Img ID", "Annots", "Decision", "Score"]
 _TOOLTIPS = {
     NavigatorColumns.STATUS: "Review status",
     NavigatorColumns.IMG_ID: "Image identifier",
     NavigatorColumns.ANNOTS: "Annotation count",
     NavigatorColumns.DECISION: "Review decision",
     NavigatorColumns.SCORE: "MicroSentry anomaly score",
-    NavigatorColumns.CLASS: "MicroSentry class",
 }
 _DECISION_LABELS = {"accept": "Accept", "reject": "Reject"}
 _DECISION_SORT = {None: 0, "": 0, "accept": 1, "reject": 2}
-_CLASS_SORT = {"": 0, "ANOMALY": 1, "NORMAL": 2}
 
 
 class NavigatorTableModel(QAbstractTableModel):
@@ -91,6 +90,10 @@ class NavigatorTableModel(QAbstractTableModel):
             return self._is_complete(row)
         if role == IMAGE_STATE_ROLE:
             return self._image_state(row)
+        if role == HAS_INSPECTOR_ROLE:
+            return bool(self._dataset_model.get_inspector(row))
+        if role == HAS_NOTE_ROLE:
+            return bool(self._dataset_model.get_note(row))
         if role == STATUS_COLOR_ROLE and col == NavigatorColumns.STATUS:
             return "#4caf50" if self._dataset_model.is_reviewed(row) else "#ff9800"
         if role == Qt.ToolTipRole:
@@ -123,9 +126,6 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.SCORE:
             score = self._score(row)
             return None if score is None else float(score)
-        if col == NavigatorColumns.CLASS:
-            label = self._label(row) or ""
-            return _CLASS_SORT.get(label, label.casefold())
         return ""
 
     def tie_break_value(self, row: int) -> str:
@@ -136,7 +136,7 @@ class NavigatorTableModel(QAbstractTableModel):
             return
         self.dataChanged.emit(
             self.index(row, NavigatorColumns.SCORE),
-            self.index(row, NavigatorColumns.CLASS),
+            self.index(row, NavigatorColumns.SCORE),
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
 
@@ -145,7 +145,7 @@ class NavigatorTableModel(QAbstractTableModel):
             return
         self.dataChanged.emit(
             self.index(0, NavigatorColumns.SCORE),
-            self.index(self.rowCount() - 1, NavigatorColumns.CLASS),
+            self.index(self.rowCount() - 1, NavigatorColumns.SCORE),
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
 
@@ -226,7 +226,14 @@ class NavigatorTableModel(QAbstractTableModel):
         self.dataChanged.emit(
             self.index(top, 0),
             self.index(bottom, self.columnCount() - 1),
-            [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, STATUS_COLOR_ROLE],
+            [
+                Qt.DisplayRole,
+                Qt.ToolTipRole,
+                SORT_ROLE,
+                STATUS_COLOR_ROLE,
+                HAS_INSPECTOR_ROLE,
+                HAS_NOTE_ROLE,
+            ],
         )
 
     def _display(self, row: int, col: int) -> str:
@@ -244,8 +251,6 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.SCORE:
             score = self._score(row)
             return "" if score is None else f"{score:.2f}"
-        if col == NavigatorColumns.CLASS:
-            return self._label(row) or ""
         return ""
 
     def _tooltip(self, row: int, col: int) -> str:
@@ -303,11 +308,7 @@ class NavigatorTableModel(QAbstractTableModel):
     def _alignment(self, col: int) -> Qt.AlignmentFlag:
         if col in (NavigatorColumns.ANNOTS, NavigatorColumns.SCORE):
             return Qt.AlignRight | Qt.AlignVCenter
-        if col in (
-            NavigatorColumns.STATUS,
-            NavigatorColumns.DECISION,
-            NavigatorColumns.CLASS,
-        ):
+        if col in (NavigatorColumns.STATUS, NavigatorColumns.DECISION):
             return Qt.AlignCenter
         return Qt.AlignLeft | Qt.AlignVCenter
 
@@ -315,10 +316,6 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.DECISION and self._dataset_model.get_review_decision(
             row
         ):
-            font = QFont()
-            font.setBold(True)
-            return font
-        if col == NavigatorColumns.CLASS and self._label(row):
             font = QFont()
             font.setBold(True)
             return font
@@ -331,12 +328,6 @@ class NavigatorTableModel(QAbstractTableModel):
                 return QBrush(QColor("#4caf50"))
             if decision == "reject":
                 return QBrush(QColor("#f44336"))
-        if col == NavigatorColumns.CLASS:
-            label = self._label(row)
-            if label == "ANOMALY":
-                return QBrush(QColor("#f44336"))
-            if label == "NORMAL":
-                return QBrush(QColor("#4caf50"))
         return None
 
     def _image_stem(self, row: int) -> str:
@@ -350,11 +341,6 @@ class NavigatorTableModel(QAbstractTableModel):
         if self._inference_model is None:
             return None
         return self._inference_model.get_score(self._image_path(row))
-
-    def _label(self, row: int) -> str | None:
-        if self._inference_model is None:
-            return None
-        return self._inference_model.get_label(self._image_path(row))
 
 
 class NavigatorSortProxyModel(QSortFilterProxyModel):
@@ -389,6 +375,8 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
             return state in ("reject_incomplete", "accept_conflict", "undecided_work")
         if self._filter_mode == "conflicting":
             return state == "accept_conflict"
+        if self._filter_mode == "reviewed":
+            return state in ("accept_clean", "reject_reviewed")
         return True
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:

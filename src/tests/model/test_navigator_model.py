@@ -7,6 +7,8 @@ from core.states.inference_state import InferenceState
 from models.dataset_model import DatasetTableModel
 from models.inference_model import InferenceModel
 from models.navigator_model import (
+    HAS_INSPECTOR_ROLE,
+    HAS_NOTE_ROLE,
     NavigatorColumns,
     NavigatorSortProxyModel,
     NavigatorTableModel,
@@ -38,7 +40,7 @@ def proxy_source_rows(proxy):
 
 class TestNavigatorTableModel:
     def test_columns_and_source_row_role(self, dataset_model, inference_model):
-        """Verify that NavigatorTableModel has 6 columns and exposes correct source row via SOURCE_ROW_ROLE.
+        """Verify that NavigatorTableModel has 5 columns and exposes correct source row via SOURCE_ROW_ROLE.
 
         Checks the column count, the IMG_ID header text, the display value for row 1
         (which is the file 'a.jpg', so ID should be 'a'), and that SOURCE_ROW_ROLE
@@ -46,7 +48,7 @@ class TestNavigatorTableModel:
         """
         model = NavigatorTableModel(dataset_model, inference_model)
 
-        assert model.columnCount() == 6
+        assert model.columnCount() == 5
         assert model.headerData(NavigatorColumns.IMG_ID, Qt.Horizontal) == "Img ID"
         assert model.data(model.index(1, NavigatorColumns.IMG_ID)) == "a"
         assert model.data(model.index(1, NavigatorColumns.IMG_ID), SOURCE_ROW_ROLE) == 1
@@ -91,11 +93,11 @@ class TestNavigatorTableModel:
     def test_inference_values_and_missing_score(
         self, dataset_model, inference_model, tmp_path
     ):
-        """Verify that inference score and class columns show values when available and empty when not.
+        """Verify that the inference score column shows a value when available and empty when not.
 
-        Stores a score map for 'a.jpg' (row 1). Success means SCORE shows '0.72',
-        CLASS shows 'ANOMALY' for that row, and for row 0 (no score) SCORE is an empty
-        string and SORT_ROLE is None.
+        Stores a score map for 'a.jpg' (row 1). Success means SCORE shows '0.72'
+        for that row, and for row 0 (no score) SCORE is an empty string and
+        SORT_ROLE is None.
         """
         inference_model.set_score_map(
             str(tmp_path / "a.jpg"), 0.72, np.zeros((2, 2), dtype=np.float32)
@@ -103,9 +105,25 @@ class TestNavigatorTableModel:
         model = NavigatorTableModel(dataset_model, inference_model)
 
         assert model.data(model.index(1, NavigatorColumns.SCORE)) == "0.72"
-        assert model.data(model.index(1, NavigatorColumns.CLASS)) == "ANOMALY"
         assert model.data(model.index(0, NavigatorColumns.SCORE)) == ""
         assert model.data(model.index(0, NavigatorColumns.SCORE), SORT_ROLE) is None
+
+    def test_has_inspector_and_has_note_roles(self, dataset_model, inference_model):
+        """Verify HAS_INSPECTOR_ROLE/HAS_NOTE_ROLE reflect whether a row has non-empty values.
+
+        Row 0 gets an inspector name only, row 1 gets a note only, row 2 gets
+        neither. Success means each row's roles reflect exactly what was set.
+        """
+        dataset_model.set_inspector(0, "mike")
+        dataset_model.set_note(1, "check this")
+        model = NavigatorTableModel(dataset_model, inference_model)
+
+        assert model.data(model.index(0, 0), HAS_INSPECTOR_ROLE) is True
+        assert model.data(model.index(0, 0), HAS_NOTE_ROLE) is False
+        assert model.data(model.index(1, 0), HAS_INSPECTOR_ROLE) is False
+        assert model.data(model.index(1, 0), HAS_NOTE_ROLE) is True
+        assert model.data(model.index(2, 0), HAS_INSPECTOR_ROLE) is False
+        assert model.data(model.index(2, 0), HAS_NOTE_ROLE) is False
 
 
 class TestNavigatorSortProxyModel:
@@ -375,3 +393,13 @@ class TestProxyFilter:
         dataset_model.set_review_decision(0, "reject")
         proxy.set_filter_mode("conflicting")
         assert self._visible_source_rows(proxy) == []
+
+    def test_reviewed_filter_shows_accept_clean_and_reject_reviewed(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "accept")  # accept_clean -- reviewed
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")  # reject_reviewed -- reviewed
+        # row 2 stays undecided -- not reviewed
+        proxy.set_filter_mode("reviewed")
+        assert self._visible_source_rows(proxy) == [0, 1]

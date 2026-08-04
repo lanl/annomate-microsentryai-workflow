@@ -176,6 +176,15 @@ class MetadataSection(QWidget):
         self._current_row = row
         self._load_fields()
 
+    def commit_pending_edits(self) -> None:
+        """Force-save an in-progress inspector edit that hasn't lost focus yet.
+
+        The inspector field only saves on editingFinished (Enter or focus
+        loss); callers that reparent or hide this widget before that fires
+        must call this first or the edit is silently lost.
+        """
+        self._inspector_edit.clearFocus()
+
     def _load_fields(self) -> None:
         self._inspector_edit.blockSignals(True)
         self._note_edit.blockSignals(True)

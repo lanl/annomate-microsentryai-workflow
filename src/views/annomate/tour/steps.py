@@ -79,10 +79,12 @@ def build_default_steps() -> list[TourStep]:
             title="Dataset Navigator",
             body=(
                 "Browse every loaded image here. Colored status dots show "
-                "which images are reviewed, pending, or incomplete."
+                "which images are reviewed, pending, or incomplete. Click a "
+                "card to expand it and see its annotations, inspector, and "
+                "notes inline."
             ),
-            target=lambda w: w.right_panel.navigator_header(),
-            placement="left",
+            target=lambda w: w.left_panel.navigator_header(),
+            placement="right",
         ),
         TourStep(
             key="classes",
@@ -92,23 +94,6 @@ def build_default_steps() -> list[TourStep]:
                 "e.g. 'crack' or 'scratch'."
             ),
             target=lambda w: w.right_panel.classes_header(),
-            placement="left",
-        ),
-        TourStep(
-            key="annotations",
-            title="Current Image Annotations",
-            body=(
-                "Every polygon drawn on the current image is listed here — "
-                "edit, hide, or delete individual annotations."
-            ),
-            target=lambda w: w.right_panel.annotations_header(),
-            placement="left",
-        ),
-        TourStep(
-            key="inspector",
-            title="Inspector / Notes",
-            body="Record who inspected the image and leave notes for QA review.",
-            target=lambda w: w.right_panel.metadata_header(),
             placement="left",
         ),
         TourStep(

@@ -1,9 +1,20 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QFrame, QLabel
 
 _COLOR_REVIEWED = "#4caf50"
 _COLOR_UNDECIDED = "#888888"
 _COLOR_INCOMPLETE = "#ff9800"
+
+
+class _ClickableFrame(QFrame):
+    """A QFrame that emits clicked() on a left-button press."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def _dot(color: str) -> QLabel:

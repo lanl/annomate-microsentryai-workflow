@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 from views.annomate._splitter import StyledSplitter
 
 from views.annomate.image_label import ImageLabel, SAM_BBOX, CALIBRATE, MEASURE
+from views.annomate.left_panel import LeftPanel
 from views.annomate.right_panel import RightPanel
 from views.annomate.tool_palette import ToolPalette
 from views.annomate.status_bar import AnnoMateStatusBar
@@ -473,12 +474,14 @@ class AnnoMateWindow(QWidget):
         self.canvas.zoom_changed.connect(self.status_bar.set_zoom)
         self.canvas.image_loaded.connect(self.status_bar.set_dimensions)
 
+        # Left panel
+        self.left_panel.image_selected.connect(self._navigate_to)
+        self.left_panel.prev_requested.connect(self._prev_image)
+        self.left_panel.next_requested.connect(self._next_image)
+        self.left_panel.annotation_selected.connect(self._on_annotation_selected)
+
         # Right panel
-        self.right_panel.image_selected.connect(self._navigate_to)
         self.right_panel.class_selected.connect(self._set_active_class)
-        self.right_panel.prev_requested.connect(self._prev_image)
-        self.right_panel.next_requested.connect(self._next_image)
-        self.right_panel.annotation_selected.connect(self._on_annotation_selected)
         self.right_panel.load_model_requested.connect(self._on_load_model_requested)
         self.right_panel.load_previous_model_requested.connect(
             self._on_load_previous_model_requested
@@ -492,6 +495,9 @@ class AnnoMateWindow(QWidget):
         )
         self.dataset_model.annotation_mode_changed.connect(
             self.right_panel.set_annotation_mode
+        )
+        self.dataset_model.annotation_mode_changed.connect(
+            self.left_panel.navigator_set_annotation_mode
         )
 
         # Keep canvas in sync when annotations change outside the canvas
@@ -609,8 +615,23 @@ class AnnoMateWindow(QWidget):
         h_layout.setContentsMargins(0, 0, 0, 0)
         h_layout.setSpacing(0)
 
+        outer_splitter = StyledSplitter(Qt.Horizontal, margin=0)
+        outer_splitter.setHandleWidth(8)
+        outer_splitter.setChildrenCollapsible(False)
+
+        self.left_panel = LeftPanel(
+            self.dataset_model, self.inference_model, self._calib_model, self
+        )
+        self.left_panel.setMinimumWidth(160)
+        outer_splitter.addWidget(self.left_panel)
+
+        canvas_area = QWidget()
+        ca_layout = QHBoxLayout(canvas_area)
+        ca_layout.setContentsMargins(0, 0, 0, 0)
+        ca_layout.setSpacing(0)
+
         self.tool_palette = ToolPalette(self)
-        h_layout.addWidget(self.tool_palette)
+        ca_layout.addWidget(self.tool_palette)
 
         splitter = StyledSplitter(Qt.Horizontal, margin=0)
         splitter.setHandleWidth(8)
@@ -656,14 +677,16 @@ class AnnoMateWindow(QWidget):
 
         self.canvas.installEventFilter(self)
 
-        self.right_panel = RightPanel(
-            self.dataset_model, self.inference_model, self._calib_model, self
-        )
+        self.right_panel = RightPanel(self.dataset_model, self.inference_model, self)
         self.right_panel.setMinimumWidth(160)
         splitter.addWidget(self.right_panel)
 
         splitter.setSizes([700, 280])
-        h_layout.addWidget(splitter, stretch=1)
+        ca_layout.addWidget(splitter, stretch=1)
+
+        outer_splitter.addWidget(canvas_area)
+        outer_splitter.setSizes([220, 1000])
+        h_layout.addWidget(outer_splitter, stretch=1)
 
         return workspace
 
@@ -725,6 +748,7 @@ class AnnoMateWindow(QWidget):
     def _on_model_reset(self) -> None:
         mode = self.dataset_model.get_annotation_mode()
         self.right_panel.set_annotation_mode(mode)
+        self.left_panel.navigator_set_annotation_mode(mode)
         self.tool_palette.set_drawing_enabled(mode == "pixel")
         if self.dataset_model.rowCount() > 0:
             self._load_row(0)
@@ -789,17 +813,17 @@ class AnnoMateWindow(QWidget):
         self._anomaly_controller.invalidate_cache()
         self._run_anomaly_checks()
         total = self.dataset_model.rowCount()
-        self.right_panel.set_counter(row, total)
-        self.right_panel.select_row(row)
+        self.left_panel.set_counter(row, total)
+        self.left_panel.select_row(row)
         self.right_panel.set_current_row(row)
 
     def _prev_image(self) -> None:
-        row = self.right_panel.navigator_adjacent_source_row(self._current_row, -1)
+        row = self.left_panel.navigator_adjacent_source_row(self._current_row, -1)
         if row >= 0:
             self._navigate_to(row)
 
     def _next_image(self) -> None:
-        row = self.right_panel.navigator_adjacent_source_row(self._current_row, 1)
+        row = self.left_panel.navigator_adjacent_source_row(self._current_row, 1)
         if row >= 0:
             self._navigate_to(row)
 
@@ -1154,8 +1178,8 @@ class AnnoMateWindow(QWidget):
             self._run_anomaly_checks()
 
     def _on_canvas_polygon_selected(self, idx: int) -> None:
-        """Sync the right panel list and slider when a polygon is clicked on the canvas."""
-        self.right_panel.annotations.select_annotation(idx)
+        """Sync the navigator's annotation list and slider when a polygon is clicked on the canvas."""
+        self.left_panel.navigator_select_annotation(idx)
         self._on_annotation_selected(idx)
 
     def _on_review_decision(self, decision) -> None:
@@ -1273,7 +1297,7 @@ class AnnoMateWindow(QWidget):
             return
         if self.inference_model and self.inference_model.get_processed_count() > 0:
             self.right_panel.set_scoremaps_loaded()
-            self.right_panel.navigator_enable_inference_columns()
+            self.left_panel.navigator_enable_inference_columns()
         # Sync anomaly canvas state from the loaded project (state was mutated directly,
         # bypassing constraints_changed, so we push colors/method explicitly here).
         if self._anomaly_model is not None:
@@ -1331,7 +1355,7 @@ class AnnoMateWindow(QWidget):
         self.inference_model.clear()
         self._refresh_canvas_render()
         self.right_panel.set_model_loaded(name, path)
-        self.right_panel.navigator_enable_inference_columns()
+        self.left_panel.navigator_enable_inference_columns()
         self._start_pending_inference()
 
     def _start_pending_inference(self) -> None:
@@ -1463,8 +1487,7 @@ class AnnoMateWindow(QWidget):
         self.inference_model.set_score_map(path, score, score_map)
         row = self._row_for_path(path)
         if row >= 0:
-            label = self.inference_model.get_label(path)
-            self.right_panel.navigator_set_inference(row, score, label)
+            self.left_panel.navigator_set_inference(row, score)
         if row == self._current_row and self._microsentry_enabled:
             self._refresh_canvas_render()
 
@@ -1474,7 +1497,7 @@ class AnnoMateWindow(QWidget):
 
     def _on_inference_batch_done(self) -> None:
         self.status_bar.clear_inference_progress()
-        self.right_panel.navigator_enable_inference_columns()
+        self.left_panel.navigator_enable_inference_columns()
 
     def _on_ai_polygon_clicked(self, idx: int, view_pos: QPointF) -> None:
         self._selected_ai_idx = idx

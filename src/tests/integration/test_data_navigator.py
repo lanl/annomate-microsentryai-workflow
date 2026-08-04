@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import Qt
 
 from core.states.dataset_state import DatasetState
 from core.states.inference_state import InferenceState
@@ -32,152 +32,217 @@ def source_rows(widget):
     ]
 
 
-def click_header(qtbot, widget, section):
-    header = widget._table.horizontalHeader()
-    x = header.sectionViewportPosition(section) + header.sectionSize(section) // 2
-    y = header.height() // 2
-    qtbot.mouseClick(header.viewport(), Qt.LeftButton, pos=QPoint(x, y))
-    qtbot.wait(20)
+def first_card(widget):
+    return widget._cards_layout.itemAt(0).widget()
 
 
-def test_header_click_sorts_and_reverses(navigator, qtbot):
-    """Verify that clicking a column header sorts the navigator table and a second click reverses the order.
+def test_sorting_reorders_cards_and_reverses(navigator):
+    """Verify that sorting the proxy model by image ID reorders the cards, and reversing flips the order.
 
-    Clicks the IMG_ID header twice. The first click should sort by image ID in one
-    direction, the second should reverse it. Success means the two orderings together
-    equal the expected ascending and descending source row sequences.
+    Success means ascending and descending sorts by IMG_ID together produce
+    the two expected source-row orderings.
     """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
 
-    click_header(qtbot, widget, NavigatorColumns.IMG_ID)
+    widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
     first_order = source_rows(widget)
-    click_header(qtbot, widget, NavigatorColumns.IMG_ID)
+    widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.DescendingOrder)
     second_order = source_rows(widget)
 
     assert {tuple(first_order), tuple(second_order)} == {(1, 0, 2), (2, 0, 1)}
 
 
-def test_clicking_sorted_row_emits_source_row(navigator, qtbot):
-    """Verify that clicking a row in the sorted navigator emits image_selected with the source row index.
+def test_clicking_top_card_emits_source_row(navigator, qtbot):
+    """Verify that clicking the visually-first card emits image_selected with its source row.
 
-    Adds two annotations to source row 2 ('c.jpg'), sorts descending by annotation
-    count so 'c.jpg' rises to the top, then clicks the top row. Success means the
-    image_selected signal emits the source row index 2, not the proxy row 0.
+    Adds two annotations to source row 2 ('c.jpg'), sorts descending by
+    annotation count so 'c.jpg' rises to the top, then clicks that card's
+    header. Success means the image_selected signal emits source row 2.
     """
     widget, dataset_model, _inference_model, _tmp_path = navigator
     dataset_model.add_annotation(2, "Defect", [(0, 0), (1, 0), (1, 1)])
     dataset_model.add_annotation(2, "Defect", [(0, 0), (2, 0), (2, 2)])
-    widget._table.sortByColumn(NavigatorColumns.ANNOTS, Qt.DescendingOrder)
+    widget._proxy.sort(NavigatorColumns.ANNOTS, Qt.DescendingOrder)
     qtbot.wait(20)
 
-    index = widget._proxy.index(0, NavigatorColumns.IMG_ID)
-    point = widget._table.visualRect(index).center()
+    card = first_card(widget)
+    assert card.source_row() == 2
 
     with qtbot.waitSignal(widget.image_selected, timeout=1000) as blocker:
-        qtbot.mouseClick(widget._table.viewport(), Qt.LeftButton, pos=point)
+        qtbot.mouseClick(card._header, Qt.LeftButton)
 
     assert blocker.args == [2]
 
 
-def test_select_row_highlights_source_row_after_sort(navigator, qtbot):
-    """Verify that select_row highlights the correct table row after a sort and supports adjacent navigation.
+def test_select_row_expands_only_that_card_after_sort(navigator):
+    """Verify that select_row expands the correct card after a sort and supports adjacent navigation.
 
-    After ascending sort by image ID (a=0, b=1, c=2), calls select_row with different
-    source rows and confirms the final selection highlights source row 0. Also verifies
-    adjacent_source_row correctly returns the adjacent source rows in the current sort order.
-    Success means current selection is source row 0 with only one selected row, and
-    adjacent rows are source rows 1 and 2.
+    After ascending sort by image ID (a=0, b=1, c=2), calls select_row with
+    different source rows and confirms only the final selection is expanded.
+    Also verifies adjacent_source_row returns the adjacent source rows in the
+    current sort order.
     """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
-    widget._table.sortByColumn(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
-    qtbot.wait(20)
+    widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
 
     widget.select_row(0)
     widget.select_row(2)
     widget.select_row(0)
 
-    selected_proxy_row = widget._table.currentIndex().row()
-    selected_source_row = widget._proxy.mapToSource(
-        widget._proxy.index(selected_proxy_row, NavigatorColumns.IMG_ID)
-    ).row()
-    assert selected_source_row == 0
-    assert len(widget._table.selectionModel().selectedRows()) == 1
+    expanded = [row for row, card in widget._cards.items() if card.is_expanded()]
+    assert expanded == [0]
     assert widget.adjacent_source_row(0, -1) == 1
     assert widget.adjacent_source_row(0, 1) == 2
 
 
-def test_microsentry_columns_and_score_resort(navigator, qtbot):
-    """Verify that microsentry mode shows the score/class columns and re-sorts by score after inference.
+def test_microsentry_mode_shows_score_and_score_resorts(navigator, qtbot):
+    """Verify that microsentry mode reveals the score label and re-sorts by score after inference.
 
-    Initially SCORE and CLASS columns are hidden. After enabling microsentry mode they
-    become visible. After storing inference results and calling set_row_inference, the
-    table sorted by score descending should place the highest-scoring row (c.jpg,
-    source row 2) at the top. Success means column visibility changes and sort order
-    reflects inference scores.
+    Initially the score label is hidden on every card. After enabling
+    microsentry mode it becomes visible. After storing inference results and
+    calling set_row_inference, sorting by score descending should place the
+    highest-scoring row (c.jpg, source row 2) at the top.
     """
     widget, _dataset_model, inference_model, tmp_path = navigator
-    assert widget._table.isColumnHidden(NavigatorColumns.SCORE)
-    assert widget._table.isColumnHidden(NavigatorColumns.CLASS)
+    assert not widget._cards[0]._score_lbl.isVisible()
 
     widget.set_microsentry_mode(True)
-    assert not widget._table.isColumnHidden(NavigatorColumns.SCORE)
-    assert not widget._table.isColumnHidden(NavigatorColumns.CLASS)
+    assert widget._cards[0]._score_lbl.isVisible()
 
-    widget._table.sortByColumn(NavigatorColumns.SCORE, Qt.DescendingOrder)
     inference_model.set_score_map(
         str(tmp_path / "b.jpg"), 0.25, np.zeros((2, 2), dtype=np.float32)
     )
-    widget.set_row_inference(0, 0.25, "NORMAL")
+    widget.set_row_inference(0, 0.25)
     inference_model.set_score_map(
         str(tmp_path / "c.jpg"), 0.95, np.zeros((2, 2), dtype=np.float32)
     )
-    widget.set_row_inference(2, 0.95, "ANOMALY")
+    widget.set_row_inference(2, 0.95)
+    widget._proxy.sort(NavigatorColumns.SCORE, Qt.DescendingOrder)
     qtbot.wait(20)
 
     assert source_rows(widget)[0] == 2
 
 
-def test_column_menu_toggles_optional_columns(navigator, qtbot):
-    """Verify that unchecking column menu actions hides the corresponding columns.
+def test_clicking_chip_filters_and_second_click_returns_to_all(navigator, qtbot):
+    """Verify clicking a status chip filters the list, and clicking it again clears the filter.
 
-    Initially all standard columns (STATUS, IMG_ID, ANNOTS, DECISION) are visible.
-    Unchecking ANNOTS and DECISION in the column actions should hide those columns
-    while leaving STATUS and IMG_ID visible. Success means the hidden state of each
-    column reflects the checked state of its action.
+    Row 0 is accepted (reviewed), row 1 is rejected with no work
+    (incomplete), row 2 is untouched (undecided). Clicking the "reviewed"
+    chip should narrow the list to row 0; clicking it again should restore
+    all three rows.
     """
-    widget, _dataset_model, _inference_model, _tmp_path = navigator
-
-    assert not widget._table.isColumnHidden(NavigatorColumns.STATUS)
-    assert not widget._table.isColumnHidden(NavigatorColumns.IMG_ID)
-    assert not widget._table.isColumnHidden(NavigatorColumns.ANNOTS)
-    assert not widget._table.isColumnHidden(NavigatorColumns.DECISION)
-
-    widget._column_actions[NavigatorColumns.ANNOTS].setChecked(False)
-    widget._column_actions[NavigatorColumns.DECISION].setChecked(False)
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(0, "accept")
+    dataset_model.set_review_decision(1, "reject")
     qtbot.wait(20)
 
-    assert widget._table.isColumnHidden(NavigatorColumns.ANNOTS)
-    assert widget._table.isColumnHidden(NavigatorColumns.DECISION)
-    assert not widget._table.isColumnHidden(NavigatorColumns.STATUS)
-    assert not widget._table.isColumnHidden(NavigatorColumns.IMG_ID)
+    widget._on_chip_clicked("reviewed")
+    assert source_rows(widget) == [0]
+    assert widget._filter_mode == "reviewed"
+
+    widget._on_chip_clicked("reviewed")
+    assert set(source_rows(widget)) == {0, 1, 2}
+    assert widget._filter_mode == "all"
 
 
-def test_microsentry_column_menu_state_is_respected(navigator, qtbot):
-    """Verify that setting a microsentry column action to unchecked keeps it hidden even after enabling microsentry mode.
-
-    The SCORE column action is checked by default but SCORE is hidden until microsentry
-    mode activates. Unchecking SCORE's action before enabling microsentry mode should
-    keep SCORE hidden even after microsentry activates. CLASS should still become
-    visible. Success means SCORE stays hidden and CLASS becomes visible.
-    """
-    widget, _dataset_model, _inference_model, _tmp_path = navigator
-
-    assert widget._column_actions[NavigatorColumns.SCORE].isChecked()
-    assert widget._table.isColumnHidden(NavigatorColumns.SCORE)
-
-    widget._column_actions[NavigatorColumns.SCORE].setChecked(False)
-    widget.set_microsentry_mode(True)
+def test_overflow_menu_accept_filter(navigator, qtbot):
+    """Verify the overflow menu's "Accept only" action filters to accepted rows."""
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(1, "accept")
     qtbot.wait(20)
 
-    assert widget._table.isColumnHidden(NavigatorColumns.SCORE)
-    assert not widget._table.isColumnHidden(NavigatorColumns.CLASS)
+    accept_action = next(
+        a for a in widget._filter_group.actions() if a.data() == "accept"
+    )
+    accept_action.trigger()
+
+    assert source_rows(widget) == [1]
+    assert widget._filter_mode == "accept"
+
+
+def test_sort_menu_same_field_reverses_different_field_resets_ascending(navigator):
+    """Verify choosing the same sort field twice reverses order, a new field resets to ascending.
+
+    The widget defaults to sorting by IMG_ID ascending, so picking IMG_ID
+    from the sort menu once reverses it to descending; picking it again
+    reverses back to ascending. Picking a different field resets to
+    ascending on that field.
+    """
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    assert widget._sort_column == NavigatorColumns.IMG_ID
+    assert widget._sort_order == Qt.AscendingOrder
+    ascending = source_rows(widget)
+
+    widget._on_sort_field_chosen(NavigatorColumns.IMG_ID)
+    descending = source_rows(widget)
+    assert widget._sort_order == Qt.DescendingOrder
+    assert "↓" in widget._btn_sort.text()
+    assert ascending != descending
+
+    widget._on_sort_field_chosen(NavigatorColumns.IMG_ID)
+    assert widget._sort_order == Qt.AscendingOrder
+    assert "↑" in widget._btn_sort.text()
+    assert source_rows(widget) == ascending
+
+    widget._on_sort_field_chosen(NavigatorColumns.ANNOTS)
+    assert widget._sort_column == NavigatorColumns.ANNOTS
+    assert widget._sort_order == Qt.AscendingOrder
+    assert "↑" in widget._btn_sort.text()
+
+
+def test_clicking_a_second_card_collapses_the_first_accordion_style(navigator, qtbot):
+    """Verify only one card is ever expanded at a time.
+
+    Clicking card B while card A is expanded must collapse A and expand B,
+    and the shared Annotations/Metadata sections move along with the
+    expansion into B's body.
+    """
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
+
+    widget.select_row(0)
+    assert widget._cards[0].is_expanded() is True
+
+    widget.select_row(1)
+    assert widget._cards[0].is_expanded() is False
+    assert widget._cards[1].is_expanded() is True
+    assert widget.annotations.parent() is widget._cards[1].body_container()
+    assert widget.metadata.parent() is widget._cards[1].body_container()
+
+
+def test_typed_inspector_edit_persists_when_switching_cards_without_blur(
+    navigator, qtbot
+):
+    """Verify an in-progress inspector edit is saved before the shared widget is reparented.
+
+    The inspector field only commits on editingFinished (Enter/focus-loss).
+    Typing into it and immediately switching to a different card -- without
+    tabbing or clicking away first -- must still persist the typed value,
+    validating the commit_pending_edits() call in _release_shared_sections.
+    """
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    widget.select_row(0)
+    inspector_edit = widget.metadata._inspector_edit
+    inspector_edit.setFocus()
+    qtbot.keyClicks(inspector_edit, "mike")
+    assert dataset_model.get_inspector(0) == ""  # not committed yet
+
+    widget.select_row(1)
+
+    assert dataset_model.get_inspector(0) == "mike"
+
+
+def test_annotations_and_metadata_are_real_descendants_with_zero_images(qtbot):
+    """Verify the shared Annotations/Metadata sections exist even with no images loaded.
+
+    These widgets are constructed once up front and parked in a hidden
+    holding slot until a card is expanded -- this is what keeps the guided
+    tour's "navigator" step resolvable to a real widget before any dataset
+    is loaded.
+    """
+    dataset_model = DatasetTableModel(DatasetState())
+    widget = DataNavigatorSection(dataset_model)
+    qtbot.addWidget(widget)
+
+    assert widget.isAncestorOf(widget.annotations)
+    assert widget.isAncestorOf(widget.metadata)

@@ -2,11 +2,13 @@ from views.annomate.tour.steps import build_default_steps
 
 
 class TestBuildDefaultSteps:
-    def test_returns_eleven_steps_in_order(self):
-        """Verify build_default_steps() returns the documented 11-step tour in order.
+    def test_returns_nine_steps_in_order(self):
+        """Verify build_default_steps() returns the documented 9-step tour in order.
 
         Success means the step keys match the exact sequence described in the
-        feature plan, from the welcome card through the outro card.
+        feature plan, from the welcome card through the outro card. The
+        "annotations"/"inspector" steps were folded into "navigator" once
+        those sections moved inline into the dataset navigator's cards.
         """
         steps = build_default_steps()
         assert [s.key for s in steps] == [
@@ -16,8 +18,6 @@ class TestBuildDefaultSteps:
             "viewport_actions",
             "navigator",
             "classes",
-            "annotations",
-            "inspector",
             "status_bar",
             "microsentry",
             "outro",
