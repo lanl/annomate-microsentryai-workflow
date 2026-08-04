@@ -110,11 +110,10 @@ class DataNavigatorSection(QWidget):
 
         nav_row = QWidget()
         nav_h = QHBoxLayout(nav_row)
-        nav_h.setContentsMargins(0, 0, 0, 0)
+        nav_h.setContentsMargins(8, 0, 0, 0)
         nav_h.setSpacing(4)
 
         self._btn_prev = QToolButton()
-        self._btn_prev.setIcon(material_icon("chevron_left", size=16))
         self._btn_prev.setText("Prev (A)")
         self._btn_prev.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_prev.setToolTip("Previous image")
@@ -122,7 +121,6 @@ class DataNavigatorSection(QWidget):
         nav_h.addWidget(self._btn_prev)
 
         self._btn_next = QToolButton()
-        self._btn_next.setIcon(material_icon("chevron_right", size=16))
         self._btn_next.setLayoutDirection(Qt.RightToLeft)
         self._btn_next.setText("Next (D)")
         self._btn_next.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
@@ -138,7 +136,7 @@ class DataNavigatorSection(QWidget):
 
         filter_row = QWidget()
         filter_h = QHBoxLayout(filter_row)
-        filter_h.setContentsMargins(0, 0, 0, 0)
+        filter_h.setContentsMargins(8, 0, 0, 0)
         filter_h.setSpacing(6)
 
         _TIP_UNDECIDED = "Undecided: no Accept or Reject decision has been set."

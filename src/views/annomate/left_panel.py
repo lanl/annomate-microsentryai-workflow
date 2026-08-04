@@ -1,7 +1,7 @@
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QWidget, QVBoxLayout
+from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout
 
-from views.annomate.sections import _CollapsibleSection, DataNavigatorSection
+from views.annomate.sections import DataNavigatorSection
 
 
 class LeftPanel(QWidget):
@@ -34,8 +34,12 @@ class LeftPanel(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        nav_sec = _CollapsibleSection("Dataset Navigator", expandable=True)
-        self._nav_collapsible = nav_sec
+        self._title_lbl = QLabel("Dataset Navigator")
+        self._title_lbl.setStyleSheet(
+            "font-weight: bold; padding: 6px 8px 2px 8px;"
+        )
+        outer.addWidget(self._title_lbl)
+
         self.navigator = DataNavigatorSection(
             dataset_model, inference_model, calibration_model
         )
@@ -43,9 +47,8 @@ class LeftPanel(QWidget):
         self.navigator.prev_requested.connect(self.prev_requested)
         self.navigator.next_requested.connect(self.next_requested)
         self.navigator.annotation_selected.connect(self.annotation_selected)
-        nav_sec.body_layout().addWidget(self.navigator)
 
-        outer.addWidget(nav_sec, stretch=1)
+        outer.addWidget(self.navigator, stretch=1)
 
     def select_row(self, row: int) -> None:
         """Silently highlight *row* in the navigator list."""
@@ -75,4 +78,4 @@ class LeftPanel(QWidget):
         self.navigator.set_annotation_mode(mode)
 
     def navigator_header(self) -> QWidget:
-        return self._nav_collapsible.header_widget()
+        return self._title_lbl
