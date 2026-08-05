@@ -161,6 +161,15 @@ class NavigatorTableModel(QAbstractTableModel):
     def get_image_state_label(self, row: int) -> str:
         return self._STATE_LABELS.get(self._image_state(row), "")
 
+    def class_entries(self, row: int) -> list:
+        """Unique annotation classes on *row*, alphabetical, each with its color."""
+        if not (0 <= row < self.rowCount()):
+            return []
+        names = sorted(
+            {a["category_name"] for a in self._dataset_model.get_annotations(row)}
+        )
+        return [(name, self._dataset_model.get_class_color(name)) for name in names]
+
     def get_state_counts(self) -> dict:
         """Return counts of reviewed, incomplete, and undecided images."""
         reviewed = incomplete = undecided = 0

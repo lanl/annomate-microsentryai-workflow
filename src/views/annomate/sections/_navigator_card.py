@@ -1,4 +1,5 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -32,6 +33,102 @@ _NOTE_ICON = "comment"
 _STATUS_DOT_W = 10
 _INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
 _REVIEWED_STATES = ("accept_clean", "reject_reviewed")
+
+_PILL_FONT_PX = 10
+_PILL_PADDING_X = 4
+_PILL_BORDER_W = 1
+_PILL_SPACING = 4
+
+
+def _vline() -> QFrame:
+    line = QFrame()
+    line.setFrameShape(QFrame.VLine)
+    line.setFrameShadow(QFrame.Sunken)
+    line.setFixedWidth(2)
+    return line
+
+
+def _pill_text_width(name: str) -> int:
+    font = QFont()
+    font.setPixelSize(_PILL_FONT_PX)
+    return (
+        QFontMetrics(font).horizontalAdvance(name)
+        + 2 * _PILL_PADDING_X
+        + 2 * _PILL_BORDER_W
+    )
+
+
+def _make_pill(name: str, rgb) -> QLabel:
+    lbl = QLabel(name)
+    lbl.setAlignment(Qt.AlignCenter)
+    lbl.setStyleSheet(
+        f"QLabel {{ border: {_PILL_BORDER_W}px solid rgb{tuple(rgb)}; "
+        f"border-radius: 7px; padding: 0px {_PILL_PADDING_X}px; color: black; "
+        f"font-size: {_PILL_FONT_PX}px; background: transparent; }}"
+    )
+    return lbl
+
+
+class _ClassPillTray(QWidget):
+    """Row of colored class-name pills, showing only as many as fit its width.
+
+    Extras beyond what fits are simply dropped -- this lives in the compact
+    "at a glance" card row, not a place for wrapping or eliding. Pills are
+    packed against the left edge (next to the divider after the decision
+    label); any leftover space trails to the right.
+    """
+
+    def __init__(self, parent: QWidget = None) -> None:
+        super().__init__(parent)
+        self._entries: list = []
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(_PILL_SPACING)
+
+    def sizeHint(self) -> QSize:
+        # Pinned regardless of content: this widget is purely reactive to the
+        # width its parent layout hands it. If its own sizeHint grew/shrank
+        # with the pills it renders, that would feed back into the parent's
+        # space negotiation, resize this widget again, retrigger _refit(),
+        # and potentially loop -- exactly what happened before this was fixed.
+        return QSize(0, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, 0)
+
+    def set_classes(self, entries: list) -> None:
+        self._entries = entries
+        self._refit()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._refit()
+
+    def _refit(self) -> None:
+        while self._layout.count():
+            item = self._layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        for name, rgb in self._fitting_entries():
+            self._layout.addWidget(_make_pill(name, rgb))
+        self._layout.addStretch(1)
+
+    def _fitting_entries(self) -> list:
+        available = self.width()
+        if available <= 0 or not self._entries:
+            return []
+        visible = []
+        used = 0
+        for name, rgb in self._entries:
+            pill_w = _pill_text_width(name)
+            extra = pill_w if not visible else _PILL_SPACING + pill_w
+            if used + extra > available:
+                break
+            used += extra
+            visible.append((name, rgb))
+        return visible
 
 
 def _badge_icon_label(name: str, tooltip: str) -> QLabel:
@@ -141,13 +238,21 @@ class _NavigatorCard(QWidget):
 
         text_col.addLayout(row1)
 
-        # Row 2: decision (left) -- MicroSentry score (right)
+        # Row 2: decision (left) -- class pills (middle) -- MicroSentry score (right)
         row2 = QHBoxLayout()
-        row2.setSpacing(8)
+        row2.setSpacing(6)
 
         self._decision_lbl = QLabel()
         row2.addWidget(self._decision_lbl)
-        row2.addStretch()
+
+        self._pill_divider_left = _vline()
+        row2.addWidget(self._pill_divider_left)
+
+        self._pill_tray = _ClassPillTray()
+        row2.addWidget(self._pill_tray, 1)
+
+        self._pill_divider_right = _vline()
+        row2.addWidget(self._pill_divider_right)
 
         self._score_lbl = QLabel()
         self._score_lbl.setStyleSheet("color: palette(mid);")
@@ -241,6 +346,12 @@ class _NavigatorCard(QWidget):
         score = model.data(model.index(row, NavigatorColumns.SCORE))
         self._score_lbl.setVisible(self._microsentry_mode)
         self._score_lbl.setText(score or "")
+
+        class_entries = model.class_entries(row)
+        has_classes = bool(class_entries)
+        self._pill_divider_left.setVisible(has_classes)
+        self._pill_divider_right.setVisible(has_classes and self._microsentry_mode)
+        self._pill_tray.set_classes(class_entries)
 
         state = model.data(model.index(row, NavigatorColumns.STATUS), IMAGE_STATE_ROLE)
         _apply_status_icon(self._status_lbl, state)

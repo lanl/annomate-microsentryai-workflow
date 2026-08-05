@@ -90,6 +90,31 @@ class TestNavigatorTableModel:
         assert model.data(model.index(0, NavigatorColumns.ANNOTS)) == "1"
         assert model.data(model.index(0, NavigatorColumns.DECISION)) == "Reject"
 
+    def test_class_entries_are_unique_alphabetical_and_colored(
+        self, dataset_model, inference_model
+    ):
+        """Verify class_entries dedupes classes, sorts them, and pairs each with its color.
+
+        Adds two 'scratch' annotations and one 'inclusion' annotation to row 0.
+        Success means only the two unique class names come back, alphabetically
+        ordered, each paired with dataset_model's registered color for that class.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_class("inclusion", (40, 50, 60))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+        dataset_model.add_annotation(0, "inclusion", _POLY)
+
+        assert model.class_entries(0) == [
+            ("inclusion", (40, 50, 60)),
+            ("scratch", (10, 20, 30)),
+        ]
+
+    def test_class_entries_empty_when_no_annotations(self, dataset_model, inference_model):
+        model = NavigatorTableModel(dataset_model, inference_model)
+        assert model.class_entries(0) == []
+
     def test_inference_values_and_missing_score(
         self, dataset_model, inference_model, tmp_path
     ):
