@@ -189,7 +189,7 @@ class DataNavigatorSection(QWidget):
         self._cards_container = QWidget()
         self._cards_layout = QVBoxLayout(self._cards_container)
         self._cards_layout.setContentsMargins(0, 0, 0, 0)
-        self._cards_layout.setSpacing(2)
+        self._cards_layout.setSpacing(0)
         self._cards_layout.addStretch()
         self._scroll.setWidget(self._cards_container)
 
