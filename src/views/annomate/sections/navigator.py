@@ -116,6 +116,7 @@ class DataNavigatorSection(QWidget):
 
         self._btn_prev = QToolButton()
         self._btn_prev.setText("Prev (A)")
+        self._btn_prev.setStyleSheet("color: black;")
         self._btn_prev.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_prev.setToolTip("Previous image")
         self._btn_prev.clicked.connect(self.prev_requested)
@@ -124,12 +125,14 @@ class DataNavigatorSection(QWidget):
         self._btn_next = QToolButton()
         self._btn_next.setLayoutDirection(Qt.RightToLeft)
         self._btn_next.setText("Next (D)")
+        self._btn_next.setStyleSheet("color: black;")
         self._btn_next.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_next.setToolTip("Next image")
         self._btn_next.clicked.connect(self.next_requested)
         nav_h.addWidget(self._btn_next)
 
         self._lbl_counter = QLabel("No images loaded")
+        self._lbl_counter.setStyleSheet("color: black;")
         nav_h.addWidget(self._lbl_counter)
         nav_h.addStretch()
 
@@ -147,16 +150,19 @@ class DataNavigatorSection(QWidget):
         _TIP_INCOMPLETE = "Incomplete: action needed. Reject missing evidence, accepted image has annotations, or work present with no decision."
 
         self._lbl_count_undecided = QLabel("0")
+        self._lbl_count_undecided.setStyleSheet("color: black;")
         self._add_filter_chip(
             filter_h, "undecided", _ring_undecided(), self._lbl_count_undecided,
             _TIP_UNDECIDED,
         )
         self._lbl_count_reviewed = QLabel("0")
+        self._lbl_count_reviewed.setStyleSheet("color: black;")
         self._add_filter_chip(
             filter_h, "reviewed", _dot(_COLOR_REVIEWED), self._lbl_count_reviewed,
             _TIP_REVIEWED,
         )
         self._lbl_count_incomplete = QLabel("0")
+        self._lbl_count_incomplete.setStyleSheet("color: black;")
         self._add_filter_chip(
             filter_h, "incomplete", _incomplete_badge(), self._lbl_count_incomplete,
             _TIP_INCOMPLETE,
@@ -164,13 +170,14 @@ class DataNavigatorSection(QWidget):
         filter_h.addStretch()
 
         self._btn_sort = QToolButton()
+        self._btn_sort.setStyleSheet("color: black;")
         self._btn_sort.setPopupMode(QToolButton.InstantPopup)
         self._btn_sort.setMenu(self._build_sort_menu())
         self._btn_sort.setToolTip("Change sort field; pick the same field again to reverse")
         filter_h.addWidget(self._btn_sort)
 
         self._btn_overflow = QToolButton()
-        self._btn_overflow.setIcon(material_icon("tune", size=16))
+        self._btn_overflow.setIcon(material_icon("tune", size=16, color="black"))
         self._btn_overflow.setToolTip("More filters")
         self._btn_overflow.setPopupMode(QToolButton.InstantPopup)
         self._btn_overflow.setMenu(self._build_overflow_menu())

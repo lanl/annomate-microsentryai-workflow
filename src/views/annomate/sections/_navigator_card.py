@@ -25,7 +25,7 @@ _ICON_EXPANDED = "expand_more"  # chevron down -- body visible
 _ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
 
 _BADGE_ICON_SIZE = 14
-_BADGE_ICON_COLOR = "#888888"
+_BADGE_ICON_COLOR = "black"
 _ANNOTATIONS_ICON = "pentagon"
 _INSPECTOR_ICON = "person"
 _NOTE_ICON = "comment"
@@ -217,12 +217,12 @@ class _NavigatorCard(QWidget):
         row1.setSpacing(4)
 
         self._filename_lbl = QLabel()
-        self._filename_lbl.setStyleSheet("font-weight: bold;")
+        self._filename_lbl.setStyleSheet("font-weight: bold; color: black;")
         row1.addWidget(self._filename_lbl)
         row1.addStretch()
 
         self._annot_count_lbl = QLabel()
-        self._annot_count_lbl.setStyleSheet("color: palette(mid); font-size: 11px;")
+        self._annot_count_lbl.setStyleSheet("color: black; font-size: 11px;")
         row1.addWidget(self._annot_count_lbl)
         self._annot_icon_lbl = _badge_icon_label(_ANNOTATIONS_ICON, "Has annotations")
         row1.addWidget(self._annot_icon_lbl)
@@ -255,7 +255,7 @@ class _NavigatorCard(QWidget):
         row2.addWidget(self._pill_divider_right)
 
         self._score_lbl = QLabel()
-        self._score_lbl.setStyleSheet("color: palette(mid);")
+        self._score_lbl.setStyleSheet("color: black;")
         row2.addWidget(self._score_lbl)
 
         text_col.addLayout(row2)
@@ -264,7 +264,7 @@ class _NavigatorCard(QWidget):
 
         self._arrow_lbl = QLabel()
         self._arrow_lbl.setPixmap(
-            material_icon(_ICON_COLLAPSED, size=_CHEVRON_SIZE).pixmap(
+            material_icon(_ICON_COLLAPSED, size=_CHEVRON_SIZE, color="black").pixmap(
                 _CHEVRON_SIZE, _CHEVRON_SIZE
             )
         )
@@ -292,7 +292,9 @@ class _NavigatorCard(QWidget):
         self._body.setVisible(expanded)
         self._arrow_lbl.setPixmap(
             material_icon(
-                _ICON_EXPANDED if expanded else _ICON_COLLAPSED, size=_CHEVRON_SIZE
+                _ICON_EXPANDED if expanded else _ICON_COLLAPSED,
+                size=_CHEVRON_SIZE,
+                color="black",
             ).pixmap(_CHEVRON_SIZE, _CHEVRON_SIZE)
         )
         self._header.setStyleSheet(
@@ -341,7 +343,7 @@ class _NavigatorCard(QWidget):
             )
         else:
             self._decision_lbl.setText("Undecided")
-            self._decision_lbl.setStyleSheet("color: palette(mid);")
+            self._decision_lbl.setStyleSheet("color: black;")
 
         score = model.data(model.index(row, NavigatorColumns.SCORE))
         self._score_lbl.setVisible(self._microsentry_mode)

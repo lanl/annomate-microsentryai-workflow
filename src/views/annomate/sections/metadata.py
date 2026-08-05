@@ -137,7 +137,9 @@ class MetadataSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        layout.addWidget(QLabel("Inspector"))
+        inspector_header_lbl = QLabel("Inspector")
+        inspector_header_lbl.setStyleSheet("color: black;")
+        layout.addWidget(inspector_header_lbl)
 
         inspector_row = QHBoxLayout()
         inspector_row.setSpacing(4)
@@ -146,7 +148,7 @@ class MetadataSection(QWidget):
         self._inspector_edit.editingFinished.connect(self._store_inspector)
         inspector_row.addWidget(self._inspector_edit, stretch=1)
 
-        self._set_inspector_btn = QPushButton(material_icon("person"), "Set")
+        self._set_inspector_btn = QPushButton(material_icon("person", color="black"), "Set")
         self._set_inspector_btn.setFixedWidth(58)
         self._set_inspector_btn.setToolTip(
             "Set as session inspector - auto-fills new images as you navigate"
@@ -154,7 +156,7 @@ class MetadataSection(QWidget):
         self._set_inspector_btn.clicked.connect(self._on_set_inspector)
         inspector_row.addWidget(self._set_inspector_btn)
 
-        self._set_all_btn = QPushButton(material_icon("groups"), "Set All")
+        self._set_all_btn = QPushButton(material_icon("groups", color="black"), "Set All")
         self._set_all_btn.setFixedWidth(78)
         self._set_all_btn.setToolTip(
             "Bulk-assign an inspector name to a filtered set of images"
@@ -164,18 +166,20 @@ class MetadataSection(QWidget):
         layout.addLayout(inspector_row)
 
         self._session_lbl = QLabel("Session Inspector: —")
-        self._session_lbl.setStyleSheet("color: grey; font-size: 11px;")
+        self._session_lbl.setStyleSheet("color: black; font-size: 11px;")
         layout.addWidget(self._session_lbl)
 
         note_header = QHBoxLayout()
         note_header.setSpacing(4)
-        note_header.addWidget(QLabel("Image note"))
+        note_header_lbl = QLabel("Image note")
+        note_header_lbl.setStyleSheet("color: black;")
+        note_header.addWidget(note_header_lbl)
         note_header.addStretch()
 
         self._expand_note_btn = QToolButton()
         self._expand_note_btn.setAutoRaise(True)
         self._expand_note_btn.setCheckable(True)
-        self._expand_note_btn.setIcon(material_icon("expand_more"))
+        self._expand_note_btn.setIcon(material_icon("expand_more", color="black"))
         self._expand_note_btn.setToolTip("Expand inspector notes")
         self._expand_note_btn.toggled.connect(self._set_note_expanded)
         note_header.addWidget(self._expand_note_btn)
@@ -199,7 +203,7 @@ class MetadataSection(QWidget):
         lines = 7 if expanded else 2
         self._note_edit.setFixedHeight(self._note_height_for_lines(lines))
         self._expand_note_btn.setIcon(
-            material_icon("expand_less" if expanded else "expand_more")
+            material_icon("expand_less" if expanded else "expand_more", color="black")
         )
         self._expand_note_btn.setToolTip(
             "Collapse inspector notes" if expanded else "Expand inspector notes"

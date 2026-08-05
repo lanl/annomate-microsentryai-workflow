@@ -56,7 +56,7 @@ class _CollapsedNavigatorRail(QWidget):
 
         self._counter_lbl = QLabel("—/—")
         self._counter_lbl.setAlignment(Qt.AlignCenter)
-        self._counter_lbl.setStyleSheet("font-size: 10px;")
+        self._counter_lbl.setStyleSheet("font-size: 10px; color: black;")
         layout.addWidget(self._counter_lbl)
         layout.addWidget(_divider())
 
@@ -72,7 +72,7 @@ class _CollapsedNavigatorRail(QWidget):
 
     def _button(self, icon_name: str, tooltip: str) -> QToolButton:
         button = QToolButton()
-        button.setIcon(material_icon(icon_name, size=18))
+        button.setIcon(material_icon(icon_name, size=18, color="black"))
         button.setToolTip(tooltip)
         button.setFixedSize(44, 36)
         button.setAutoRaise(True)
@@ -88,6 +88,7 @@ class _CollapsedNavigatorRail(QWidget):
         glyph_lbl.setStyleSheet(style)
         count_lbl = QLabel("0")
         count_lbl.setAlignment(Qt.AlignCenter)
+        count_lbl.setStyleSheet("color: black;")
         group_layout.addWidget(glyph_lbl)
         group_layout.addWidget(count_lbl)
         group.setToolTip(f"0 {name.lower()} images")
@@ -163,11 +164,13 @@ class LeftPanel(QWidget):
         header_layout.setSpacing(2)
         self._title_lbl = QLabel("Dataset Navigator")
         self._title_lbl.setStyleSheet(
-            "font-weight: bold; padding: 6px 8px 2px 8px;"
+            "font-weight: bold; padding: 6px 8px 2px 8px; color: black;"
         )
         header_layout.addWidget(self._title_lbl, stretch=1)
         self._collapse_btn = QToolButton()
-        self._collapse_btn.setIcon(material_icon("keyboard_double_arrow_left", size=18))
+        self._collapse_btn.setIcon(
+            material_icon("keyboard_double_arrow_left", size=18, color="black")
+        )
         self._collapse_btn.setToolTip("Collapse Dataset Navigator")
         self._collapse_btn.setAutoRaise(True)
         self._collapse_btn.clicked.connect(lambda: self.set_collapsed(True))

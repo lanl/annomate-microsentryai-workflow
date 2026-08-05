@@ -30,7 +30,7 @@ _CELL_FONT_PX = 11
 _COLUMN_TEXT_PADDING = 4
 _VERTICES_HEADER_TEXT = "Pts"
 _AREA_HEADER_TEXT = "Area"
-_HEADER_STYLE = f"font-size: {_HEADER_FONT_PX}px; font-weight: bold; color: palette(mid);"
+_HEADER_STYLE = f"font-size: {_HEADER_FONT_PX}px; font-weight: bold; color: black;"
 
 
 def _header_label_width(text: str) -> int:
@@ -124,14 +124,14 @@ class _AnnotationRow(_ClickableFrame):
         vertices_lbl = QLabel(str(vertices or ""))
         vertices_lbl.setFixedWidth(vertices_col_w)
         vertices_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        vertices_lbl.setStyleSheet("color: palette(mid); font-size: 11px;")
+        vertices_lbl.setStyleSheet("color: black; font-size: 11px;")
         h.addWidget(vertices_lbl)
 
         area = table_model.index(idx, AnnotationColumns.AREA).data(Qt.DisplayRole)
         area_lbl = QLabel(str(area or ""))
         area_lbl.setFixedWidth(area_col_w)
         area_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        area_lbl.setStyleSheet("color: palette(mid); font-size: 11px;")
+        area_lbl.setStyleSheet("color: black; font-size: 11px;")
         h.addWidget(area_lbl)
 
         visible = bool(
@@ -149,7 +149,7 @@ class _AnnotationRow(_ClickableFrame):
         self._delete_btn.setFixedSize(_ICON_BTN_W, _ICON_BTN_W)
         self._delete_btn.setAutoRaise(True)
         self._delete_btn.setToolTip("Delete annotation")
-        self._delete_btn.setIcon(material_icon("delete", size=_ICON_BTN_SIZE))
+        self._delete_btn.setIcon(material_icon("delete", size=_ICON_BTN_SIZE, color="black"))
         self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self._idx))
         h.addWidget(self._delete_btn)
 
@@ -160,7 +160,7 @@ class _AnnotationRow(_ClickableFrame):
 
     def _set_eye_icon(self, visible: bool) -> None:
         name = "visibility" if visible else "visibility_off"
-        self._eye_btn.setIcon(material_icon(name, size=_ICON_BTN_SIZE))
+        self._eye_btn.setIcon(material_icon(name, size=_ICON_BTN_SIZE, color="black"))
 
     def set_selected(self, selected: bool) -> None:
         self.setStyleSheet(
@@ -215,7 +215,7 @@ class AnnotationsSection(QWidget):
         layout.addWidget(self._rows_container)
 
         self._empty_lbl = QLabel("No annotations")
-        self._empty_lbl.setStyleSheet("color: gray; font-size: 11px;")
+        self._empty_lbl.setStyleSheet("color: black; font-size: 11px;")
         self._empty_lbl.setContentsMargins(6, 4, 6, 4)
         layout.addWidget(self._empty_lbl)
         self._sync_empty_label()
