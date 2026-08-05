@@ -168,6 +168,7 @@ class DataNavigatorSection(QWidget):
         self._filter_panel = _FilterPanel()
         self._filter_panel.decision_toggled.connect(self._on_panel_decision_toggled)
         self._filter_panel.status_toggled.connect(self._on_panel_status_toggled)
+        self._filter_panel.class_toggled.connect(self._on_panel_class_toggled)
         self._filter_panel.sort_field_clicked.connect(self._on_sort_field_chosen)
         self._filter_panel.clear_filters_clicked.connect(self._on_clear_filters_clicked)
 
@@ -248,6 +249,10 @@ class DataNavigatorSection(QWidget):
         self._proxy.set_status_filter_active(status, checked)
         self._apply_filters()
 
+    def _on_panel_class_toggled(self, class_name: str, checked: bool) -> None:
+        self._proxy.set_class_filter_active(class_name, checked)
+        self._apply_filters()
+
     def _on_clear_filters_clicked(self) -> None:
         self._proxy.clear_filters()
         self._apply_filters()
@@ -259,6 +264,7 @@ class DataNavigatorSection(QWidget):
             )
         self._filter_panel.set_decision_filter(self._proxy.decision_filter())
         self._filter_panel.set_status_filter(self._proxy.status_filter())
+        self._filter_panel.set_class_filter(self._proxy.class_filter())
         n = self._proxy.active_filter_count()
         self._btn_filter.setText("Filter" if n == 0 else f"Filter ({n})")
         # invalidateFilter()/invalidateRowsFilter() don't reliably emit
@@ -288,13 +294,18 @@ class DataNavigatorSection(QWidget):
         self._refresh_counts()
 
     def _refresh_counts(self, *args) -> None:
-        counts = self._table_model.get_state_counts()
-        self._lbl_count_reviewed.setText(str(counts["reviewed"]))
-        self._lbl_count_incomplete.setText(str(counts["incomplete"]))
-        self._lbl_count_undecided.setText(str(counts["undecided"]))
+        facet_counts = self._table_model.get_filter_facet_counts()
+        status_counts = facet_counts["status"]
+        self._lbl_count_reviewed.setText(str(status_counts["reviewed"]))
+        self._lbl_count_incomplete.setText(str(status_counts["incomplete"]))
+        self._lbl_count_undecided.setText(str(status_counts["undecided"]))
         self.state_counts_changed.emit(
-            counts["undecided"], counts["reviewed"], counts["incomplete"]
+            status_counts["undecided"], status_counts["reviewed"], status_counts["incomplete"]
         )
+        self._filter_panel.set_decision_counts(facet_counts["decision"])
+        self._filter_panel.set_status_counts(status_counts)
+        self._filter_panel.set_class_options(facet_counts["class_options"])
+        self._filter_panel.set_class_filter(self._proxy.class_filter())
 
     def get_image_state_label(self, source_row: int) -> str:
         return self._table_model.get_image_state_label(source_row)

@@ -115,6 +115,38 @@ class TestNavigatorTableModel:
         model = NavigatorTableModel(dataset_model, inference_model)
         assert model.class_entries(0) == []
 
+    def test_get_filter_facet_counts_counts_images_not_annotation_instances(
+        self, dataset_model, inference_model
+    ):
+        """Verify facet counts are per-image (a class used twice in one image counts once).
+
+        Row 0: accepted with two "scratch" annotations -- accept_conflict,
+        bucketed under "incomplete" (accepted but still has work to resolve).
+        Row 1: rejected with one "inclusion" annotation -- reject_reviewed,
+        bucketed under "reviewed". Row 2: untouched -- undecided. Success
+        means decision/status counts match, and "scratch"'s image count is 1
+        (not 2) despite two annotations on the same image.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_class("inclusion", (40, 50, 60))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.add_annotation(1, "inclusion", _POLY)
+        dataset_model.set_review_decision(1, "reject")
+
+        counts = model.get_filter_facet_counts()
+
+        assert counts["decision"] == {"accept": 1, "reject": 1}
+        assert counts["status"]["incomplete"] == 1  # row 0: accept_conflict
+        assert counts["status"]["reviewed"] == 1  # row 1: reject_reviewed
+        assert counts["status"]["undecided"] == 1  # row 2
+        assert counts["class_options"] == [
+            ("inclusion", (40, 50, 60), 1),
+            ("scratch", (10, 20, 30), 1),
+        ]
+
     def test_inference_values_and_missing_score(
         self, dataset_model, inference_model, tmp_path
     ):
@@ -507,3 +539,47 @@ class TestProxyFilter:
         proxy.set_status_filter_active("reviewed", True)
         proxy.set_status_filter_active("incomplete", True)
         assert proxy.active_filter_count() == 3
+
+    def test_class_filter_shows_only_images_with_that_class(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_class("scratch", (0, 255, 0))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.add_annotation(1, "scratch", _POLY)
+
+        proxy.set_class_filter_active("crack", True)
+
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_multiple_class_selections_are_ored(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_class("scratch", (0, 255, 0))
+        dataset_model.add_class("inclusion", (0, 0, 255))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.add_annotation(1, "scratch", _POLY)
+        dataset_model.add_annotation(2, "inclusion", _POLY)
+
+        proxy.set_class_filter_active("crack", True)
+        proxy.set_class_filter_active("scratch", True)
+
+        assert self._visible_source_rows(proxy) == [0, 1]
+
+    def test_class_filter_ands_with_decision_filter(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")
+
+        proxy.set_class_filter_active("crack", True)
+        proxy.set_decision_filter_active("accept", True)
+
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_class_filter_excludes_images_without_annotations(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        # rows 1, 2 have no annotations at all
+
+        proxy.set_class_filter_active("crack", True)
+
+        assert self._visible_source_rows(proxy) == [0]

@@ -291,6 +291,61 @@ def test_loading_new_dataset_clears_filters(navigator, qtbot):
     assert widget._btn_filter.text() == "Filter"
 
 
+def test_filter_panel_class_checkbox_filters_by_annotation_class(navigator, qtbot):
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.add_class("crack", (255, 0, 0))
+    dataset_model.add_class("scratch", (0, 255, 0))
+    dataset_model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+    dataset_model.add_annotation(1, "scratch", [(0, 0), (1, 0), (1, 1)])
+    qtbot.wait(20)
+
+    widget._filter_panel._class_checks["crack"].setChecked(True)
+
+    assert source_rows(widget) == [0]
+    assert widget._proxy.class_filter() == frozenset({"crack"})
+    assert set(widget._cards.keys()) == {0}
+
+
+def test_filter_panel_checkbox_labels_show_image_counts(navigator, qtbot):
+    """Row 0 gets a crack annotation with no decision (undecided_work -- bucketed
+    under Incomplete). Row 1 is accepted with no work (accept_clean -- Reviewed).
+    Row 2 is untouched (Undecided). Each checkbox's label should reflect the
+    number of images matching it, not annotation instances.
+    """
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.add_class("crack", (255, 0, 0))
+    dataset_model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+    dataset_model.add_annotation(0, "crack", [(0, 0), (2, 0), (2, 2)])
+    dataset_model.set_review_decision(1, "accept")
+    qtbot.wait(20)
+
+    assert widget._filter_panel._class_checks["crack"].text() == "crack (1)"
+    assert widget._filter_panel._decision_checks["accept"].text() == "Accept (1)"
+    assert widget._filter_panel._status_checks["incomplete"].text() == "Incomplete (1)"
+    assert widget._filter_panel._status_checks["reviewed"].text() == "Reviewed (1)"
+    assert widget._filter_panel._status_checks["undecided"].text() == "Undecided (1)"
+
+
+def test_filter_panel_shows_placeholder_when_no_classes_annotated_yet(navigator, qtbot):
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    qtbot.wait(20)
+
+    assert widget._filter_panel._class_checks == {}
+
+
+def test_filter_panel_class_options_update_as_annotations_are_added(navigator, qtbot):
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    qtbot.wait(20)
+    assert "crack" not in widget._filter_panel._class_checks
+
+    dataset_model.add_class("crack", (255, 0, 0))
+    dataset_model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+    qtbot.wait(20)
+
+    assert "crack" in widget._filter_panel._class_checks
+    assert widget._filter_panel._class_checks["crack"].text() == "crack (1)"
+
+
 def test_sort_menu_same_field_reverses_different_field_resets_ascending(navigator):
     """Verify choosing the same sort field twice reverses order, a new field resets to ascending.
 

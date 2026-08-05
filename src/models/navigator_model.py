@@ -32,8 +32,8 @@ STATUS_FILTER_OPTIONS = (
     ("conflicting", "Conflicting"),
 )
 # Maps the six _image_state() keys down to the three status-filter buckets --
-# matches NavigatorTableModel.get_state_counts()'s partition exactly, so the
-# chip counts always agree with what checking that chip's status filters to.
+# matches NavigatorTableModel.get_filter_facet_counts()'s partition exactly,
+# so the chip/checkbox counts always agree with what checking them filters to.
 # "conflicting" isn't in this map -- it's checked separately against the raw
 # "accept_conflict" state, since it's an intentional subset of "incomplete"
 # (both true for accept_conflict rows), not a fourth disjoint bucket.
@@ -192,18 +192,43 @@ class NavigatorTableModel(QAbstractTableModel):
         )
         return [(name, self._dataset_model.get_class_color(name)) for name in names]
 
-    def get_state_counts(self) -> dict:
-        """Return counts of reviewed, incomplete, and undecided images."""
-        reviewed = incomplete = undecided = 0
+    def get_filter_facet_counts(self) -> dict:
+        """Image counts for populating the Filter menu's checkbox labels.
+
+        Returns {"decision": {"accept": n, "reject": n},
+                 "status": {"undecided": n, "reviewed": n, "incomplete": n, "conflicting": n},
+                 "class_options": [(name, rgb, image_count), ...]} (class_options
+        alphabetical). Counts are images, not annotation instances -- an image
+        with 3 "crack" annotations counts once toward "crack"'s total.
+        """
+        decision_counts = {"accept": 0, "reject": 0}
+        status_counts = {"undecided": 0, "reviewed": 0, "incomplete": 0, "conflicting": 0}
+        class_counts: dict = {}
+        class_colors: dict = {}
         for row in range(self.rowCount()):
+            decision = self._dataset_model.get_review_decision(row)
+            if decision in decision_counts:
+                decision_counts[decision] += 1
+
             state = self._image_state(row)
-            if state in ("accept_clean", "reject_reviewed"):
-                reviewed += 1
-            elif state in ("reject_incomplete", "accept_conflict", "undecided_work"):
-                incomplete += 1
-            else:
-                undecided += 1
-        return {"reviewed": reviewed, "incomplete": incomplete, "undecided": undecided}
+            bucket = _STATUS_BUCKET.get(state)
+            if bucket in status_counts:
+                status_counts[bucket] += 1
+            if state == "accept_conflict":
+                status_counts["conflicting"] += 1
+
+            for name, rgb in self.class_entries(row):
+                class_counts[name] = class_counts.get(name, 0) + 1
+                class_colors[name] = rgb
+
+        class_options = [
+            (name, class_colors[name], class_counts[name]) for name in sorted(class_counts)
+        ]
+        return {
+            "decision": decision_counts,
+            "status": status_counts,
+            "class_options": class_options,
+        }
 
     def _image_state(self, row: int) -> str:
         """Return a string key describing the review completeness of this image.
@@ -383,6 +408,7 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
         self.setSortCaseSensitivity(Qt.CaseInsensitive)
         self._decision_filter: set = set()
         self._status_filter: set = set()
+        self._class_filter: set = set()
 
     def set_decision_filter_active(self, decision: str, active: bool) -> None:
         """decision is "accept" or "reject". Empty set imposes no restriction."""
@@ -400,9 +426,18 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
             self._status_filter.discard(status)
         self.invalidateFilter()
 
+    def set_class_filter_active(self, class_name: str, active: bool) -> None:
+        """Empty set imposes no restriction; a non-empty set matches images with ANY of them."""
+        if active:
+            self._class_filter.add(class_name)
+        else:
+            self._class_filter.discard(class_name)
+        self.invalidateFilter()
+
     def clear_filters(self) -> None:
         self._decision_filter.clear()
         self._status_filter.clear()
+        self._class_filter.clear()
         self.invalidateFilter()
 
     def decision_filter(self) -> frozenset:
@@ -411,11 +446,18 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
     def status_filter(self) -> frozenset:
         return frozenset(self._status_filter)
 
+    def class_filter(self) -> frozenset:
+        return frozenset(self._class_filter)
+
     def active_filter_count(self) -> int:
-        return len(self._decision_filter) + len(self._status_filter)
+        return (
+            len(self._decision_filter)
+            + len(self._status_filter)
+            + len(self._class_filter)
+        )
 
     def filterAcceptsRow(self, source_row: int, parent: QModelIndex) -> bool:
-        if not self._decision_filter and not self._status_filter:
+        if not self._decision_filter and not self._status_filter and not self._class_filter:
             return True
         model = self.sourceModel()
         if model is None:
@@ -434,6 +476,11 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
                 "conflicting" in self._status_filter and state == "accept_conflict"
             )
             if not (bucket_match or conflict_match):
+                return False
+
+        if self._class_filter:
+            row_classes = {name for name, _rgb in model.class_entries(source_row)}
+            if not (row_classes & self._class_filter):
                 return False
 
         return True
