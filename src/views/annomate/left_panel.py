@@ -48,7 +48,6 @@ class _CollapsedNavigatorRail(QWidget):
         self._btn_prev = self._button("chevron_left", "Previous image (A)")
         self._btn_prev.clicked.connect(self.prev_requested)
         layout.addWidget(self._btn_prev)
-        layout.addWidget(_divider())
 
         self._btn_next = self._button("chevron_right", "Next image (D)")
         self._btn_next.clicked.connect(self.next_requested)
