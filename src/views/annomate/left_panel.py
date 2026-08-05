@@ -96,12 +96,13 @@ class _CollapsedNavigatorRail(QWidget):
         return glyph_lbl, count_lbl
 
     def set_counter(self, current: int, total: int) -> None:
-        text = f"{current + 1}/{total}" if total > 0 and current >= 0 else f"—/{total}"
+        has_position = total > 0 and current >= 0
+        text = f"{current + 1}/{total}" if has_position else "—/—"
         self._counter_lbl.setText(text)
         self._counter_lbl.setToolTip(
             f"Image {current + 1} of {total}"
-            if total > 0 and current >= 0
-            else f"{total} images loaded"
+            if has_position
+            else f"{total} images loaded" if total > 0 else "No images loaded"
         )
 
     def set_counts(self, undecided: int, reviewed: int, incomplete: int) -> None:
@@ -230,6 +231,8 @@ class LeftPanel(QWidget):
         """Collapsed with greyed-out controls until a dataset loads, then expanded."""
         has_data = self._dataset_model.rowCount() > 0
         self._collapsed_rail.set_has_data(has_data)
+        if not has_data:
+            self._collapsed_rail.set_counter(-1, 0)
         self.set_collapsed(not has_data)
 
     def _on_state_counts_changed(

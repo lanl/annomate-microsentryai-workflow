@@ -617,7 +617,7 @@ class AnnoMateWindow(QWidget):
 
         outer_splitter = StyledSplitter(Qt.Horizontal, margin=0)
         self._outer_splitter = outer_splitter
-        self._expanded_left_panel_width = 220
+        self._expanded_left_panel_width = 280
         outer_splitter.setHandleWidth(8)
         outer_splitter.setChildrenCollapsible(False)
 
@@ -689,7 +689,7 @@ class AnnoMateWindow(QWidget):
         ca_layout.addWidget(splitter, stretch=1)
 
         outer_splitter.addWidget(canvas_area)
-        outer_splitter.setSizes([220, 1000])
+        outer_splitter.setSizes([280, 1000])
         outer_splitter.handle(1).set_suppressed(self.left_panel.is_collapsed())
         h_layout.addWidget(outer_splitter, stretch=1)
 

@@ -362,3 +362,24 @@ def test_left_panel_defaults_to_expanded_when_data_already_present(qtbot):
     qtbot.addWidget(panel)
 
     assert not panel.is_collapsed()
+
+
+def test_collapsed_rail_counter_resets_when_project_cleared(qtbot):
+    """Starting a new project (dataset emptied) resets the collapsed counter to placeholders.
+
+    Regression test: the collapsed rail's counter label used to only get
+    updated from window.py's per-image load path, which never runs once the
+    dataset goes back to zero rows -- leaving the previous project's stale
+    "n/total" text on screen instead of resetting.
+    """
+    dataset_model = DatasetTableModel(DatasetState())
+    dataset_model.load_folder("/fake", ["a.jpg", "b.jpg"])
+    panel = LeftPanel(dataset_model)
+    qtbot.addWidget(panel)
+    panel.set_counter(1, 2)
+    assert panel._collapsed_rail._counter_lbl.text() == "2/2"
+
+    dataset_model.load_folder("/fake", [])  # simulates "New Project" clearing the dataset
+
+    assert panel._collapsed_rail._counter_lbl.text() == "—/—"
+    assert panel.is_collapsed()
