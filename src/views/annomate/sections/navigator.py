@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QCoreApplication, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -373,7 +373,22 @@ class DataNavigatorSection(QWidget):
             card.set_expanded(True)
             self._attach_shared_sections(card)
             if scroll:
-                self._scroll.ensureWidgetVisible(card)
+                self._scroll_card_to_top(card)
+
+    def _scroll_card_to_top(self, card: _NavigatorCard) -> None:
+        """Scroll the list so *card* sits at the very top of the visible area.
+
+        Used for Prev/Next (A/D) navigation so the currently viewed image's
+        card stays anchored at the top instead of merely being scrolled into
+        view somewhere in the middle or bottom. Expanding the card just now
+        dirtied the layout, so force it to settle before reading card.y() --
+        otherwise it (and the scrollbar's range) would still reflect stale,
+        pre-expansion geometry.
+        """
+        self._cards_layout.activate()
+        QCoreApplication.sendPostedEvents()
+        QCoreApplication.processEvents()
+        self._scroll.verticalScrollBar().setValue(card.y())
 
     def _release_shared_sections(self) -> None:
         """Move the shared Annotations/Metadata widgets back to the holding slot.

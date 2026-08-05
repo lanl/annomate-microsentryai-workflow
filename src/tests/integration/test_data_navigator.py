@@ -96,6 +96,27 @@ def test_select_row_expands_only_that_card_after_sort(navigator):
     assert widget.adjacent_source_row(0, 1) == 2
 
 
+def test_select_row_scrolls_expanded_card_to_top(navigator, qtbot):
+    """Verify Prev/Next-style navigation (select_row) pins the active card to the top of the list.
+
+    With three cards in a viewport too short to show them all at once,
+    selecting the last card should scroll the list so that card's top edge
+    sits at the very top of the visible area, matching the A/D keyboard
+    navigation expectation that the current image's card stays anchored at
+    the top instead of landing somewhere in the middle or bottom.
+    """
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
+
+    widget.select_row(2)
+    qtbot.wait(20)
+
+    card = widget._cards[2]
+    scrollbar = widget._scroll.verticalScrollBar()
+    assert card.y() > 0  # sanity check: there's actually something to scroll past
+    assert scrollbar.value() == min(card.y(), scrollbar.maximum())
+
+
 def test_microsentry_mode_shows_score_and_score_resorts(navigator, qtbot):
     """Verify that microsentry mode reveals the score label and re-sorts by score after inference.
 
