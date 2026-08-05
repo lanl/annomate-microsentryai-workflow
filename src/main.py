@@ -90,7 +90,7 @@ def main() -> None:
         center_template_controller=center_template_controller,
         anomaly_constraint_model=anomaly_constraint_model,
     )
-    window.show()
+    window.showMaximized()
 
     sys.exit(app.exec())
 
