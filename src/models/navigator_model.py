@@ -24,6 +24,28 @@ HAS_INSPECTOR_ROLE = Qt.UserRole + 8  # bool: row has a non-empty inspector name
 HAS_NOTE_ROLE = Qt.UserRole + 9  # bool: row has a non-empty note
 
 
+DECISION_FILTER_OPTIONS = (("accept", "Accept"), ("reject", "Reject"))
+STATUS_FILTER_OPTIONS = (
+    ("undecided", "Undecided"),
+    ("reviewed", "Reviewed"),
+    ("incomplete", "Incomplete"),
+    ("conflicting", "Conflicting"),
+)
+# Maps the six _image_state() keys down to the three status-filter buckets --
+# matches NavigatorTableModel.get_state_counts()'s partition exactly, so the
+# chip counts always agree with what checking that chip's status filters to.
+# "conflicting" isn't in this map -- it's checked separately against the raw
+# "accept_conflict" state, since it's an intentional subset of "incomplete"
+# (both true for accept_conflict rows), not a fourth disjoint bucket.
+_STATUS_BUCKET = {
+    "undecided": "undecided",
+    "undecided_work": "incomplete",
+    "accept_clean": "reviewed",
+    "reject_reviewed": "reviewed",
+    "reject_incomplete": "incomplete",
+    "accept_conflict": "incomplete",
+}
+
 _HEADERS = ["", "Img ID", "Annots", "Decision", "Score"]
 _TOOLTIPS = {
     NavigatorColumns.STATUS: "Review status",
@@ -359,33 +381,61 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
         super().__init__(parent)
         self.setDynamicSortFilter(True)
         self.setSortCaseSensitivity(Qt.CaseInsensitive)
-        self._filter_mode: str = "all"
+        self._decision_filter: set = set()
+        self._status_filter: set = set()
 
-    def set_filter_mode(self, mode: str) -> None:
-        self._filter_mode = mode
+    def set_decision_filter_active(self, decision: str, active: bool) -> None:
+        """decision is "accept" or "reject". Empty set imposes no restriction."""
+        if active:
+            self._decision_filter.add(decision)
+        else:
+            self._decision_filter.discard(decision)
         self.invalidateFilter()
 
+    def set_status_filter_active(self, status: str, active: bool) -> None:
+        """status is one of STATUS_FILTER_OPTIONS' keys. Empty set imposes no restriction."""
+        if active:
+            self._status_filter.add(status)
+        else:
+            self._status_filter.discard(status)
+        self.invalidateFilter()
+
+    def clear_filters(self) -> None:
+        self._decision_filter.clear()
+        self._status_filter.clear()
+        self.invalidateFilter()
+
+    def decision_filter(self) -> frozenset:
+        return frozenset(self._decision_filter)
+
+    def status_filter(self) -> frozenset:
+        return frozenset(self._status_filter)
+
+    def active_filter_count(self) -> int:
+        return len(self._decision_filter) + len(self._status_filter)
+
     def filterAcceptsRow(self, source_row: int, parent: QModelIndex) -> bool:
-        if self._filter_mode == "all":
+        if not self._decision_filter and not self._status_filter:
             return True
         model = self.sourceModel()
         if model is None:
             return True
         idx = model.index(source_row, 0)
-        if self._filter_mode in ("accept", "reject", "undecided"):
+
+        if self._decision_filter:
             decision = model.data(idx, FILTER_DECISION_ROLE)
-            if self._filter_mode == "accept":
-                return decision == "accept"
-            if self._filter_mode == "reject":
-                return decision == "reject"
-            return not decision  # undecided
-        state = model.data(idx, IMAGE_STATE_ROLE)
-        if self._filter_mode == "incomplete":
-            return state in ("reject_incomplete", "accept_conflict", "undecided_work")
-        if self._filter_mode == "conflicting":
-            return state == "accept_conflict"
-        if self._filter_mode == "reviewed":
-            return state in ("accept_clean", "reject_reviewed")
+            if decision not in self._decision_filter:
+                return False
+
+        if self._status_filter:
+            state = model.data(idx, IMAGE_STATE_ROLE)
+            bucket_match = _STATUS_BUCKET.get(state) in self._status_filter
+            conflict_match = (
+                "conflicting" in self._status_filter and state == "accept_conflict"
+            )
+            if not (bucket_match or conflict_match):
+                return False
+
         return True
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:

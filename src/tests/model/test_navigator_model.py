@@ -365,24 +365,23 @@ class TestProxyFilter:
             proxy.mapToSource(proxy.index(r, 0)).row() for r in range(proxy.rowCount())
         ]
 
-    def test_all_shows_every_row(self, proxy, dataset_model):
-        proxy.set_filter_mode("all")
+    def test_no_filters_shows_every_row(self, proxy, dataset_model):
         assert proxy.rowCount() == 3
 
     def test_accept_filter(self, proxy, dataset_model):
         dataset_model.set_review_decision(0, "accept")
-        proxy.set_filter_mode("accept")
+        proxy.set_decision_filter_active("accept", True)
         assert self._visible_source_rows(proxy) == [0]
 
     def test_reject_filter(self, proxy, dataset_model):
         dataset_model.set_review_decision(1, "reject")
-        proxy.set_filter_mode("reject")
+        proxy.set_decision_filter_active("reject", True)
         assert self._visible_source_rows(proxy) == [1]
 
     def test_undecided_filter(self, proxy, dataset_model):
         dataset_model.set_review_decision(0, "accept")
         dataset_model.set_review_decision(1, "reject")
-        proxy.set_filter_mode("undecided")
+        proxy.set_status_filter_active("undecided", True)
         assert self._visible_source_rows(proxy) == [2]
 
     def test_incomplete_filter_catches_reject_without_annotation(
@@ -391,19 +390,19 @@ class TestProxyFilter:
         dataset_model.set_review_decision(0, "reject")  # incomplete — no work
         dataset_model.add_annotation(1, "crack", _POLY)
         dataset_model.set_review_decision(1, "reject")  # reviewed
-        proxy.set_filter_mode("incomplete")
+        proxy.set_status_filter_active("incomplete", True)
         assert self._visible_source_rows(proxy) == [0]
 
     def test_incomplete_filter_catches_accept_conflict(self, proxy, dataset_model):
         dataset_model.add_annotation(0, "crack", _POLY)
         dataset_model.set_review_decision(0, "accept")  # accept_conflict
-        proxy.set_filter_mode("incomplete")
+        proxy.set_status_filter_active("incomplete", True)
         assert 0 in self._visible_source_rows(proxy)
 
     def test_incomplete_filter_catches_undecided_with_work(self, proxy, dataset_model):
         dataset_model.add_annotation(0, "crack", _POLY)
         # no decision set — undecided_work
-        proxy.set_filter_mode("incomplete")
+        proxy.set_status_filter_active("incomplete", True)
         assert 0 in self._visible_source_rows(proxy)
 
     def test_conflicting_filter_shows_only_accept_conflict(self, proxy, dataset_model):
@@ -411,12 +410,12 @@ class TestProxyFilter:
         dataset_model.set_review_decision(0, "accept")  # accept_conflict
         dataset_model.set_review_decision(1, "reject")  # reject_incomplete
         dataset_model.add_annotation(2, "crack", _POLY)  # undecided_work
-        proxy.set_filter_mode("conflicting")
+        proxy.set_status_filter_active("conflicting", True)
         assert self._visible_source_rows(proxy) == [0]
 
     def test_conflicting_filter_excludes_reject_incomplete(self, proxy, dataset_model):
         dataset_model.set_review_decision(0, "reject")
-        proxy.set_filter_mode("conflicting")
+        proxy.set_status_filter_active("conflicting", True)
         assert self._visible_source_rows(proxy) == []
 
     def test_reviewed_filter_shows_accept_clean_and_reject_reviewed(
@@ -426,5 +425,85 @@ class TestProxyFilter:
         dataset_model.add_annotation(1, "crack", _POLY)
         dataset_model.set_review_decision(1, "reject")  # reject_reviewed -- reviewed
         # row 2 stays undecided -- not reviewed
-        proxy.set_filter_mode("reviewed")
+        proxy.set_status_filter_active("reviewed", True)
         assert self._visible_source_rows(proxy) == [0, 1]
+
+    def test_decision_and_status_facets_and_together(self, proxy, dataset_model):
+        """Decision:Reject + Status:Incomplete should narrow to exactly reject_incomplete."""
+        dataset_model.set_review_decision(0, "reject")  # reject_incomplete
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")  # reject_reviewed
+        dataset_model.add_annotation(2, "crack", _POLY)
+        dataset_model.set_review_decision(2, "accept")  # accept_conflict
+
+        proxy.set_decision_filter_active("reject", True)
+        proxy.set_status_filter_active("incomplete", True)
+
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_multiple_decision_selections_are_ored(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.set_review_decision(1, "reject")
+        # row 2 stays undecided
+
+        proxy.set_decision_filter_active("accept", True)
+        proxy.set_decision_filter_active("reject", True)
+
+        assert self._visible_source_rows(proxy) == [0, 1]
+
+    def test_multiple_status_selections_are_ored(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")  # accept_clean -- reviewed
+        # row 1, row 2 stay undecided
+
+        proxy.set_status_filter_active("undecided", True)
+        proxy.set_status_filter_active("reviewed", True)
+
+        assert self._visible_source_rows(proxy) == [0, 1, 2]
+
+    def test_conflicting_and_incomplete_both_checked_equivalent_to_incomplete_alone(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "reject")  # reject_incomplete
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "accept")  # accept_conflict
+
+        proxy.set_status_filter_active("incomplete", True)
+        incomplete_only = self._visible_source_rows(proxy)
+
+        proxy.set_status_filter_active("conflicting", True)
+        both = self._visible_source_rows(proxy)
+
+        assert incomplete_only == both == [0, 1]
+
+    def test_empty_decision_facet_imposes_no_restriction_when_status_set(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "accept")  # accept_clean -- reviewed
+        proxy.set_status_filter_active("reviewed", True)
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_empty_status_facet_imposes_no_restriction_when_decision_set(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(1, "reject")
+        proxy.set_decision_filter_active("reject", True)
+        assert self._visible_source_rows(proxy) == [1]
+
+    def test_clear_filters_resets_to_all_rows(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        proxy.set_decision_filter_active("accept", True)
+        proxy.set_status_filter_active("reviewed", True)
+
+        proxy.clear_filters()
+
+        assert proxy.rowCount() == 3
+        assert proxy.decision_filter() == frozenset()
+        assert proxy.status_filter() == frozenset()
+
+    def test_active_filter_count_reflects_both_facets(self, proxy):
+        assert proxy.active_filter_count() == 0
+        proxy.set_decision_filter_active("accept", True)
+        assert proxy.active_filter_count() == 1
+        proxy.set_status_filter_active("reviewed", True)
+        proxy.set_status_filter_active("incomplete", True)
+        assert proxy.active_filter_count() == 3

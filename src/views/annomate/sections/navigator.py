@@ -1,5 +1,4 @@
 from PySide6.QtCore import QCoreApplication, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -9,6 +8,7 @@ from PySide6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from models.navigator_model import (
@@ -22,6 +22,7 @@ from views.icons import material_icon
 
 from .annotations import AnnotationsSection
 from .metadata import MetadataSection
+from ._filter_panel import _FilterPanel
 from ._navigator_card import _NavigatorCard
 from ._shared import (
     _ClickableFrame,
@@ -32,18 +33,6 @@ from ._shared import (
     _ring_undecided,
 )
 
-_SORT_FIELDS = (
-    (NavigatorColumns.IMG_ID, "Filename"),
-    (NavigatorColumns.ANNOTS, "Annotations"),
-    (NavigatorColumns.DECISION, "Decision"),
-    (NavigatorColumns.SCORE, "Score"),
-)
-_OVERFLOW_FILTER_OPTIONS = (
-    ("All images", "all"),
-    ("Accept only", "accept"),
-    ("Reject only", "reject"),
-    ("Conflicting only", "conflicting"),
-)
 _CHIP_ACTIVE_STYLE = f"background-color: {_COLOR_SELECTED_BG}; border-radius: 4px;"
 
 
@@ -77,7 +66,6 @@ class DataNavigatorSection(QWidget):
         self._microsentry_mode: bool = False
         self._annotation_mode: str = "pixel"
         self._cards: dict[int, _NavigatorCard] = {}
-        self._filter_mode: str = "all"
         self._filter_chips: dict[str, _ClickableFrame] = {}
         self._sort_column: int = NavigatorColumns.IMG_ID
         self._sort_order: Qt.SortOrder = Qt.AscendingOrder
@@ -86,7 +74,6 @@ class DataNavigatorSection(QWidget):
         self._proxy = NavigatorSortProxyModel(self)
         self._proxy.setSourceModel(self._table_model)
         self._proxy.sort(self._sort_column, self._sort_order)
-        self._filter_group: QActionGroup | None = None
 
         self.annotations = AnnotationsSection(dataset_model, calibration_model)
         self.annotations.annotation_selected.connect(self.annotation_selected)
@@ -170,22 +157,28 @@ class DataNavigatorSection(QWidget):
         )
         filter_h.addStretch()
 
-        self._btn_sort = QToolButton()
-        self._btn_sort.setStyleSheet("color: black;")
-        self._btn_sort.setPopupMode(QToolButton.InstantPopup)
-        self._btn_sort.setMenu(self._build_sort_menu())
-        self._btn_sort.setToolTip("Change sort field; pick the same field again to reverse")
-        filter_h.addWidget(self._btn_sort)
+        self._btn_filter = QToolButton()
+        self._btn_filter.setIcon(material_icon("filter_alt", size=16, color="black"))
+        self._btn_filter.setText("Filter")
+        self._btn_filter.setStyleSheet("color: black;")
+        self._btn_filter.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self._btn_filter.setToolTip("Filter and sort images")
+        self._btn_filter.setPopupMode(QToolButton.InstantPopup)
 
-        self._btn_overflow = QToolButton()
-        self._btn_overflow.setIcon(material_icon("tune", size=16, color="black"))
-        self._btn_overflow.setToolTip("More filters")
-        self._btn_overflow.setPopupMode(QToolButton.InstantPopup)
-        self._btn_overflow.setMenu(self._build_overflow_menu())
-        filter_h.addWidget(self._btn_overflow)
+        self._filter_panel = _FilterPanel()
+        self._filter_panel.decision_toggled.connect(self._on_panel_decision_toggled)
+        self._filter_panel.status_toggled.connect(self._on_panel_status_toggled)
+        self._filter_panel.sort_field_clicked.connect(self._on_sort_field_chosen)
+        self._filter_panel.clear_filters_clicked.connect(self._on_clear_filters_clicked)
+
+        filter_menu = QMenu(self)
+        filter_action = QWidgetAction(self)
+        filter_action.setDefaultWidget(self._filter_panel)
+        filter_menu.addAction(filter_action)
+        self._btn_filter.setMenu(filter_menu)
+        filter_h.addWidget(self._btn_filter)
 
         layout.addWidget(filter_row)
-        self._update_sort_button_text()
 
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -229,16 +222,6 @@ class DataNavigatorSection(QWidget):
         layout.addWidget(chip)
         self._filter_chips[mode] = chip
 
-    def _build_sort_menu(self) -> QMenu:
-        menu = QMenu(self)
-        for column, label in _SORT_FIELDS:
-            action = QAction(label, self)
-            action.triggered.connect(
-                lambda checked=False, col=column: self._on_sort_field_chosen(col)
-            )
-            menu.addAction(action)
-        return menu
-
     def _on_sort_field_chosen(self, column: int) -> None:
         if column == self._sort_column:
             self._sort_order = (
@@ -250,39 +233,39 @@ class DataNavigatorSection(QWidget):
             self._sort_column = column
             self._sort_order = Qt.AscendingOrder
         self._proxy.sort(self._sort_column, self._sort_order)
-        self._update_sort_button_text()
-
-    def _update_sort_button_text(self) -> None:
-        label = dict(_SORT_FIELDS)[self._sort_column]
-        arrow = "↑" if self._sort_order == Qt.AscendingOrder else "↓"
-        self._btn_sort.setText(f"{label} {arrow}")
-
-    def _build_overflow_menu(self) -> QMenu:
-        menu = QMenu(self)
-        self._filter_group = QActionGroup(menu)
-        self._filter_group.setExclusive(True)
-        for label, mode in _OVERFLOW_FILTER_OPTIONS:
-            action = QAction(label, self._filter_group)
-            action.setCheckable(True)
-            action.setData(mode)
-            menu.addAction(action)
-        self._filter_group.actions()[0].setChecked(True)
-        self._filter_group.triggered.connect(
-            lambda action: self._set_filter_mode(action.data())
-        )
-        return menu
+        self._filter_panel.set_sort_state(self._sort_column, self._sort_order)
 
     def _on_chip_clicked(self, mode: str) -> None:
-        self._set_filter_mode("all" if self._filter_mode == mode else mode)
+        active = mode in self._proxy.status_filter()
+        self._proxy.set_status_filter_active(mode, not active)
+        self._apply_filters()
 
-    def _set_filter_mode(self, mode: str) -> None:
-        self._filter_mode = mode
-        self._proxy.set_filter_mode(mode)
+    def _on_panel_decision_toggled(self, decision: str, checked: bool) -> None:
+        self._proxy.set_decision_filter_active(decision, checked)
+        self._apply_filters()
+
+    def _on_panel_status_toggled(self, status: str, checked: bool) -> None:
+        self._proxy.set_status_filter_active(status, checked)
+        self._apply_filters()
+
+    def _on_clear_filters_clicked(self) -> None:
+        self._proxy.clear_filters()
+        self._apply_filters()
+
+    def _apply_filters(self) -> None:
         for chip_mode, chip in self._filter_chips.items():
-            chip.setStyleSheet(_CHIP_ACTIVE_STYLE if chip_mode == mode else "")
-        if self._filter_group:
-            for action in self._filter_group.actions():
-                action.setChecked(action.data() == mode)
+            chip.setStyleSheet(
+                _CHIP_ACTIVE_STYLE if chip_mode in self._proxy.status_filter() else ""
+            )
+        self._filter_panel.set_decision_filter(self._proxy.decision_filter())
+        self._filter_panel.set_status_filter(self._proxy.status_filter())
+        n = self._proxy.active_filter_count()
+        self._btn_filter.setText("Filter" if n == 0 else f"Filter ({n})")
+        # invalidateFilter()/invalidateRowsFilter() don't reliably emit
+        # layoutChanged in this Qt build, so _on_proxy_order_changed never
+        # fires from a filter change alone -- rebuild explicitly instead of
+        # depending on that signal.
+        self._rebuild_cards()
 
     def _on_model_reset(self) -> None:
         self._release_shared_sections()
@@ -300,8 +283,8 @@ class DataNavigatorSection(QWidget):
             )
         else:
             self._lbl_counter.setText("No images loaded")
-        self._set_filter_mode("all")
-        self._rebuild_cards()
+        self._proxy.clear_filters()
+        self._apply_filters()  # also rebuilds the card list
         self._refresh_counts()
 
     def _refresh_counts(self, *args) -> None:

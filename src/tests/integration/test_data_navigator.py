@@ -160,26 +160,135 @@ def test_clicking_chip_filters_and_second_click_returns_to_all(navigator, qtbot)
 
     widget._on_chip_clicked("reviewed")
     assert source_rows(widget) == [0]
-    assert widget._filter_mode == "reviewed"
+    assert widget._proxy.status_filter() == frozenset({"reviewed"})
 
     widget._on_chip_clicked("reviewed")
     assert set(source_rows(widget)) == {0, 1, 2}
-    assert widget._filter_mode == "all"
+    assert widget._proxy.status_filter() == frozenset()
 
 
-def test_overflow_menu_accept_filter(navigator, qtbot):
-    """Verify the overflow menu's "Accept only" action filters to accepted rows."""
+def test_clicking_a_second_chip_adds_to_rather_than_replaces_the_first(
+    navigator, qtbot
+):
+    """Chips are independent toggles now, not a mutually-exclusive radio group.
+
+    Clicking "reviewed" then "incomplete" should leave both active
+    simultaneously, matching the multi-select checkboxes they stay in sync
+    with in the Filter menu.
+    """
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(0, "accept")  # reviewed
+    dataset_model.set_review_decision(1, "reject")  # incomplete (no work)
+    qtbot.wait(20)
+
+    widget._on_chip_clicked("reviewed")
+    widget._on_chip_clicked("incomplete")
+
+    assert widget._proxy.status_filter() == frozenset({"reviewed", "incomplete"})
+    assert set(source_rows(widget)) == {0, 1}
+
+
+def test_filter_panel_decision_checkbox_filters_to_accepted_rows(navigator, qtbot):
+    """Verify the Filter menu's Decision:Accept checkbox filters to accepted rows."""
     widget, dataset_model, _inference_model, _tmp_path = navigator
     dataset_model.set_review_decision(1, "accept")
     qtbot.wait(20)
 
-    accept_action = next(
-        a for a in widget._filter_group.actions() if a.data() == "accept"
-    )
-    accept_action.trigger()
+    widget._filter_panel._decision_checks["accept"].setChecked(True)
 
     assert source_rows(widget) == [1]
-    assert widget._filter_mode == "accept"
+    assert widget._proxy.decision_filter() == frozenset({"accept"})
+
+
+def test_filter_panel_checkbox_actually_rebuilds_the_card_list(navigator, qtbot):
+    """Regression: invalidateFilter()/invalidateRowsFilter() don't reliably emit
+    layoutChanged in this Qt build, so _on_proxy_order_changed (which listens
+    for it) never fired from a filter change alone -- the proxy's rowCount()
+    updated correctly but the actual card widgets never got rebuilt, so the
+    on-screen list silently stayed unfiltered. _apply_filters() must rebuild
+    the card list itself rather than relying on that signal.
+    """
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(1, "accept")
+    qtbot.wait(20)
+    assert set(widget._cards.keys()) == {0, 1, 2}
+
+    widget._filter_panel._decision_checks["accept"].setChecked(True)
+
+    assert set(widget._cards.keys()) == {1}
+    assert widget._cards_layout.count() == 2  # 1 card + trailing stretch
+
+
+def test_filter_panel_conflicting_checkbox_isolates_accept_conflict_rows(
+    navigator, qtbot
+):
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+    dataset_model.set_review_decision(0, "accept")  # accept_conflict
+    dataset_model.set_review_decision(1, "reject")  # reject_incomplete
+    qtbot.wait(20)
+
+    widget._filter_panel._status_checks["conflicting"].setChecked(True)
+
+    assert source_rows(widget) == [0]
+
+
+def test_chip_and_filter_panel_checkbox_stay_in_sync_bidirectionally(
+    navigator, qtbot
+):
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(0, "accept")
+    qtbot.wait(20)
+
+    widget._on_chip_clicked("reviewed")
+    assert widget._filter_panel._status_checks["reviewed"].isChecked() is True
+
+    widget._filter_panel._status_checks["reviewed"].setChecked(False)
+    assert widget._proxy.status_filter() == frozenset()
+    assert widget._filter_chips["reviewed"].styleSheet() == ""
+
+
+def test_clear_filters_button_resets_everything_and_badge(navigator, qtbot):
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(0, "accept")
+    qtbot.wait(20)
+
+    widget._filter_panel._decision_checks["accept"].setChecked(True)
+    widget._on_chip_clicked("incomplete")
+    assert widget._btn_filter.text() != "Filter"
+
+    widget._on_clear_filters_clicked()
+
+    assert set(source_rows(widget)) == {0, 1, 2}
+    assert widget._proxy.decision_filter() == frozenset()
+    assert widget._proxy.status_filter() == frozenset()
+    assert widget._btn_filter.text() == "Filter"
+    assert widget._filter_panel._decision_checks["accept"].isChecked() is False
+
+
+def test_filter_button_badge_shows_active_count(navigator, qtbot):
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.set_review_decision(0, "accept")
+    qtbot.wait(20)
+
+    widget._filter_panel._decision_checks["accept"].setChecked(True)
+    assert widget._btn_filter.text() == "Filter (1)"
+
+    widget._on_chip_clicked("incomplete")
+    assert widget._btn_filter.text() == "Filter (2)"
+
+
+def test_loading_new_dataset_clears_filters(navigator, qtbot):
+    widget, dataset_model, _inference_model, tmp_path = navigator
+    dataset_model.set_review_decision(0, "accept")
+    qtbot.wait(20)
+    widget._filter_panel._decision_checks["accept"].setChecked(True)
+    assert widget._proxy.decision_filter() == frozenset({"accept"})
+
+    dataset_model.load_folder(str(tmp_path), ["d.jpg"])
+
+    assert widget._proxy.decision_filter() == frozenset()
+    assert widget._btn_filter.text() == "Filter"
 
 
 def test_sort_menu_same_field_reverses_different_field_resets_ascending(navigator):
@@ -198,18 +307,18 @@ def test_sort_menu_same_field_reverses_different_field_resets_ascending(navigato
     widget._on_sort_field_chosen(NavigatorColumns.IMG_ID)
     descending = source_rows(widget)
     assert widget._sort_order == Qt.DescendingOrder
-    assert "↓" in widget._btn_sort.text()
+    assert "↓" in widget._filter_panel._sort_radios[NavigatorColumns.IMG_ID].text()
     assert ascending != descending
 
     widget._on_sort_field_chosen(NavigatorColumns.IMG_ID)
     assert widget._sort_order == Qt.AscendingOrder
-    assert "↑" in widget._btn_sort.text()
+    assert "↑" in widget._filter_panel._sort_radios[NavigatorColumns.IMG_ID].text()
     assert source_rows(widget) == ascending
 
     widget._on_sort_field_chosen(NavigatorColumns.ANNOTS)
     assert widget._sort_column == NavigatorColumns.ANNOTS
     assert widget._sort_order == Qt.AscendingOrder
-    assert "↑" in widget._btn_sort.text()
+    assert "↑" in widget._filter_panel._sort_radios[NavigatorColumns.ANNOTS].text()
 
 
 def test_clicking_a_second_card_collapses_the_first_accordion_style(navigator, qtbot):
