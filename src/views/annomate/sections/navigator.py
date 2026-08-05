@@ -26,6 +26,7 @@ from ._navigator_card import _NavigatorCard
 from ._shared import (
     _ClickableFrame,
     _COLOR_REVIEWED,
+    _COLOR_SELECTED_BG,
     _dot,
     _incomplete_badge,
     _ring_undecided,
@@ -43,7 +44,7 @@ _OVERFLOW_FILTER_OPTIONS = (
     ("Reject only", "reject"),
     ("Conflicting only", "conflicting"),
 )
-_CHIP_ACTIVE_STYLE = "background-color: palette(highlight); border-radius: 4px;"
+_CHIP_ACTIVE_STYLE = f"background-color: {_COLOR_SELECTED_BG}; border-radius: 4px;"
 
 
 class DataNavigatorSection(QWidget):

@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QFrame, QLabel
 _COLOR_REVIEWED = "#4caf50"
 _COLOR_UNDECIDED = "#888888"
 _COLOR_INCOMPLETE = "#ff9800"
+_COLOR_SELECTED_BG = "#d6d6d6"  # light grey, standing in for palette(highlight)'s accent blue
 
 
 class _ClickableFrame(QFrame):

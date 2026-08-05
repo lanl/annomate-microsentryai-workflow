@@ -18,7 +18,13 @@ from models.navigator_model import (
 
 from views.icons import material_icon
 
-from ._shared import _ClickableFrame, _COLOR_INCOMPLETE, _COLOR_REVIEWED, _COLOR_UNDECIDED
+from ._shared import (
+    _ClickableFrame,
+    _COLOR_INCOMPLETE,
+    _COLOR_REVIEWED,
+    _COLOR_SELECTED_BG,
+    _COLOR_UNDECIDED,
+)
 
 _CHEVRON_SIZE = 16
 _ICON_EXPANDED = "expand_more"  # chevron down -- body visible
@@ -298,7 +304,7 @@ class _NavigatorCard(QWidget):
             ).pixmap(_CHEVRON_SIZE, _CHEVRON_SIZE)
         )
         self._header.setStyleSheet(
-            "background-color: palette(highlight);" if expanded else ""
+            f"background-color: {_COLOR_SELECTED_BG};" if expanded else ""
         )
 
     def body_container(self) -> QWidget:

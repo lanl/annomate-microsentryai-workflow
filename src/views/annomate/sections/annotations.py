@@ -20,7 +20,7 @@ from models.annotations_model import (
 
 from views.icons import material_icon
 
-from ._shared import _ClickableFrame
+from ._shared import _ClickableFrame, _COLOR_SELECTED_BG
 
 _DOT_W = 16
 _ICON_BTN_SIZE = 16
@@ -164,7 +164,7 @@ class _AnnotationRow(_ClickableFrame):
 
     def set_selected(self, selected: bool) -> None:
         self.setStyleSheet(
-            "background-color: palette(highlight);" if selected else ""
+            f"background-color: {_COLOR_SELECTED_BG};" if selected else ""
         )
 
 
