@@ -83,6 +83,21 @@ def test_navigator_header_hover_uses_selected_card_background(navigator):
     assert "QFrame#navigatorFilterChip:hover" in widget.styleSheet()
 
 
+def test_collapsed_delegate_caches_rows_and_invalidates_changed_row(navigator):
+    """Scrolling reuses rendered rows while model edits refresh stale pixels."""
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    delegate = widget._delegate
+
+    first = delegate._row_pixmap(0, 330, False, 1.0)
+    second = delegate._row_pixmap(0, 330, False, 1.0)
+    assert first.cacheKey() == second.cacheKey()
+
+    dataset_model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])
+    refreshed = delegate._row_pixmap(0, 330, False, 1.0)
+
+    assert refreshed.cacheKey() != first.cacheKey()
+
+
 def test_sorting_reorders_cards_and_reverses(navigator):
     """Verify that sorting the proxy model by image ID reorders the cards, and reversing flips the order.
 
