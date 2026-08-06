@@ -23,6 +23,7 @@ from models.navigator_model import (
 from views.icons import material_icon
 
 from .annotations import AnnotationsSection
+from ._image_classes import ImageClassesSection
 from .metadata import MetadataSection
 from ._filter_panel import _FilterPanel
 from ._navigator_card import _NavigatorCard
@@ -46,10 +47,11 @@ _HEADER_BUTTON_STYLE = (
 class DataNavigatorSection(QWidget):
     """Scrollable, sortable list of expandable dataset cards for selecting images.
 
-    Each card expands to show that image's annotations, inspector, and note
-    inline. Since only one card is expanded at a time, the Annotations and
-    Metadata sections are shared singleton widgets that get reparented into
-    whichever card is currently expanded (see `_attach_shared_sections`/
+    Each card expands to show that image's annotations (or, in image-level
+    mode, its class-tag picker), inspector, and note inline. Since only one
+    card is expanded at a time, the Annotations, ImageClasses, and Metadata
+    sections are shared singleton widgets that get reparented into whichever
+    card is currently expanded (see `_attach_shared_sections`/
     `_release_shared_sections`).
 
     Collapsed rows are virtualized: a QListView paints only the rows in the
@@ -99,6 +101,8 @@ class DataNavigatorSection(QWidget):
 
         self.annotations = AnnotationsSection(dataset_model, calibration_model)
         self.annotations.annotation_selected.connect(self.annotation_selected)
+        self.image_classes = ImageClassesSection(dataset_model)
+        self.image_classes.setVisible(self._annotation_mode == "image_level")
         self.metadata = MetadataSection(dataset_model)
 
         self._init_ui()
@@ -256,6 +260,7 @@ class DataNavigatorSection(QWidget):
         self._shared_slot_layout = QVBoxLayout(self._shared_slot)
         self._shared_slot_layout.setContentsMargins(0, 0, 0, 0)
         self._shared_slot_layout.addWidget(self.annotations)
+        self._shared_slot_layout.addWidget(self.image_classes)
         self._shared_slot_layout.addWidget(self.metadata)
 
     def _add_filter_chip(self, layout, mode: str, icon, count_label: QLabel, tooltip: str):
@@ -332,6 +337,7 @@ class DataNavigatorSection(QWidget):
         self._btn_next.setVisible(has_images)
         self._list.setVisible(has_images)
         self.annotations.set_current_row(-1)
+        self.image_classes.set_current_row(-1)
         self.metadata.set_current_row(-1)
         if has_images:
             total = self.dataset_model.rowCount()
@@ -533,6 +539,7 @@ class DataNavigatorSection(QWidget):
         """
         self.metadata.commit_pending_edits()
         self._shared_slot_layout.addWidget(self.annotations)
+        self._shared_slot_layout.addWidget(self.image_classes)
         self._shared_slot_layout.addWidget(self.metadata)
 
     def _attach_shared_sections(self) -> None:
@@ -540,8 +547,10 @@ class DataNavigatorSection(QWidget):
         card = self._expanded_card
         body_layout = card.body_container().layout()
         body_layout.addWidget(self.annotations)
+        body_layout.addWidget(self.image_classes)
         body_layout.addWidget(self.metadata)
         self.annotations.set_current_row(card.source_row())
+        self.image_classes.set_current_row(card.source_row())
         self.metadata.set_current_row(card.source_row())
 
     def _source_row_from_proxy(self, proxy_index) -> int:
@@ -613,6 +622,13 @@ class DataNavigatorSection(QWidget):
         self.annotations.select_annotation(idx)
 
     def set_annotation_mode(self, mode: str) -> None:
-        """Show or hide the Annotations sub-block based on pixel vs image-level mode."""
+        """Swap the expanded card's sub-block for pixel vs image-level mode.
+
+        Pixel mode shows the polygon Annotations list; image-level mode
+        shows the class-tag picker instead -- exactly one is visible at a
+        time, matching which kind of "work" the current mode tracks.
+        """
         self._annotation_mode = mode
         self.annotations.setVisible(mode == "pixel")
+        self.image_classes.setVisible(mode == "image_level")
+        self._list.viewport().update()

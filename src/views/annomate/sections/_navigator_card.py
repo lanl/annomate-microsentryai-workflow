@@ -32,9 +32,11 @@ _ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
 
 _BADGE_ICON_SIZE = 14
 _BADGE_ICON_COLOR = "black"
-_ANNOTATIONS_ICON = "pentagon"
 _INSPECTOR_ICON = "person"
 _NOTE_ICON = "comment"
+
+_ANNOT_BADGE_PIXEL = ("pentagon", "Has annotations")
+_ANNOT_BADGE_IMAGE_LEVEL = ("label", "Has class tags")
 
 _STATUS_DOT_W = 10
 _INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
@@ -165,6 +167,25 @@ def _badge_icon_label(name: str, tooltip: str) -> QLabel:
     return lbl
 
 
+def _apply_annot_badge(label: QLabel, mode: str) -> None:
+    """Point the annotations badge at the icon/tooltip for the current mode.
+
+    Pixel mode's work is polygon annotations (pentagon icon); image-level
+    mode's work is per-image class tags, which aren't shapes on the image at
+    all -- reusing the polygon icon there would misleadingly imply pixel
+    annotations exist, so image-level mode gets its own "label" icon.
+    """
+    name, tooltip = (
+        _ANNOT_BADGE_IMAGE_LEVEL if mode == "image_level" else _ANNOT_BADGE_PIXEL
+    )
+    label.setPixmap(
+        material_icon(name, size=_BADGE_ICON_SIZE, color=_BADGE_ICON_COLOR).pixmap(
+            _BADGE_ICON_SIZE, _BADGE_ICON_SIZE
+        )
+    )
+    label.setToolTip(tooltip)
+
+
 def _apply_status_icon(label: QLabel, state: str) -> None:
     """Style *label* in place to match the status dot/ring/badge for *state*."""
     label.setFixedSize(_STATUS_DOT_W, _STATUS_DOT_W)
@@ -248,7 +269,7 @@ class _NavigatorCard(QWidget):
         self._annot_count_lbl = QLabel()
         self._annot_count_lbl.setStyleSheet("color: black; font-size: 11px;")
         row1.addWidget(self._annot_count_lbl)
-        self._annot_icon_lbl = _badge_icon_label(_ANNOTATIONS_ICON, "Has annotations")
+        self._annot_icon_lbl = QLabel()
         row1.addWidget(self._annot_icon_lbl)
 
         row1.addSpacing(4)
@@ -375,6 +396,7 @@ class _NavigatorCard(QWidget):
         has_annots = bool(annots)
         self._annot_count_lbl.setText(str(annots) if has_annots else "")
         self._annot_count_lbl.setVisible(has_annots)
+        _apply_annot_badge(self._annot_icon_lbl, model.get_annotation_mode())
         self._annot_icon_lbl.setVisible(has_annots)
 
         has_inspector = bool(

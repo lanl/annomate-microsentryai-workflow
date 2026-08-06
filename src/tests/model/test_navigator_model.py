@@ -115,6 +115,75 @@ class TestNavigatorTableModel:
         model = NavigatorTableModel(dataset_model, inference_model)
         assert model.class_entries(0) == []
 
+    def test_class_entries_use_image_tags_in_image_level_mode(
+        self, dataset_model, inference_model
+    ):
+        """In image-level mode, pills come from image class tags, not polygons.
+
+        A pixel annotation on row 0 is ignored for class_entries once the
+        dataset is in image-level mode -- only the image's own class tags
+        (set via set_image_classes) should come back.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_class("inclusion", (40, 50, 60))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["inclusion"])
+
+        assert model.class_entries(0) == [("inclusion", (40, 50, 60))]
+
+    def test_class_entries_ignores_pixel_annotations_added_after_mode_switch(
+        self, dataset_model, inference_model
+    ):
+        """A polygon added after switching to image-level mode isn't auto-tagged.
+
+        set_annotation_mode("image_level") merges *existing* pixel classes
+        into image tags as a one-time migration -- it doesn't keep syncing
+        afterward. So a pixel annotation added once already in image-level
+        mode should stay invisible to class_entries() until explicitly
+        tagged via set_image_classes.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.add_annotation(0, "scratch", _POLY)
+
+        assert model.class_entries(0) == []
+
+    def test_annots_column_counts_image_tags_in_image_level_mode(
+        self, dataset_model, inference_model
+    ):
+        """The Annots badge count follows the current mode's kind of work."""
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["scratch"])
+
+        index = model.index(0, NavigatorColumns.ANNOTS)
+        assert model.data(index) == "1"
+        assert model.data(index, SORT_ROLE) == 1
+
+    def test_annots_column_counts_polygon_instances_in_pixel_mode(
+        self, dataset_model, inference_model
+    ):
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+
+        index = model.index(0, NavigatorColumns.ANNOTS)
+        assert model.data(index) == "2"
+        assert model.data(index, SORT_ROLE) == 2
+
+    def test_get_annotation_mode_passthrough(self, dataset_model, inference_model):
+        model = NavigatorTableModel(dataset_model, inference_model)
+        assert model.get_annotation_mode() == "pixel"
+        dataset_model.set_annotation_mode("image_level")
+        assert model.get_annotation_mode() == "image_level"
+
     def test_get_filter_facet_counts_counts_images_not_annotation_instances(
         self, dataset_model, inference_model
     ):

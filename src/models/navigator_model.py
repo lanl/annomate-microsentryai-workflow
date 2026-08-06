@@ -142,7 +142,7 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.IMG_ID:
             return self._image_stem(row).casefold()
         if col == NavigatorColumns.ANNOTS:
-            return self._dataset_model.get_annotation_count(row)
+            return self._work_count(row)
         if col == NavigatorColumns.DECISION:
             return _DECISION_SORT.get(self._dataset_model.get_review_decision(row), 0)
         if col == NavigatorColumns.SCORE:
@@ -183,14 +183,37 @@ class NavigatorTableModel(QAbstractTableModel):
     def get_image_state_label(self, row: int) -> str:
         return self._STATE_LABELS.get(self._image_state(row), "")
 
+    def get_annotation_mode(self) -> str:
+        """Return the current annotation workflow mode (``"pixel"`` or ``"image_level"``)."""
+        return self._dataset_model.get_annotation_mode()
+
     def class_entries(self, row: int) -> list:
-        """Unique annotation classes on *row*, alphabetical, each with its color."""
+        """Unique classes on *row* for the current mode, alphabetical, each with its color.
+
+        Pixel mode: classes from polygon annotations. Image-level mode: the
+        image's assigned class tags -- these are two different sources of
+        truth, so which one backs the card's pill tray must follow the mode.
+        """
         if not (0 <= row < self.rowCount()):
             return []
-        names = sorted(
-            {a["category_name"] for a in self._dataset_model.get_annotations(row)}
-        )
+        if self._dataset_model.get_annotation_mode() == "image_level":
+            names = sorted(set(self._dataset_model.get_image_classes(row)))
+        else:
+            names = sorted(
+                {a["category_name"] for a in self._dataset_model.get_annotations(row)}
+            )
         return [(name, self._dataset_model.get_class_color(name)) for name in names]
+
+    def _work_count(self, row: int) -> int:
+        """Mode-aware "how much work exists on this image" count.
+
+        Pixel mode: number of polygon annotation instances. Image-level mode:
+        number of class tags assigned (tags don't repeat, so this is also
+        the unique class count).
+        """
+        if self._dataset_model.get_annotation_mode() == "image_level":
+            return len(self._dataset_model.get_image_classes(row))
+        return self._dataset_model.get_annotation_count(row)
 
     def get_filter_facet_counts(self) -> dict:
         """Image counts for populating the Filter menu's checkbox labels.
@@ -298,7 +321,7 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.IMG_ID:
             return self._image_stem(row)
         if col == NavigatorColumns.ANNOTS:
-            count = self._dataset_model.get_annotation_count(row)
+            count = self._work_count(row)
             return str(count) if count > 0 else ""
         if col == NavigatorColumns.DECISION:
             return _DECISION_LABELS.get(

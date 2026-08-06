@@ -214,6 +214,42 @@ def test_navigator_card_shows_left_divider_with_classes_regardless_of_microsentr
     assert card._pill_divider_right.isVisibleTo(card) is True
 
 
+def test_annot_badge_shows_polygon_icon_and_tooltip_in_pixel_mode(
+    qtbot, nav_model, dataset_model
+):
+    dataset_model.add_annotation(0, "scratch", [(0, 0), (1, 0), (1, 1)])
+    card = _NavigatorCard(0, nav_model)
+    qtbot.addWidget(card)
+
+    assert card._annot_icon_lbl.toolTip() == "Has annotations"
+    assert card._annot_icon_lbl.isVisibleTo(card) is True
+
+
+def test_annot_badge_shows_label_icon_and_tooltip_in_image_level_mode(
+    qtbot, nav_model, dataset_model
+):
+    """Image-level mode's badge is a label/tag icon, not the pixel polygon icon.
+
+    A pixel annotation alone (no image class tag) must NOT surface the
+    badge -- image-level mode's "has work" signal is class tags, not
+    polygons, matching class_entries()'s mode-aware source of truth. The
+    annotation is added after the mode switch so the one-time
+    pixel-to-image-tag migration doesn't pre-populate the tag.
+    """
+    dataset_model.set_annotation_mode("image_level")
+    dataset_model.add_annotation(0, "scratch", [(0, 0), (1, 0), (1, 1)])
+    card = _NavigatorCard(0, nav_model)
+    qtbot.addWidget(card)
+
+    assert card._annot_icon_lbl.isVisibleTo(card) is False
+
+    dataset_model.set_image_classes(0, ["scratch"])
+    card.refresh()
+
+    assert card._annot_icon_lbl.toolTip() == "Has class tags"
+    assert card._annot_icon_lbl.isVisibleTo(card) is True
+
+
 def test_collapsed_render_refits_pills_after_row_layout_changes(
     qtbot, nav_model, dataset_model
 ):
