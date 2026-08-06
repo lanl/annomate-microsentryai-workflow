@@ -9,6 +9,7 @@ from views.annomate.sections._navigator_card import (
     _NavigatorCard,
     _make_pill,
 )
+from views.annomate.sections._shared import _COLOR_SELECTED_BG
 
 
 @pytest.fixture
@@ -184,6 +185,17 @@ def test_navigator_card_dividers_hidden_without_classes(qtbot, nav_model):
     # widget's own flag regardless of whether the card itself is shown.
     assert card._pill_divider_left.isVisibleTo(card) is False
     assert card._pill_divider_right.isVisibleTo(card) is False
+
+
+def test_collapsed_card_hover_matches_expanded_background(qtbot, nav_model):
+    card = _NavigatorCard(0, nav_model)
+    qtbot.addWidget(card)
+
+    card.set_hovered(True)
+    assert _COLOR_SELECTED_BG in card._header.styleSheet()
+
+    card.set_hovered(False)
+    assert _COLOR_SELECTED_BG not in card._header.styleSheet()
 
 
 def test_navigator_card_shows_left_divider_with_classes_regardless_of_microsentry(

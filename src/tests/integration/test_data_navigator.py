@@ -47,6 +47,42 @@ def test_list_does_not_capture_window_navigation_hotkeys(navigator):
     assert widget._list.focusPolicy() == Qt.NoFocus
 
 
+def test_collapsed_delegate_exposes_card_and_icon_tooltips(navigator):
+    """Painted rows retain the tooltip behavior of their real card widgets."""
+    widget, dataset_model, _inference_model, _tmp_path = navigator
+    dataset_model.add_annotation(0, "Defect", [(0, 0), (1, 0), (1, 1)])
+    delegate = widget._delegate
+    delegate._flyweight.set_source_row(0)
+    delegate._flyweight.prepare_collapsed_render(400, delegate._collapsed_height)
+
+    card = delegate._flyweight
+    icon_pos = card._annot_icon_lbl.mapTo(
+        card, card._annot_icon_lbl.rect().center()
+    )
+
+    assert delegate._tooltip_at(icon_pos) == "Has annotations"
+    assert delegate._tooltip_at(card._header.rect().topLeft()) == card._header.toolTip()
+
+
+def test_navigator_tooltips_use_selected_card_background(navigator):
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+
+    assert "QToolTip" in widget.styleSheet()
+    assert "background-color: #d6d6d6" in widget.styleSheet()
+    assert "}}" not in widget.styleSheet()
+    tooltip_rule = widget.styleSheet().split("}", 1)[0]
+    assert "border-radius" not in tooltip_rule
+
+
+def test_navigator_header_hover_uses_selected_card_background(navigator):
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+
+    for button in (widget._btn_prev, widget._btn_next, widget._btn_filter):
+        assert "QToolButton:hover" in button.styleSheet()
+        assert "background-color: #d6d6d6" in button.styleSheet()
+    assert "QFrame#navigatorFilterChip:hover" in widget.styleSheet()
+
+
 def test_sorting_reorders_cards_and_reverses(navigator):
     """Verify that sorting the proxy model by image ID reorders the cards, and reversing flips the order.
 

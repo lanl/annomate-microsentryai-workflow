@@ -1,5 +1,5 @@
-from PySide6.QtCore import QModelIndex, QPoint, QSize
-from PySide6.QtWidgets import QStyledItemDelegate
+from PySide6.QtCore import QEvent, QModelIndex, QPoint, QSize
+from PySide6.QtWidgets import QStyle, QStyledItemDelegate, QToolTip
 
 from models.navigator_model import SOURCE_ROW_ROLE
 
@@ -53,12 +53,47 @@ class _NavigatorRowDelegate(QStyledItemDelegate):
 
         painter.save()
         self._flyweight.set_source_row(source_row)
+        self._flyweight.set_hovered(bool(option.state & QStyle.State_MouseOver))
         self._flyweight.prepare_collapsed_render(
             option.rect.width(), self._collapsed_height
         )
         painter.translate(option.rect.topLeft())
         self._flyweight.render(painter, QPoint(0, 0))
         painter.restore()
+
+    def helpEvent(self, event, view, option, index: QModelIndex) -> bool:
+        """Expose the real card's child tooltips for delegate-painted rows."""
+        if event.type() != QEvent.ToolTip or not index.isValid():
+            return super().helpEvent(event, view, option, index)
+
+        source_row = index.data(SOURCE_ROW_ROLE)
+        if source_row is None or source_row == self._expanded_source_row:
+            return False  # the expanded row's real widget handles its own tips
+
+        self._flyweight.set_source_row(source_row)
+        self._flyweight.prepare_collapsed_render(
+            option.rect.width(), self._collapsed_height
+        )
+        local_pos = event.pos() - option.rect.topLeft()
+        tooltip = self._tooltip_at(local_pos)
+        if tooltip:
+            QToolTip.showText(event.globalPos(), tooltip, view)
+            return True
+
+        QToolTip.hideText()
+        return True
+
+    def _tooltip_at(self, local_pos: QPoint) -> str:
+        """Return the nearest tooltip in the flyweight's child hierarchy."""
+        child = self._flyweight.childAt(local_pos)
+        while child is not None:
+            tooltip = child.toolTip()
+            if tooltip:
+                return tooltip
+            if child is self._flyweight:
+                break
+            child = child.parentWidget()
+        return ""
 
     def sizeHint(self, option, index: QModelIndex) -> QSize:
         source_row = index.data(SOURCE_ROW_ROLE)

@@ -214,6 +214,7 @@ class _NavigatorCard(QWidget):
         self._table_model = table_model
         self._microsentry_mode = microsentry_mode
         self._expanded = False
+        self._hovered = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -343,8 +344,17 @@ class _NavigatorCard(QWidget):
                 color="black",
             ).pixmap(_CHEVRON_SIZE, _CHEVRON_SIZE)
         )
+        self._update_header_background()
+
+    def set_hovered(self, hovered: bool) -> None:
+        """Match the selected background while a collapsed row is hovered."""
+        self._hovered = hovered
+        self._update_header_background()
+
+    def _update_header_background(self) -> None:
+        highlighted = self._expanded or self._hovered
         self._header.setStyleSheet(
-            f"background-color: {_COLOR_SELECTED_BG};" if expanded else ""
+            f"background-color: {_COLOR_SELECTED_BG};" if highlighted else ""
         )
 
     def body_container(self) -> QWidget:

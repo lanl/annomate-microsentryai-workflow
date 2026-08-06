@@ -37,6 +37,10 @@ from ._shared import (
 )
 
 _CHIP_ACTIVE_STYLE = f"background-color: {_COLOR_SELECTED_BG}; border-radius: 4px;"
+_HEADER_BUTTON_STYLE = (
+    "QToolButton { color: black; } "
+    f"QToolButton:hover {{ background-color: {_COLOR_SELECTED_BG}; }}"
+)
 
 
 class DataNavigatorSection(QWidget):
@@ -109,7 +113,10 @@ class DataNavigatorSection(QWidget):
 
     def _init_ui(self) -> None:
         self.setStyleSheet(
-            "QToolTip { padding: 2px 4px; border-radius: 4px; border: 1px solid palette(shadow); }"
+            f"QToolTip {{ background-color: {_COLOR_SELECTED_BG}; color: black; "
+            "padding: 2px 4px; border: 1px solid palette(shadow); } "
+            f"QFrame#navigatorFilterChip:hover {{ background-color: {_COLOR_SELECTED_BG}; "
+            "border-radius: 4px; }"
         )
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -122,7 +129,7 @@ class DataNavigatorSection(QWidget):
 
         self._btn_prev = QToolButton()
         self._btn_prev.setText("Prev (A)")
-        self._btn_prev.setStyleSheet("color: black;")
+        self._btn_prev.setStyleSheet(_HEADER_BUTTON_STYLE)
         self._btn_prev.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_prev.setToolTip("Previous image")
         self._btn_prev.clicked.connect(self.prev_requested)
@@ -131,7 +138,7 @@ class DataNavigatorSection(QWidget):
         self._btn_next = QToolButton()
         self._btn_next.setLayoutDirection(Qt.RightToLeft)
         self._btn_next.setText("Next (D)")
-        self._btn_next.setStyleSheet("color: black;")
+        self._btn_next.setStyleSheet(_HEADER_BUTTON_STYLE)
         self._btn_next.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_next.setToolTip("Next image")
         self._btn_next.clicked.connect(self.next_requested)
@@ -178,7 +185,7 @@ class DataNavigatorSection(QWidget):
         self._btn_filter = QToolButton()
         self._btn_filter.setIcon(material_icon("filter_alt", size=16, color="black"))
         self._btn_filter.setText("Filter")
-        self._btn_filter.setStyleSheet("color: black;")
+        self._btn_filter.setStyleSheet(_HEADER_BUTTON_STYLE)
         self._btn_filter.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self._btn_filter.setToolTip("Filter and sort images")
         self._btn_filter.setPopupMode(QToolButton.InstantPopup)
@@ -206,6 +213,7 @@ class DataNavigatorSection(QWidget):
         # never reach the window after the navigator is clicked. Rows do not
         # use Qt selection or keyboard editing, so the view should not focus.
         self._list.setFocusPolicy(Qt.NoFocus)
+        self._list.setMouseTracking(True)
         self._list.setSelectionMode(QAbstractItemView.NoSelection)
         self._list.setSpacing(0)
         self._list.setUniformItemSizes(False)  # the expanded row's height varies
@@ -252,6 +260,7 @@ class DataNavigatorSection(QWidget):
 
     def _add_filter_chip(self, layout, mode: str, icon, count_label: QLabel, tooltip: str):
         chip = _ClickableFrame()
+        chip.setObjectName("navigatorFilterChip")
         chip.setCursor(Qt.PointingHandCursor)
         chip.setToolTip(tooltip)
         chip_h = QHBoxLayout(chip)
