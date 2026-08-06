@@ -30,6 +30,7 @@ def pill_texts(tray):
         tray._layout.itemAt(i).widget().text()
         for i in range(tray._layout.count())
         if tray._layout.itemAt(i).widget() is not None
+        and not tray._layout.itemAt(i).widget().isHidden()
     ]
 
 
@@ -147,6 +148,26 @@ def test_pill_tray_empty_when_no_classes(qtbot):
     assert pill_texts(tray) == []
 
 
+def test_pill_tray_reuse_across_rows_hides_and_reuses_stale_pill(qtbot):
+    """Flyweight repainting must not create/destroy pills during scrolling."""
+    tray = _ClassPillTray()
+    qtbot.addWidget(tray)
+    tray.resize(400, 20)
+
+    tray.set_classes([("nick", (10, 20, 30))])
+    old_pill = tray._layout.itemAt(0).widget()
+
+    tray.set_classes([])  # simulates painting the next (class-less) row
+
+    assert old_pill.isHidden()
+    assert old_pill.parent() is tray
+
+    tray.set_classes([("nick", (10, 20, 30))])
+
+    assert tray._layout.itemAt(0).widget() is old_pill
+    assert not old_pill.isHidden()
+
+
 def test_pill_style_uses_class_color_border_and_black_text():
     pill = _make_pill("scratch", (10, 20, 30))
     style = pill.styleSheet()
@@ -179,3 +200,24 @@ def test_navigator_card_shows_left_divider_with_classes_regardless_of_microsentr
     card.set_microsentry_mode(True)
 
     assert card._pill_divider_right.isVisibleTo(card) is True
+
+
+def test_collapsed_render_refits_pills_after_row_layout_changes(
+    qtbot, nav_model, dataset_model
+):
+    """A flyweight row must fit pills using its current, not previous, geometry."""
+    dataset_model.add_annotation(0, "scratch", [(0, 0), (1, 0), (1, 1)])
+    card = _NavigatorCard(0, nav_model, microsentry_mode=True)
+    qtbot.addWidget(card)
+
+    # Simulate stale geometry inherited from a previously painted, cramped row.
+    card._pill_tray.resize(1, 20)
+    card.refresh()
+    assert pill_texts(card._pill_tray) == []
+
+    card.prepare_collapsed_render(400, card.sizeHint().height())
+
+    assert pill_texts(card._pill_tray) == ["scratch"]
+    pill = card._pill_tray._layout.itemAt(0).widget()
+    assert pill.width() <= card._pill_tray.width()
+    assert pill.height() <= card._pill_tray.height()

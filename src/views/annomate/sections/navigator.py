@@ -1,9 +1,11 @@
-from PySide6.QtCore import QCoreApplication, Qt, Signal
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QListView,
     QMenu,
-    QScrollArea,
     QSizePolicy,
     QToolButton,
     QVBoxLayout,
@@ -24,6 +26,7 @@ from .annotations import AnnotationsSection
 from .metadata import MetadataSection
 from ._filter_panel import _FilterPanel
 from ._navigator_card import _NavigatorCard
+from ._navigator_delegate import _NavigatorRowDelegate
 from ._shared import (
     _ClickableFrame,
     _COLOR_REVIEWED,
@@ -44,6 +47,21 @@ class DataNavigatorSection(QWidget):
     Metadata sections are shared singleton widgets that get reparented into
     whichever card is currently expanded (see `_attach_shared_sections`/
     `_release_shared_sections`).
+
+    Collapsed rows are virtualized: a QListView paints only the rows in the
+    viewport via `_NavigatorRowDelegate`, instead of constructing a real
+    QWidget per dataset row up front (the old approach, which froze the UI
+    while loading hundreds of images). The one row that IS expanded is a
+    real `_NavigatorCard`, manually parented as a child of the list's
+    viewport and positioned with `setGeometry(self._list.visualRect(index))`
+    -- deliberately NOT via `QAbstractItemView.setIndexWidget()`, which Qt's
+    own docs mark as meant for static content only; there's no reliable way
+    to get the view to size a row to fit a dynamically-sized index widget,
+    and the view takes ownership of (and can silently delete) whatever's
+    assigned to it. Normal Qt parent/child widget lifetime applies instead:
+    we show/hide/delete the card ourselves, and reposition it on every
+    scroll, resize, sort, filter, or content change that could move or
+    resize its row (see `_reposition_expanded_card`).
     """
 
     image_selected = Signal(int)
@@ -65,7 +83,7 @@ class DataNavigatorSection(QWidget):
         self._selected_row: int = -1
         self._microsentry_mode: bool = False
         self._annotation_mode: str = "pixel"
-        self._cards: dict[int, _NavigatorCard] = {}
+        self._expanded_card: _NavigatorCard | None = None
         self._filter_chips: dict[str, _ClickableFrame] = {}
         self._sort_column: int = NavigatorColumns.IMG_ID
         self._sort_order: Qt.SortOrder = Qt.AscendingOrder
@@ -181,21 +199,45 @@ class DataNavigatorSection(QWidget):
 
         layout.addWidget(filter_row)
 
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._scroll.setFrameShape(QScrollArea.NoFrame)
-        self._scroll.setMinimumHeight(80)
-        self._scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._list = QListView()
+        self._list.setFrameShape(QFrame.NoFrame)
+        # Image navigation hotkeys are handled by AnnoMateWindow. QListView's
+        # default StrongFocus consumes letter keys for keyboard search, so A/D
+        # never reach the window after the navigator is clicked. Rows do not
+        # use Qt selection or keyboard editing, so the view should not focus.
+        self._list.setFocusPolicy(Qt.NoFocus)
+        self._list.setSelectionMode(QAbstractItemView.NoSelection)
+        self._list.setSpacing(0)
+        self._list.setUniformItemSizes(False)  # the expanded row's height varies
+        self._list.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self._list.viewport().setCursor(Qt.PointingHandCursor)
+        self._list.setMinimumHeight(80)
+        self._list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._list.setModel(self._proxy)
+        # Must match the column used everywhere else in this file
+        # (_proxy_row_from_source, _select_source_row, etc.) -- QListView
+        # only lays out/reports visualRect() for its configured
+        # modelColumn(); an index built with any other column silently
+        # returns an empty rect, which is what was causing the expanded
+        # card to sit at (0, 0, 0, 0) even though sizeHint()/doItemsLayout()
+        # were computing the right row height all along.
+        self._list.setModelColumn(NavigatorColumns.IMG_ID)
 
-        self._cards_container = QWidget()
-        self._cards_layout = QVBoxLayout(self._cards_container)
-        self._cards_layout.setContentsMargins(0, 0, 0, 0)
-        self._cards_layout.setSpacing(0)
-        self._cards_layout.addStretch()
-        self._scroll.setWidget(self._cards_container)
+        self._delegate = _NavigatorRowDelegate(self._table_model, self._list, self)
+        self._list.setItemDelegate(self._delegate)
+        self._list.clicked.connect(self._on_list_clicked)
+        # The expanded row's card is a manually-positioned child of the
+        # viewport (see class docstring) -- anything that can move or
+        # resize its row needs to reposition it explicitly.
+        self._list.verticalScrollBar().valueChanged.connect(
+            self._reposition_expanded_card
+        )
+        self._list.verticalScrollBar().rangeChanged.connect(
+            self._reposition_expanded_card
+        )
+        self._list.viewport().installEventFilter(self)
 
-        layout.addWidget(self._scroll)
+        layout.addWidget(self._list)
 
         # Permanent, invisible parent for the shared Annotations/Metadata
         # sections when no card is expanded. Keeps them real descendants of
@@ -268,18 +310,18 @@ class DataNavigatorSection(QWidget):
         n = self._proxy.active_filter_count()
         self._btn_filter.setText("Filter" if n == 0 else f"Filter ({n})")
         # invalidateFilter()/invalidateRowsFilter() don't reliably emit
-        # layoutChanged in this Qt build, so _on_proxy_order_changed never
-        # fires from a filter change alone -- rebuild explicitly instead of
-        # depending on that signal.
-        self._rebuild_cards()
+        # layoutChanged in this Qt build -- force a relayout explicitly
+        # rather than depending on QListView picking it up on its own.
+        self._list.doItemsLayout()
+        self._prune_selection_if_filtered_out()
+        self._reposition_expanded_card()
 
     def _on_model_reset(self) -> None:
-        self._release_shared_sections()
+        self._collapse_expanded_widget()
         has_images = self.dataset_model.rowCount() > 0
         self._btn_prev.setVisible(has_images)
         self._btn_next.setVisible(has_images)
-        self._scroll.setVisible(has_images)
-        self._selected_row = -1
+        self._list.setVisible(has_images)
         self.annotations.set_current_row(-1)
         self.metadata.set_current_row(-1)
         if has_images:
@@ -290,7 +332,7 @@ class DataNavigatorSection(QWidget):
         else:
             self._lbl_counter.setText("No images loaded")
         self._proxy.clear_filters()
-        self._apply_filters()  # also rebuilds the card list
+        self._apply_filters()
         self._refresh_counts()
 
     def _refresh_counts(self, *args) -> None:
@@ -311,54 +353,53 @@ class DataNavigatorSection(QWidget):
         return self._table_model.get_image_state_label(source_row)
 
     def _on_proxy_order_changed(self, *args) -> None:
-        self._rebuild_cards()
-        if self._selected_row >= 0:
-            self.select_row(self._selected_row)
+        self._list.doItemsLayout()
+        self._reposition_expanded_card()
 
     def _on_table_data_changed(self, top_left, bottom_right, roles=None) -> None:
-        for row in range(top_left.row(), bottom_right.row() + 1):
-            card = self._cards.get(row)
-            if card is not None:
-                card.refresh()
+        if self._selected_row < 0 or self._expanded_card is None:
+            return
+        if top_left.row() <= self._selected_row <= bottom_right.row():
+            self._expanded_card.refresh()
+            self._list.doItemsLayout()
+            self._reposition_expanded_card()
 
-    def _rebuild_cards(self) -> None:
-        valid_source_rows = set()
-        for proxy_row in range(self._proxy.rowCount()):
-            proxy_index = self._proxy.index(proxy_row, NavigatorColumns.IMG_ID)
-            source_row = self._source_row_from_proxy(proxy_index)
-            if source_row < 0:
-                continue
-            valid_source_rows.add(source_row)
-            card = self._cards.get(source_row)
-            if card is None:
-                card = _NavigatorCard(
-                    source_row,
-                    self._table_model,
-                    self._microsentry_mode,
-                )
-                card.clicked.connect(self._on_card_clicked)
-                self._cards[source_row] = card
-            else:
-                card.refresh()
-            self._cards_layout.insertWidget(proxy_row, card)
+    def _prune_selection_if_filtered_out(self) -> None:
+        if self._selected_row < 0:
+            return
+        if self._proxy_row_from_source(self._selected_row) < 0:
+            self._collapse_expanded_widget()
 
-        for row in list(self._cards.keys()):
-            if row not in valid_source_rows:
-                if row == self._selected_row:
-                    self._release_shared_sections()
-                card = self._cards.pop(row)
-                self._cards_layout.removeWidget(card)
-                card.deleteLater()
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self._list.viewport() and event.type() == QEvent.Resize:
+            self._reposition_expanded_card()
+        elif (
+            obj is self._expanded_card
+            and event.type() == QEvent.LayoutRequest
+        ):
+            # The expanded card's body content (annotation count, expandable
+            # notes, ...) can change size after the fact. Qt sends
+            # LayoutRequest to a widget whenever its own layout's sizeHint
+            # is invalidated -- catching that here is what tells QListView
+            # to re-measure the row and the card to grow/shrink to match,
+            # instead of clipping or leaving a gap.
+            self._list.doItemsLayout()
+            self._reposition_expanded_card()
+        return super().eventFilter(obj, event)
+
+    def _on_list_clicked(self, proxy_index) -> None:
+        source_row = self._source_row_from_proxy(proxy_index)
+        if source_row < 0:
+            return
+        self._on_card_clicked(source_row)
 
     def _on_card_clicked(self, source_row: int) -> None:
-        card = self._cards.get(source_row)
         if (
             source_row == self._selected_row
-            and card is not None
-            and card.is_expanded()
+            and self._expanded_card is not None
+            and self._expanded_card.is_expanded()
         ):
-            self._release_shared_sections()
-            card.set_expanded(False)
+            self._collapse_expanded_widget()
             return
 
         self._select_source_row(source_row, scroll=False)
@@ -366,45 +407,128 @@ class DataNavigatorSection(QWidget):
         self.image_selected.emit(source_row)
 
     def _select_source_row(self, row: int, scroll: bool) -> None:
-        if self._selected_row in self._cards and self._selected_row != row:
-            self._cards[self._selected_row].set_expanded(False)
-            self._release_shared_sections()
-        self._selected_row = row
-        card = self._cards.get(row)
-        if card is not None:
-            card.set_expanded(True)
-            self._attach_shared_sections(card)
-            if scroll:
-                self._scroll_card_to_top(card)
+        proxy_row = self._proxy_row_from_source(row)
+        if proxy_row < 0:
+            self._selected_row = row
+            return
+        index = self._proxy.index(proxy_row, NavigatorColumns.IMG_ID)
 
-    def _scroll_card_to_top(self, card: _NavigatorCard) -> None:
-        """Scroll the list so *card* sits at the very top of the visible area.
+        if row == self._selected_row and self._expanded_card is not None:
+            # Already expanded on this exact row -- e.g. a duplicate/racy
+            # click signal. Building a second card here would silently
+            # steal the shared Annotations/Metadata widgets away from the
+            # one already on screen (via _attach_shared_sections()),
+            # leaving that one's body blank while a second, orphaned card
+            # never gets shown -- exactly the "expands again into a bugged
+            # state" symptom. Just make sure the existing card is
+            # positioned correctly and stop.
+            if scroll:
+                self._scroll_row_to_top(index)
+            else:
+                self._reposition_expanded_card()
+            return
+
+        if self._selected_row >= 0 and self._selected_row != row:
+            self._collapse_expanded_widget()
+        self._selected_row = row
+
+        # A real widget, but deliberately NOT via QListView.setIndexWidget()
+        # -- see class docstring. Manually parented to the viewport instead,
+        # so normal Qt widget ownership applies: we show/hide/delete it
+        # ourselves, no risk of Qt's view-internal bookkeeping deleting it
+        # (or us) out from under the other.
+        card = _NavigatorCard(
+            row, self._table_model, self._microsentry_mode, parent=self._list.viewport()
+        )
+        card.setAutoFillBackground(True)  # opaque -- otherwise the (unpainted) row shows through
+        card.set_expanded(True)
+        card.clicked.connect(self._on_card_clicked)
+        self._expanded_card = card
+        self._delegate.set_expanded_row(row)
+        self._delegate.set_expanded_card(card)
+        card.installEventFilter(self)
+        self._attach_shared_sections()
+
+        # show() BEFORE doItemsLayout(): Qt layouts skip hidden widgets when
+        # computing sizeHint(), and a widget only counts as "visible" once
+        # its whole ancestor chain is shown. Before this card is shown, its
+        # body (and everything inside it -- annotations, metadata) is
+        # effectively invisible to Qt's layout system no matter how many
+        # times set_expanded(True)/addWidget() ran, so card.sizeHint() would
+        # silently report just the header's height. Show first so the
+        # delegate's sizeHint() (called from doItemsLayout()) sees the real,
+        # fully-visible content.
+        card.show()
+        self._list.doItemsLayout()
+        card.setGeometry(self._list.visualRect(index))
+        card.raise_()
+
+        if scroll:
+            self._scroll_row_to_top(index)
+        else:
+            self._reposition_expanded_card()
+        # doItemsLayout() doesn't always finish settling QListView's
+        # internal row-position cache synchronously -- visualRect() can
+        # still report stale/empty geometry for a beat afterward, even
+        # though it's correct one event-loop turn later. Reposition once
+        # more once that's had a chance to happen.
+        QTimer.singleShot(0, self._reposition_expanded_card)
+
+    def _collapse_expanded_widget(self) -> None:
+        if self._expanded_card is None:
+            return
+        card = self._expanded_card
+        self._release_shared_sections()  # detach the singletons BEFORE deleting the card
+        card.removeEventFilter(self)
+        card.set_expanded(False)  # deleteLater() is deferred -- don't leave it visually stale meanwhile
+        self._delegate.set_expanded_row(-1)
+        self._delegate.set_expanded_card(None)
+        self._expanded_card = None
+        self._selected_row = -1
+        card.setParent(None)
+        card.deleteLater()
+        self._list.doItemsLayout()  # the row shrinks back to collapsed height
+        self._list.viewport().update()  # force a repaint of the area the card vacated
+
+    def _reposition_expanded_card(self, *args) -> None:
+        """Move the expanded row's card to wherever its row currently sits.
+
+        Needed because the card is a plain child widget with manually set
+        geometry, not something QListView positions on its own -- call this
+        after anything that could shift row positions: scrolling, resizing,
+        sorting, filtering, or the card's own content changing size.
+        """
+        if self._expanded_card is None or self._selected_row < 0:
+            return
+        proxy_row = self._proxy_row_from_source(self._selected_row)
+        if proxy_row < 0:
+            return
+        index = self._proxy.index(proxy_row, NavigatorColumns.IMG_ID)
+        self._expanded_card.setGeometry(self._list.visualRect(index))
+
+    def _scroll_row_to_top(self, index) -> None:
+        """Scroll the list so *index* sits at the very top of the visible area.
 
         Used for Prev/Next (A/D) navigation so the currently viewed image's
-        card stays anchored at the top instead of merely being scrolled into
-        view somewhere in the middle or bottom. Expanding the card just now
-        dirtied the layout, so force it to settle before reading card.y() --
-        otherwise it (and the scrollbar's range) would still reflect stale,
-        pre-expansion geometry.
+        row stays anchored at the top instead of merely being scrolled into
+        view somewhere in the middle or bottom.
         """
-        self._cards_layout.activate()
-        QCoreApplication.sendPostedEvents()
-        QCoreApplication.processEvents()
-        self._scroll.verticalScrollBar().setValue(card.y())
+        self._list.scrollTo(index, QAbstractItemView.PositionAtTop)
+        self._reposition_expanded_card()
 
     def _release_shared_sections(self) -> None:
         """Move the shared Annotations/Metadata widgets back to the holding slot.
 
-        Must run before a card that might currently host them is deleted —
-        otherwise Qt would cascade-delete these singleton widgets along with
-        the card.
+        Must run before the expanded card is detached from a row -- keeps
+        these singleton widgets from ever being reparented into limbo.
         """
         self.metadata.commit_pending_edits()
         self._shared_slot_layout.addWidget(self.annotations)
         self._shared_slot_layout.addWidget(self.metadata)
 
-    def _attach_shared_sections(self, card: _NavigatorCard) -> None:
-        """Reparent the shared Annotations/Metadata widgets into *card*'s body."""
+    def _attach_shared_sections(self) -> None:
+        """Reparent the shared Annotations/Metadata widgets into the expanded card's body."""
+        card = self._expanded_card
         body_layout = card.body_container().layout()
         body_layout.addWidget(self.annotations)
         body_layout.addWidget(self.metadata)
@@ -452,9 +576,11 @@ class DataNavigatorSection(QWidget):
     def set_microsentry_mode(self, enabled: bool) -> None:
         """Show or hide the Score field across the navigator cards."""
         self._microsentry_mode = enabled
-        for card in self._cards.values():
-            card.set_microsentry_mode(enabled)
+        if self._expanded_card is not None:
+            self._expanded_card.set_microsentry_mode(enabled)
+        self._delegate.set_microsentry_mode(enabled)
         self._table_model.refresh_inference()
+        self._list.viewport().update()
 
     def enable_inference_columns(self) -> None:
         """Reveal the Score field; called once inference data is available."""

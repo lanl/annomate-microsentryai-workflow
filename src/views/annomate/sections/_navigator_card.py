@@ -65,14 +65,20 @@ def _pill_text_width(name: str) -> int:
 
 
 def _make_pill(name: str, rgb) -> QLabel:
-    lbl = QLabel(name)
+    lbl = QLabel()
     lbl.setAlignment(Qt.AlignCenter)
+    _configure_pill(lbl, name, rgb)
+    return lbl
+
+
+def _configure_pill(lbl: QLabel, name: str, rgb) -> None:
+    """Update a reusable pill label without replacing the widget."""
+    lbl.setText(name)
     lbl.setStyleSheet(
         f"QLabel {{ border: {_PILL_BORDER_W}px solid rgb{tuple(rgb)}; "
         f"border-radius: 7px; padding: 0px {_PILL_PADDING_X}px; color: black; "
         f"font-size: {_PILL_FONT_PX}px; background: transparent; }}"
     )
-    return lbl
 
 
 class _ClassPillTray(QWidget):
@@ -90,6 +96,8 @@ class _ClassPillTray(QWidget):
         self._layout = QHBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(_PILL_SPACING)
+        self._pills: list[QLabel] = []
+        self._layout.addStretch(1)
 
     def sizeHint(self) -> QSize:
         # Pinned regardless of content: this widget is purely reactive to the
@@ -111,15 +119,24 @@ class _ClassPillTray(QWidget):
         self._refit()
 
     def _refit(self) -> None:
-        while self._layout.count():
-            item = self._layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+        visible_entries = self._fitting_entries()
 
-        for name, rgb in self._fitting_entries():
-            self._layout.addWidget(_make_pill(name, rgb))
-        self._layout.addStretch(1)
+        # Delegate painting reuses this tray many times in one synchronous
+        # scroll pass. Keep stable child widgets instead of creating and
+        # deleteLater()-ing labels while Qt is itself traversing the render
+        # tree; that made the result depend on viewport paint order.
+        while len(self._pills) < len(visible_entries):
+            pill = _make_pill("", (0, 0, 0))
+            self._layout.insertWidget(len(self._pills), pill)
+            self._pills.append(pill)
+
+        for index, pill in enumerate(self._pills):
+            if index < len(visible_entries):
+                name, rgb = visible_entries[index]
+                _configure_pill(pill, name, rgb)
+                pill.show()
+            else:
+                pill.hide()
 
     def _fitting_entries(self) -> list:
         available = self.width()
@@ -289,6 +306,29 @@ class _NavigatorCard(QWidget):
 
     def source_row(self) -> int:
         return self._source_row
+
+    def set_source_row(self, source_row: int) -> None:
+        """Retarget this (possibly reused) card at a different dataset row."""
+        self._source_row = source_row
+        self.refresh()
+
+    def prepare_collapsed_render(self, width: int, height: int) -> None:
+        """Lay out a reused collapsed card before a delegate renders it.
+
+        ``refresh()`` changes badge, decision, and score visibility. Those
+        changes alter the width left for the class-pill tray, but Qt does not
+        assign that new geometry until the layout is activated. Refit the
+        pills after that pass so the fit calculation never uses the previous
+        row's tray width.
+        """
+        self.resize(width, height)
+        self.layout().activate()
+        self._header.layout().activate()
+        self._pill_tray._refit()
+        # _refit() creates labels in this nested layout. Without activating
+        # it, a new pill can retain QWidget's default 640x480 geometry; its
+        # centered text then falls outside the tray's clip rect.
+        self._pill_tray.layout().activate()
 
     def is_expanded(self) -> bool:
         return self._expanded

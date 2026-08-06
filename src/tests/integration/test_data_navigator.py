@@ -33,8 +33,18 @@ def source_rows(widget):
     ]
 
 
-def first_card(widget):
-    return widget._cards_layout.itemAt(0).widget()
+def click_proxy_row(widget, qtbot, proxy_row):
+    """Simulate a real click on the collapsed (delegate-painted) row at *proxy_row*."""
+    index = widget._proxy.index(proxy_row, NavigatorColumns.IMG_ID)
+    rect = widget._list.visualRect(index)
+    qtbot.mouseClick(widget._list.viewport(), Qt.LeftButton, pos=rect.center())
+
+
+def test_list_does_not_capture_window_navigation_hotkeys(navigator):
+    """The virtualized view must leave A/D handling to AnnoMateWindow."""
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+
+    assert widget._list.focusPolicy() == Qt.NoFocus
 
 
 def test_sorting_reorders_cards_and_reverses(navigator):
@@ -53,12 +63,13 @@ def test_sorting_reorders_cards_and_reverses(navigator):
     assert {tuple(first_order), tuple(second_order)} == {(1, 0, 2), (2, 0, 1)}
 
 
-def test_clicking_top_card_emits_source_row(navigator, qtbot):
-    """Verify that clicking the visually-first card emits image_selected with its source row.
+def test_clicking_top_row_emits_source_row(navigator, qtbot):
+    """Verify that clicking the visually-first row emits image_selected with its source row.
 
     Adds two annotations to source row 2 ('c.jpg'), sorts descending by
-    annotation count so 'c.jpg' rises to the top, then clicks that card's
-    header. Success means the image_selected signal emits source row 2.
+    annotation count so 'c.jpg' rises to the top, then clicks that row (it's
+    delegate-painted, not a real widget, so the click goes through
+    QListView's viewport like a real user click would).
     """
     widget, dataset_model, _inference_model, _tmp_path = navigator
     dataset_model.add_annotation(2, "Defect", [(0, 0), (1, 0), (1, 1)])
@@ -66,22 +77,21 @@ def test_clicking_top_card_emits_source_row(navigator, qtbot):
     widget._proxy.sort(NavigatorColumns.ANNOTS, Qt.DescendingOrder)
     qtbot.wait(20)
 
-    card = first_card(widget)
-    assert card.source_row() == 2
+    index = widget._proxy.index(0, NavigatorColumns.IMG_ID)
+    assert widget._source_row_from_proxy(index) == 2
 
     with qtbot.waitSignal(widget.image_selected, timeout=1000) as blocker:
-        qtbot.mouseClick(card._header, Qt.LeftButton)
+        click_proxy_row(widget, qtbot, 0)
 
     assert blocker.args == [2]
 
 
-def test_select_row_expands_only_that_card_after_sort(navigator):
-    """Verify that select_row expands the correct card after a sort and supports adjacent navigation.
+def test_select_row_expands_only_that_row_after_sort(navigator):
+    """Verify that select_row expands the correct row after a sort and supports adjacent navigation.
 
     After ascending sort by image ID (a=0, b=1, c=2), calls select_row with
-    different source rows and confirms only the final selection is expanded.
-    Also verifies adjacent_source_row returns the adjacent source rows in the
-    current sort order.
+    different source rows and confirms only the final selection ends up
+    attached to the single shared expanded-card widget.
     """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
     widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
@@ -90,19 +100,20 @@ def test_select_row_expands_only_that_card_after_sort(navigator):
     widget.select_row(2)
     widget.select_row(0)
 
-    expanded = [row for row, card in widget._cards.items() if card.is_expanded()]
-    assert expanded == [0]
+    assert widget._selected_row == 0
+    assert widget._expanded_card.source_row() == 0
+    assert widget._expanded_card.is_expanded() is True
     assert widget.adjacent_source_row(0, -1) == 1
     assert widget.adjacent_source_row(0, 1) == 2
 
 
-def test_select_row_scrolls_expanded_card_to_top(navigator, qtbot):
-    """Verify Prev/Next-style navigation (select_row) pins the active card to the top of the list.
+def test_select_row_scrolls_expanded_row_to_top(navigator, qtbot):
+    """Verify Prev/Next-style navigation (select_row) pins the active row to the top of the list.
 
-    With three cards in a viewport too short to show them all at once,
-    selecting the last card should scroll the list so that card's top edge
+    With three rows in a viewport too short to show them all at once,
+    selecting the last row should scroll the list so that row's top edge
     sits at the very top of the visible area, matching the A/D keyboard
-    navigation expectation that the current image's card stays anchored at
+    navigation expectation that the current image's row stays anchored at
     the top instead of landing somewhere in the middle or bottom.
     """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
@@ -111,25 +122,31 @@ def test_select_row_scrolls_expanded_card_to_top(navigator, qtbot):
     widget.select_row(2)
     qtbot.wait(20)
 
-    card = widget._cards[2]
-    scrollbar = widget._scroll.verticalScrollBar()
-    assert card.y() > 0  # sanity check: there's actually something to scroll past
-    assert scrollbar.value() == min(card.y(), scrollbar.maximum())
+    assert widget._list.verticalScrollBar().maximum() > 0  # something to scroll past
+    index = widget._proxy.index(
+        widget._proxy_row_from_source(2), NavigatorColumns.IMG_ID
+    )
+    assert widget._list.visualRect(index).top() == 0
 
 
 def test_microsentry_mode_shows_score_and_score_resorts(navigator, qtbot):
     """Verify that microsentry mode reveals the score label and re-sorts by score after inference.
 
-    Initially the score label is hidden on every card. After enabling
-    microsentry mode it becomes visible. After storing inference results and
-    calling set_row_inference, sorting by score descending should place the
-    highest-scoring row (c.jpg, source row 2) at the top.
+    Initially the score label is hidden, both on the delegate's collapsed-row
+    flyweight and on the expanded row's real widget. After enabling
+    microsentry mode it becomes visible on both. After storing inference
+    results and calling set_row_inference, sorting by score descending
+    should place the highest-scoring row (c.jpg, source row 2) at the top.
     """
     widget, _dataset_model, inference_model, tmp_path = navigator
-    assert not widget._cards[0]._score_lbl.isVisible()
+    flyweight = widget._delegate._flyweight
+    assert flyweight._score_lbl.isVisibleTo(flyweight) is False
 
     widget.set_microsentry_mode(True)
-    assert widget._cards[0]._score_lbl.isVisible()
+    assert flyweight._score_lbl.isVisibleTo(flyweight) is True
+
+    widget.select_row(0)
+    assert widget._expanded_card._score_lbl.isVisible() is True
 
     inference_model.set_score_map(
         str(tmp_path / "b.jpg"), 0.25, np.zeros((2, 2), dtype=np.float32)
@@ -200,23 +217,54 @@ def test_filter_panel_decision_checkbox_filters_to_accepted_rows(navigator, qtbo
     assert widget._proxy.decision_filter() == frozenset({"accept"})
 
 
-def test_filter_panel_checkbox_actually_rebuilds_the_card_list(navigator, qtbot):
-    """Regression: invalidateFilter()/invalidateRowsFilter() don't reliably emit
-    layoutChanged in this Qt build, so _on_proxy_order_changed (which listens
-    for it) never fired from a filter change alone -- the proxy's rowCount()
-    updated correctly but the actual card widgets never got rebuilt, so the
-    on-screen list silently stayed unfiltered. _apply_filters() must rebuild
-    the card list itself rather than relying on that signal.
+def test_expanded_card_never_becomes_a_top_level_window(navigator, qtbot):
+    """Regression: the expanded-card widget must never flash open as a real
+    top-level OS window. It's constructed with the list's viewport passed
+    as its parent up front -- unlike the old per-row rebuild path, there's
+    no point where a parentless card gets setVisible(True) first.
+    """
+    widget, _dataset_model, _inference_model, _tmp_path = navigator
+    widget.select_row(0)
+    assert widget._expanded_card.isWindow() is False
+    assert widget._expanded_card.windowHandle() is None
+
+
+def test_filtering_out_the_expanded_row_collapses_it(navigator, qtbot):
+    """Regression: with a fresh expanded-card widget built per selection
+    instead of a per-row dict, filtering the currently expanded row out of
+    view must explicitly release and delete it -- otherwise it would sit
+    around attached to a row that no longer exists in the filtered list.
     """
     widget, dataset_model, _inference_model, _tmp_path = navigator
-    dataset_model.set_review_decision(1, "accept")
+    dataset_model.set_review_decision(1, "accept")  # row 1 becomes "reviewed"
     qtbot.wait(20)
-    assert set(widget._cards.keys()) == {0, 1, 2}
+    widget.select_row(1)
+    assert widget._expanded_card is not None
+    assert widget._expanded_card.is_expanded() is True
 
-    widget._filter_panel._decision_checks["accept"].setChecked(True)
+    widget._filter_panel._status_checks["undecided"].setChecked(True)  # hides row 1
 
-    assert set(widget._cards.keys()) == {1}
-    assert widget._cards_layout.count() == 2  # 1 card + trailing stretch
+    assert widget._selected_row == -1
+    assert widget._expanded_card is None
+
+
+def test_loading_a_smaller_dataset_collapses_out_of_range_selection(navigator, qtbot):
+    """Loading a dataset smaller than the previous one, while the now-out-of-
+    range row is expanded, must release the expanded-card widget rather than
+    leaving our reference pointing at one Qt may have already deleted.
+    """
+    widget, dataset_model, _inference_model, tmp_path = navigator
+    widget.select_row(2)
+    qtbot.wait(20)
+    assert widget._expanded_card is not None
+    assert widget._expanded_card.is_expanded() is True
+
+    dataset_model.load_folder(str(tmp_path), ["d.jpg", "e.jpg"])
+    qtbot.wait(20)
+
+    assert widget.dataset_model.rowCount() == 2
+    assert widget._selected_row == -1
+    assert widget._expanded_card is None
 
 
 def test_filter_panel_conflicting_checkbox_isolates_accept_conflict_rows(
@@ -303,7 +351,7 @@ def test_filter_panel_class_checkbox_filters_by_annotation_class(navigator, qtbo
 
     assert source_rows(widget) == [0]
     assert widget._proxy.class_filter() == frozenset({"crack"})
-    assert set(widget._cards.keys()) == {0}
+    assert set(source_rows(widget)) == {0}
 
 
 def test_filter_panel_checkbox_labels_show_image_counts(navigator, qtbot):
@@ -376,47 +424,56 @@ def test_sort_menu_same_field_reverses_different_field_resets_ascending(navigato
     assert "↑" in widget._filter_panel._sort_radios[NavigatorColumns.ANNOTS].text()
 
 
-def test_clicking_a_second_card_collapses_the_first_accordion_style(navigator, qtbot):
-    """Verify only one card is ever expanded at a time.
+def test_selecting_a_second_row_collapses_the_first_accordion_style(navigator, qtbot):
+    """Verify only one row is ever expanded at a time.
 
-    Clicking card B while card A is expanded must collapse A and expand B,
-    and the shared Annotations/Metadata sections move along with the
-    expansion into B's body.
+    Selecting row B while row A is expanded must retarget the single shared
+    expanded-card widget at B, and the shared Annotations/Metadata sections
+    move along with it.
     """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
     widget._proxy.sort(NavigatorColumns.IMG_ID, Qt.AscendingOrder)
 
     widget.select_row(0)
-    assert widget._cards[0].is_expanded() is True
+    assert widget._expanded_card.source_row() == 0
+    assert widget._expanded_card.is_expanded() is True
 
     widget.select_row(1)
-    assert widget._cards[0].is_expanded() is False
-    assert widget._cards[1].is_expanded() is True
-    assert widget.annotations.parent() is widget._cards[1].body_container()
-    assert widget.metadata.parent() is widget._cards[1].body_container()
+    assert widget._expanded_card.source_row() == 1
+    assert widget._expanded_card.is_expanded() is True
+    assert widget.annotations.parent() is widget._expanded_card.body_container()
+    assert widget.metadata.parent() is widget._expanded_card.body_container()
 
 
-def test_clicking_expanded_card_collapses_then_navigation_reexpands(
+def test_clicking_expanded_row_collapses_then_navigation_reexpands(
     navigator, qtbot
 ):
-    """A repeated card click collapses it; programmatic image navigation expands it."""
+    """A repeated header click collapses the expanded row; programmatic image navigation re-expands it.
+
+    Each expansion builds a fresh card (see module docstring in navigator.py
+    -- collapsing deletes the old one rather than reusing it), so this
+    checks widget._expanded_card's identity/state rather than holding onto
+    one card instance across the collapse.
+    """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
     widget.select_row(0)
-    card = widget._cards[0]
+    card = widget._expanded_card
     assert card.is_expanded() is True
 
     qtbot.mouseClick(card._header, Qt.LeftButton)
 
-    assert card.is_expanded() is False
+    assert widget._expanded_card is None
+    assert card.is_expanded() is False  # reset before its deferred deleteLater() runs
     assert widget.annotations.parent() is widget._shared_slot
     assert widget.metadata.parent() is widget._shared_slot
 
     # Window navigation (including A/D) calls select_row for the destination.
     widget.select_row(0)
 
-    assert card.is_expanded() is True
-    assert widget.annotations.parent() is card.body_container()
-    assert widget.metadata.parent() is card.body_container()
+    assert widget._expanded_card is not None
+    assert widget._expanded_card.is_expanded() is True
+    assert widget.annotations.parent() is widget._expanded_card.body_container()
+    assert widget.metadata.parent() is widget._expanded_card.body_container()
 
 
 def test_typed_inspector_edit_persists_when_switching_cards_without_blur(
