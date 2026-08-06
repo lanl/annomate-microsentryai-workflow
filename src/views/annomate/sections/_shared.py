@@ -6,6 +6,14 @@ _COLOR_UNDECIDED = "#888888"
 _COLOR_INCOMPLETE = "#ff9800"
 _COLOR_SELECTED_BG = "#d6d6d6"  # light grey, standing in for palette(highlight)'s accent blue
 
+# Applied to the QApplication itself (see main.py) so every tooltip in the
+# app looks the same, instead of each widget/section falling back to
+# whatever the native platform style happens to render for QToolTip.
+TOOLTIP_STYLESHEET = (
+    f"QToolTip {{ background-color: {_COLOR_SELECTED_BG}; color: black; "
+    "padding: 2px 4px; border: 1px solid palette(shadow); }"
+)
+
 
 class _ClickableFrame(QFrame):
     """A QFrame that emits clicked() on a left-button press."""

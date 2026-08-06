@@ -37,18 +37,29 @@ from controllers.project_controller import ProjectController
 from controllers.center_template_controller import CenterTemplateController
 
 from views.app_window import AppWindow
+from views.annomate.sections._shared import TOOLTIP_STYLESHEET
 
 from core.utils.logger import setup_logging
 
 setup_logging()
 
 
+def _configure_theme(app: QApplication) -> None:
+    """Force one consistent light Fusion look across all platforms.
+
+    Fusion is required for the rest of this to actually take: native
+    styles often draw tooltips (and other chrome) through the platform's
+    own theme engine, ignoring QPalette/QSS, so light-mode + a stylesheet
+    only "stick" everywhere once Fusion is in charge of the painting.
+    """
+    app.setStyle("Fusion")
+    app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    app.setStyleSheet(TOOLTIP_STYLESHEET)
+
+
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-
-    # Force Light Theme globally across all OS platforms
-    app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    _configure_theme(app)
 
     # States
     dataset_state = DatasetState()

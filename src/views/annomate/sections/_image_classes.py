@@ -7,13 +7,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from views.icons import material_icon
+
 from ._shared import _ClickableFrame
 
 _DOT_W = 16
+_CHECK_ICON_SIZE = 12
 
 
 class _ImageClassRow(_ClickableFrame):
-    """One class as a row: color dot, name, and a checkmark if tagged.
+    """One class as a row: color dot, name, and a check icon if tagged.
+
+    The check icon sits immediately after the name (not pushed to the row's
+    far edge) so it reads as "this name is checked" rather than as a
+    separate trailing column.
 
     Signals:
         toggled (str): This row's class name, emitted on click -- only
@@ -45,13 +52,19 @@ class _ImageClassRow(_ClickableFrame):
 
         name_lbl = QLabel(name)
         name_lbl.setStyleSheet("color: black; font-size: 11px;")
-        h.addWidget(name_lbl, 1)
+        h.addWidget(name_lbl)
 
-        check_lbl = QLabel("✓" if tagged else "")
-        check_lbl.setStyleSheet("color: black; font-weight: bold;")
-        check_lbl.setFixedWidth(16)
-        check_lbl.setAlignment(Qt.AlignCenter)
+        check_lbl = QLabel()
+        check_lbl.setFixedSize(_CHECK_ICON_SIZE, _CHECK_ICON_SIZE)
+        if tagged:
+            check_lbl.setPixmap(
+                material_icon("check", size=_CHECK_ICON_SIZE, color="black").pixmap(
+                    _CHECK_ICON_SIZE, _CHECK_ICON_SIZE
+                )
+            )
         h.addWidget(check_lbl)
+
+        h.addStretch(1)
 
 
 class ImageClassesSection(QWidget):

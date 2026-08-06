@@ -116,9 +116,9 @@ class DataNavigatorSection(QWidget):
         self._on_model_reset()
 
     def _init_ui(self) -> None:
+        # Tooltip styling is app-wide (see main.py's _configure_theme) --
+        # this widget only owns its own filter-chip hover rule.
         self.setStyleSheet(
-            f"QToolTip {{ background-color: {_COLOR_SELECTED_BG}; color: black; "
-            "padding: 2px 4px; border: 1px solid palette(shadow); } "
             f"QFrame#navigatorFilterChip:hover {{ background-color: {_COLOR_SELECTED_BG}; "
             "border-radius: 4px; }"
         )

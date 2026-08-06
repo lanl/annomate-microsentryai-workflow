@@ -64,14 +64,17 @@ def test_collapsed_delegate_exposes_card_and_icon_tooltips(navigator):
     assert delegate._tooltip_at(card._header.rect().topLeft()) == card._header.toolTip()
 
 
-def test_navigator_tooltips_use_selected_card_background(navigator):
+def test_navigator_does_not_duplicate_app_wide_tooltip_styling(navigator):
+    """Tooltip styling is applied once, app-wide (see main.py) -- not per-widget.
+
+    Regression guard: navigator.py used to set its own local QToolTip rule.
+    If that ever creeps back in here, it would shadow (or drift from) the
+    app-wide styling for this widget's subtree, so this asserts the local
+    stylesheet stays free of it.
+    """
     widget, _dataset_model, _inference_model, _tmp_path = navigator
 
-    assert "QToolTip" in widget.styleSheet()
-    assert "background-color: #d6d6d6" in widget.styleSheet()
-    assert "}}" not in widget.styleSheet()
-    tooltip_rule = widget.styleSheet().split("}", 1)[0]
-    assert "border-radius" not in tooltip_rule
+    assert "QToolTip" not in widget.styleSheet()
 
 
 def test_navigator_header_hover_uses_selected_card_background(navigator):
