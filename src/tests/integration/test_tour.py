@@ -20,7 +20,17 @@ def isolated_settings():
     settings.clear()
 
 
-def _build_window(qtbot, settings, tour_started: bool = True):
+def _build_window(qtbot, monkeypatch, settings, tour_started: bool = True):
+    # These tests only exercise tour UI wiring. Without this, AnnoMateWindow's
+    # startup autoload would spin up a real background QThread whenever this
+    # machine has SAM weights cached on disk — one that can outlive the window
+    # (nothing here calls shutdown()) and later deliver a signal into an
+    # already-deleted window, crashing the process. Also makes these tests'
+    # behavior depend on local disk state, which they shouldn't.
+    monkeypatch.setattr(
+        "controllers.sam_controller.SAMController.try_autoload",
+        lambda self, variant: False,
+    )
     dataset_model = DatasetTableModel(DatasetState())
     io_controller = IOController(dataset_model)
     win = AnnoMateWindow(dataset_model, io_controller)
@@ -32,13 +42,13 @@ def _build_window(qtbot, settings, tour_started: bool = True):
 
 
 @pytest.fixture
-def main_window(qtbot, isolated_settings):
+def main_window(qtbot, monkeypatch, isolated_settings):
     """A real AnnoMateWindow with an isolated tour settings store.
 
     `_tour_started` is pre-set so showing the window does not auto-launch the
     tour — tests drive TourManager explicitly for deterministic behavior.
     """
-    win = _build_window(qtbot, isolated_settings, tour_started=True)
+    win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=True)
     win.show()
     qtbot.waitExposed(win)
     return win
@@ -163,14 +173,16 @@ class TestTourManager:
 
 
 class TestTourAutoStartWiring:
-    def test_first_show_auto_starts_tour_when_fresh(self, qtbot, isolated_settings):
+    def test_first_show_auto_starts_tour_when_fresh(
+        self, qtbot, monkeypatch, isolated_settings
+    ):
         """Verify the tour auto-launches on the very first showEvent when unseen.
 
         This exercises the real AnnoMateWindow.showEvent wiring rather than
         TourManager's API in isolation. Success means the tour is active
         immediately after the window is first shown, given fresh settings.
         """
-        win = _build_window(qtbot, isolated_settings, tour_started=False)
+        win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=False)
 
         win.show()
         qtbot.waitExposed(win)
@@ -178,7 +190,7 @@ class TestTourAutoStartWiring:
         assert win._tour_manager.is_active() is True
 
     def test_tour_does_not_reappear_after_being_completed(
-        self, qtbot, isolated_settings
+        self, qtbot, monkeypatch, isolated_settings
     ):
         """Verify completing the tour once prevents it from auto-starting on a later launch.
 
@@ -186,12 +198,12 @@ class TestTourAutoStartWiring:
         against the same (now-completed) settings store. Success means the
         new window's first show() does not activate the tour.
         """
-        first_win = _build_window(qtbot, isolated_settings, tour_started=False)
+        first_win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=False)
         first_win.show()
         qtbot.waitExposed(first_win)
         first_win._tour_manager.skip()
 
-        second_win = _build_window(qtbot, isolated_settings, tour_started=False)
+        second_win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=False)
         second_win.show()
         qtbot.waitExposed(second_win)
 
