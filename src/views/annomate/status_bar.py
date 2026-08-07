@@ -58,10 +58,6 @@ class AnnoMateStatusBar(QWidget):
         h.addWidget(self._lbl_tool_hint)
 
         h.addWidget(self._pipe())
-        self._lbl_class = QLabel("Class: —")
-        h.addWidget(self._lbl_class)
-
-        h.addWidget(self._pipe())
         self._lbl_session = QLabel("Session: —")
         h.addWidget(self._lbl_session)
 
@@ -120,9 +116,6 @@ class AnnoMateStatusBar(QWidget):
         """Update the tool hint area with a dynamic SAM status message."""
         self._lbl_tool_hint.setText(f"  —  {text}" if text else "")
         self._lbl_tool_hint.setVisible(bool(text))
-
-    def set_class(self, name: str) -> None:
-        self._lbl_class.setText(f"Class: {name}" if name else "Class: —")
 
     @staticmethod
     def _format_duration(seconds: float) -> str:

@@ -70,6 +70,7 @@ class ImageLabel(QLabel):
     polygonSelected = Signal(int)  # polygon index (-1 for deselect)
     toolCanceled = Signal()  # Escape pressed while a tool is active
     draw_attempted = Signal()  # left-click while a drawing tool is active
+    polygonDiscarded = Signal()  # pending (unclassified) polygon dropped by the user
     zoom_changed = Signal(float)  # emitted whenever _zoom changes
     image_loaded = Signal(int, int)  # (orig_w, orig_h) emitted when a new image is set
     ai_polygon_clicked = Signal(int, QPointF)  # (ai_idx, view_pos); -1 = deselect
@@ -123,6 +124,7 @@ class ImageLabel(QLabel):
         self.current_polygon_points: List[QPointF] = []
         self._overlays: List[Tuple[List[QPointF], QColor, float, bool]] = []
         self._ai_overlays: List[List[QPointF]] = []
+        self._pending_polygon: Optional[List[QPointF]] = None
         self._anomaly_area_violations: set = set()
         self._anomaly_distance_pairs: set = set()
         self._anomaly_dist_values: dict = {}
@@ -193,6 +195,7 @@ class ImageLabel(QLabel):
         self.clear_current_polygon()
         self._overlays = []
         self._ai_overlays = []
+        self._pending_polygon = None
         self._anomaly_area_violations = set()
         self._anomaly_distance_pairs = set()
         self._anomaly_dist_values = {}
@@ -286,6 +289,7 @@ class ImageLabel(QLabel):
         self.current_polygon_points.clear()
         self._overlays = []
         self._ai_overlays = []
+        self._pending_polygon = None
         self.selected_polygon_idx = -1
         self._dragging_polygon = False
         self._polygon_drag_moved = False
@@ -320,15 +324,6 @@ class ImageLabel(QLabel):
             self.setCursor(Qt.CrossCursor)
         elif tool_name is None:
             self.setCursor(Qt.ArrowCursor)
-
-    def set_active_color(self, color: QColor) -> None:
-        """Set the stroke color used when drawing a new polygon.
-
-        Args:
-            color (QColor): Desired color. Falls back to ``QColor(0, 200, 0)``
-                if *color* is not a valid :class:`~PySide6.QtGui.QColor`.
-        """
-        self._active_color = color if isinstance(color, QColor) else QColor(0, 200, 0)
 
     @property
     def center_crop_calibrating(self) -> bool:
@@ -579,6 +574,32 @@ class ImageLabel(QLabel):
         y0, y1 = int(min(ys)), int(max(ys))
         return QRect(x0, y0, x1 - x0, y1 - y0)
 
+    def set_pending_polygon(self, pts_orig: List[Tuple[float, float]]) -> None:
+        """Store a just-finished, not-yet-classified polygon for preview rendering.
+
+        Args:
+            pts_orig: Polygon vertices in original image coordinates. An empty
+                list clears the pending polygon.
+        """
+        if not pts_orig:
+            self._pending_polygon = None
+        else:
+            self._pending_polygon = [
+                QPointF(x * self._base_scale, y * self._base_scale)
+                for (x, y) in pts_orig
+            ]
+        self.update()
+
+    def get_pending_polygon_view_rect(self) -> QRect:
+        """Return the bounding rect of the pending polygon in widget (view) coordinates."""
+        if not self._pending_polygon:
+            return QRect()
+        xs = [p.x() * self._zoom + self._pan.x() for p in self._pending_polygon]
+        ys = [p.y() * self._zoom + self._pan.y() for p in self._pending_polygon]
+        x0, x1 = int(min(xs)), int(max(xs))
+        y0, y1 = int(min(ys)), int(max(ys))
+        return QRect(x0, y0, x1 - x0, y1 - y0)
+
     def clear_current_polygon(self) -> None:
         """Discard all in-progress polygon vertices and repaint."""
         self.current_polygon_points.clear()
@@ -778,6 +799,11 @@ class ImageLabel(QLabel):
                 return
 
         if event.key() == Qt.Key_Escape:
+            if self._pending_polygon is not None:
+                self._pending_polygon = None
+                self.update()
+                self.polygonDiscarded.emit()
+                return
             self.clear_current_polygon()
             self.set_tool(None)
             self.toolCanceled.emit()
@@ -822,6 +848,12 @@ class ImageLabel(QLabel):
         self.setFocus()
 
         if event.button() == Qt.LeftButton:
+            if self._pending_polygon is not None:
+                self._pending_polygon = None
+                self.update()
+                self.polygonDiscarded.emit()
+                return
+
             if self.current_tool in (SAM_BBOX, POLYGON):
                 self.draw_attempted.emit()
                 if (
@@ -1531,6 +1563,18 @@ class ImageLabel(QLabel):
             fill_alpha = 60 if is_selected else 20
             painter.setBrush(QBrush(QColor(255, 80, 80, fill_alpha)))
             painter.drawPolygon(QPolygonF(pts + [pts[0]]))
+
+        # Draw the just-finished, not-yet-classified polygon awaiting a class pick.
+        # Same color as the in-progress line above and the SAM ghost below — the
+        # polygon only takes on its real class color once accepted.
+        if self._pending_polygon and len(self._pending_polygon) >= 3:
+            pending_color = QColor(self._active_color)
+            pending_pen = QPen(pending_color, 2.0 / self._zoom, Qt.DashLine)
+            pending_pen.setDashPattern([8, 4])
+            painter.setPen(pending_pen)
+            pending_color.setAlpha(45)
+            painter.setBrush(QBrush(pending_color))
+            painter.drawPolygon(QPolygonF(self._pending_polygon + [self._pending_polygon[0]]))
 
         # Draw SAM ghost polygon (pending accept/reject)
         if self._sam_ghost is not None:

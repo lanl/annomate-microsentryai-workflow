@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from views.annomate._splitter import StyledSplitter
+from views.icons import material_icon
 
 from views.annomate.image_label import ImageLabel, SAM_BBOX, CALIBRATE, MEASURE
 from views.annomate.left_panel import LeftPanel
@@ -41,14 +42,23 @@ from models.anomaly_constraint_model import AnomalyConstraintModel
 logger = logging.getLogger(__name__)
 
 
-class _AIAcceptPopup(QFrame):
-    """Floating accept button + class selector for a selected AI polygon."""
+class _ClassPickerPopup(QFrame):
+    """Floating class selector for a pending polygon (AI-detected or manually drawn).
+
+    When *show_reject* is set, an additional discard button is shown alongside
+    accept — used for manually-drawn polygons, which have no other way to be
+    dropped besides Escape/click-elsewhere.
+    """
 
     accepted = Signal()
+    rejected = Signal()
 
     _BTN_SIZE = 28
+    _ICON_SIZE = 16
 
-    def __init__(self, canvas: QWidget, parent: QWidget = None) -> None:
+    def __init__(
+        self, canvas: QWidget, parent: QWidget = None, show_reject: bool = False
+    ) -> None:
         super().__init__(parent or canvas)
         self._canvas = canvas
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
@@ -59,7 +69,7 @@ class _AIAcceptPopup(QFrame):
         layout.setSpacing(4)
 
         btn_accept = QToolButton()
-        btn_accept.setText("✓")
+        btn_accept.setIcon(material_icon("check", size=self._ICON_SIZE, color="black"))
         btn_accept.setToolTip("Accept polygon into selected class")
         btn_accept.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
         btn_accept.clicked.connect(self.accepted)
@@ -69,10 +79,18 @@ class _AIAcceptPopup(QFrame):
         self._combo.setToolTip("Class to assign polygon to")
         layout.addWidget(self._combo)
 
+        if show_reject:
+            btn_reject = QToolButton()
+            btn_reject.setIcon(material_icon("close", size=self._ICON_SIZE, color="black"))
+            btn_reject.setToolTip("Discard this polygon")
+            btn_reject.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
+            btn_reject.clicked.connect(self.rejected)
+            layout.addWidget(btn_reject)
+
         self.adjustSize()
         self.setVisible(False)
 
-    def set_classes(self, names: list, active: str) -> None:
+    def set_classes(self, names: list, active: str = "") -> None:
         self._combo.blockSignals(True)
         self._combo.clear()
         self._combo.addItems(names)
@@ -441,7 +459,7 @@ class AnnoMateWindow(QWidget):
         )
         self._prev_distance_method: str = self._anomaly_model.distance_method()
         self._current_row: int = -1
-        self._active_class: str = ""
+        self._pending_manual_pts: list = []
         self._active_tool: str = ""
         self._microsentry_enabled: bool = True
         self._current_bgr = None
@@ -469,6 +487,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.toolCanceled.connect(self._on_tool_canceled)
         self.canvas.polygonSelected.connect(self._on_canvas_polygon_selected)
         self.canvas.ai_polygon_clicked.connect(self._on_ai_polygon_clicked)
+        self.canvas.polygonDiscarded.connect(self._on_discard_manual_polygon)
 
         # Canvas → status bar (live feedback)
         self.canvas.zoom_changed.connect(self.status_bar.set_zoom)
@@ -481,7 +500,6 @@ class AnnoMateWindow(QWidget):
         self.left_panel.annotation_selected.connect(self._on_annotation_selected)
 
         # Right panel
-        self.right_panel.class_selected.connect(self._set_active_class)
         self.right_panel.load_model_requested.connect(self._on_load_model_requested)
         self.right_panel.load_previous_model_requested.connect(
             self._on_load_previous_model_requested
@@ -676,8 +694,12 @@ class AnnoMateWindow(QWidget):
         self._review_bar.decision_changed.connect(self._on_review_decision)
         self._review_bar.raise_()
 
-        self._ai_popup = _AIAcceptPopup(self.canvas, self.canvas)
+        self._ai_popup = _ClassPickerPopup(self.canvas, self.canvas)
         self._ai_popup.accepted.connect(self._on_accept_single_ai)
+
+        self._manual_popup = _ClassPickerPopup(self.canvas, self.canvas, show_reject=True)
+        self._manual_popup.accepted.connect(self._on_accept_manual_polygon)
+        self._manual_popup.rejected.connect(self._on_discard_manual_polygon)
 
         self.canvas.installEventFilter(self)
 
@@ -777,14 +799,14 @@ class AnnoMateWindow(QWidget):
             self._current_bgr = None
             self._current_ai_contours = []
             self._selected_ai_idx = -1
-            self._active_class = ""
+            self._pending_manual_pts = []
             self._review_bar.setVisible(False)
             self._ai_popup.setVisible(False)
+            self._manual_popup.setVisible(False)
             self.viewport_actions.set_image_loaded(False)
             self.viewport_actions.set_active_tool("")
             self.canvas.clear_image()
             self.right_panel.set_current_row(-1)
-            self.status_bar.set_class("")
             self._set_start_screen_visible(True)
         if (
             self._project_controller is not None
@@ -823,6 +845,8 @@ class AnnoMateWindow(QWidget):
         self.viewport_actions.reposition(self.canvas.size())
         self._ai_popup.setVisible(False)
         self._selected_ai_idx = -1
+        self._manual_popup.setVisible(False)
+        self._pending_manual_pts = []
         self.canvas.set_image(
             bgr
         )  # always set the original; resets zoom (expected on new image)
@@ -918,7 +942,7 @@ class AnnoMateWindow(QWidget):
         self.status_bar.set_tool("")
 
     def _on_draw_attempted(self) -> None:
-        """Guard against drawing without a valid class; cancels the tool if missing."""
+        """Guard against drawing with no classes defined at all; cancels the tool if so."""
         class_names = self.dataset_model.get_class_names()
         if not class_names:
             self.canvas.set_tool(None)
@@ -928,18 +952,6 @@ class AnnoMateWindow(QWidget):
             self.status_bar.set_tool("")
             QMessageBox.warning(
                 self, "No Classes Defined", "Add an annotation class before drawing."
-            )
-            return
-        if not self._active_class or self._active_class not in class_names:
-            self.canvas.set_tool(None)
-            self.tool_palette.deselect_all()
-            self.viewport_actions.set_active_tool("")
-            self._active_tool = ""
-            self.status_bar.set_tool("")
-            QMessageBox.warning(
-                self,
-                "No Class Selected",
-                "Select an annotation class in the panel before drawing.",
             )
 
     # ------------------------------------------------------------------ #
@@ -1123,12 +1135,6 @@ class AnnoMateWindow(QWidget):
     # Annotation slots
     # ------------------------------------------------------------------ #
 
-    def _set_active_class(self, name: str) -> None:
-        self._active_class = name
-        r, g, b = self.dataset_model.get_class_color(name)
-        self.canvas.set_active_color(QColor(r, g, b))
-        self.status_bar.set_class(name)
-
     def _on_anomaly_violations_updated(
         self, area_violations: set, distance_pairs: set, dist_values: dict
     ) -> None:
@@ -1166,18 +1172,48 @@ class AnnoMateWindow(QWidget):
         self._anomaly_controller.run_checks(annotations, scale)
 
     def _on_polygon_finished(self, pts: list) -> None:
+        """A polygon (manual draw or SAM-ghost accept) is complete but not yet classified.
+
+        Holds it as a pending overlay and shows a class-picker popup at its
+        bounding box instead of committing immediately — the right panel no
+        longer needs to pre-select a class before drawing.
+        """
         if self._current_row < 0 or not pts:
             return
         class_names = self.dataset_model.get_class_names()
         if not class_names:
             return
-        target = (
-            self._active_class if self._active_class in class_names else class_names[0]
-        )
-        self.dataset_model.add_annotation(
-            self._current_row, target, pts, self.canvas.line_thickness
-        )
+        self._pending_manual_pts = pts
+        self.canvas.set_pending_polygon(pts)
+        self.canvas.set_tool(None)
+        self.tool_palette.deselect_all()
+        self.viewport_actions.set_active_tool("")
+        self._active_tool = ""
+        self.status_bar.set_tool("")
+        self._manual_popup.set_classes(class_names)
+        bbox = self.canvas.get_pending_polygon_view_rect()
+        self._manual_popup.show_at_polygon(bbox)
+
+    def _on_accept_manual_polygon(self) -> None:
+        if not self._pending_manual_pts or self._current_row < 0:
+            return
+        target = self._manual_popup.current_class()
+        if target:
+            self.dataset_model.add_annotation(
+                self._current_row,
+                target,
+                self._pending_manual_pts,
+                self.canvas.line_thickness,
+            )
+        self._pending_manual_pts = []
+        self.canvas.set_pending_polygon([])
+        self._manual_popup.setVisible(False)
         self._refresh_canvas_render()
+
+    def _on_discard_manual_polygon(self) -> None:
+        self._pending_manual_pts = []
+        self.canvas.set_pending_polygon([])
+        self._manual_popup.setVisible(False)
 
     def _on_polygon_edited(self, idx: int, pts: list) -> None:
         if self._current_row < 0 or self.canvas.is_dragging():
@@ -1531,7 +1567,7 @@ class AnnoMateWindow(QWidget):
                 "Add an annotation class before accepting AI segmentation polygons.",
             )
             return
-        self._ai_popup.set_classes(class_names, self._active_class)
+        self._ai_popup.set_classes(class_names)
         bbox = self.canvas.get_ai_polygon_view_rect(idx)
         self._ai_popup.show_at_polygon(bbox)
 
@@ -1544,11 +1580,7 @@ class AnnoMateWindow(QWidget):
             target = self._ai_popup.current_class()
             if not target:
                 class_names = self.dataset_model.get_class_names()
-                target = (
-                    self._active_class
-                    if self._active_class in class_names
-                    else (class_names[0] if class_names else "")
-                )
+                target = class_names[0] if class_names else ""
             if target:
                 self._accepting_ai = True
                 try:
@@ -1589,9 +1621,7 @@ class AnnoMateWindow(QWidget):
                 "Add an annotation class before accepting AI segmentation polygons.",
             )
             return
-        target = (
-            self._active_class if self._active_class in class_names else class_names[0]
-        )
+        target = class_names[0]
         contours_to_accept = list(self._current_ai_contours)
         self._accepting_ai = True
         try:
@@ -1698,14 +1728,17 @@ class AnnoMateWindow(QWidget):
         self._sam_controller.run_inference(self._current_bgr, (x1, y1, x2, y2))
 
     def _on_sam_result_ready(self, pts: list, confidence: float) -> None:
+        """A SAM mask is ready — stage it and show the class picker immediately.
+
+        Reuses the manual-polygon pending flow instead of the old ghost +
+        Enter-to-accept step, so segmenting and classifying is a single popup
+        rather than two separate confirmations.
+        """
         self.canvas.setCursor(Qt.CrossCursor)
         if not pts:
             self.status_bar.set_sam_hint("No mask found — try a larger bbox")
             return
-        self.canvas.set_sam_ghost(pts, confidence)
-        self.status_bar.set_sam_hint(
-            f"conf={confidence:.2f}  ·  Enter=accept  ·  Esc=cancel"
-        )
+        self._on_polygon_finished(pts)
 
     def _on_sam_inference_failed(self, msg: str) -> None:
         self.canvas.setCursor(Qt.CrossCursor)
