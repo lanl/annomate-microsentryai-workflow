@@ -704,10 +704,15 @@ class AnnoMateWindow(QWidget):
         self.canvas.installEventFilter(self)
 
         self.right_panel = RightPanel(self.dataset_model, self.inference_model, self)
-        self.right_panel.setMinimumWidth(160)
+        self.right_panel.collapsed_changed.connect(
+            self._on_right_panel_collapsed_changed
+        )
         splitter.addWidget(self.right_panel)
 
         splitter.setSizes([700, 280])
+        self._canvas_splitter = splitter
+        self._expanded_right_panel_width = 280
+        splitter.handle(1).set_suppressed(self.right_panel.is_collapsed())
         ca_layout.addWidget(splitter, stretch=1)
 
         outer_splitter.addWidget(canvas_area)
@@ -729,6 +734,19 @@ class AnnoMateWindow(QWidget):
             left_width = max(160, self._expanded_left_panel_width)
         self._outer_splitter.setSizes([left_width, max(1, total - left_width)])
         self._outer_splitter.handle(1).set_suppressed(collapsed)
+
+    def _on_right_panel_collapsed_changed(self, collapsed: bool) -> None:
+        """Resize the canvas/right-panel splitter while preserving the expanded width."""
+        sizes = self._canvas_splitter.sizes()
+        total = sum(sizes)
+        if collapsed:
+            if len(sizes) > 1 and sizes[1] > 48:
+                self._expanded_right_panel_width = sizes[1]
+            right_width = 48
+        else:
+            right_width = max(220, self._expanded_right_panel_width)
+        self._canvas_splitter.setSizes([max(1, total - right_width), right_width])
+        self._canvas_splitter.handle(1).set_suppressed(collapsed)
 
     # ------------------------------------------------------------------ #
     # Floating canvas controls
