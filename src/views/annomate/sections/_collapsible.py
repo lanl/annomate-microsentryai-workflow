@@ -70,8 +70,8 @@ class _CollapsibleSection(QWidget):
         self._body_layout = QVBoxLayout(self._body)
         self._body_layout.setContentsMargins(8, 6, 8, 8)
         self._body_layout.setSpacing(4)
-        self._body.setVisible(expanded)
         root.addWidget(self._body, stretch=1 if expandable else 0)
+        self._body.setVisible(expanded)
 
     def body_layout(self) -> QVBoxLayout:
         return self._body_layout
