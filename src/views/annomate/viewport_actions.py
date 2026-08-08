@@ -139,14 +139,6 @@ class ViewportActionsBar(QFrame):
 
         self._add_divider(layout)
 
-        self._btn_measure = self._make_button("⇔", "Measure Distance (M)")
-        self._btn_measure.setCheckable(True)
-        self._btn_measure.setFont(font)
-        self._btn_measure.clicked.connect(
-            lambda checked: self._on_tool_clicked("measure", checked)
-        )
-        layout.addWidget(self._btn_measure)
-
         self._btn_settings = self._make_popup_button("⊞", "Grid Settings")
         self._btn_settings.setFont(font_large)
         self._btn_settings.setMenu(self._build_settings_menu())
@@ -811,19 +803,14 @@ class ViewportActionsBar(QFrame):
         self._refresh_action_availability()
 
     def set_active_tool(self, tool_name: str) -> None:
-        self._active_tool = tool_name if tool_name in ("calibrate", "measure") else ""
+        self._active_tool = tool_name if tool_name == "calibrate" else ""
         self._refreshing = True
         self._btn_calibrate_points.setChecked(self._active_tool == "calibrate")
-        self._btn_measure.setChecked(self._active_tool == "measure")
         self._refreshing = False
 
     def toggle_calibrate(self) -> None:
         if self._btn_calibrate_points.isEnabled():
             self._on_tool_clicked("calibrate", self._active_tool != "calibrate")
-
-    def toggle_measure(self) -> None:
-        if self._btn_measure.isEnabled():
-            self._on_tool_clicked("measure", self._active_tool != "measure")
 
     def reposition(self, canvas_size) -> None:
         self.adjustSize()
@@ -1270,7 +1257,6 @@ class ViewportActionsBar(QFrame):
                 and self._center_template_model.has_template()
             )
         )
-        self._btn_measure.setEnabled(scale_available and self._has_image)
         self._grid_chk.setEnabled(scale_available)
         self._opacity_slider.setEnabled(scale_available)
         self._color_btn.setEnabled(scale_available)
@@ -1279,9 +1265,6 @@ class ViewportActionsBar(QFrame):
         self._spacing_edit.setEnabled(scale_available and self._radio_fixed.isChecked())
         self._btn_clear_measurement.setEnabled(scale_available)
         self._btn_reset_calibration.setEnabled(scale_available)
-        if not scale_available and self._active_tool == "measure":
-            self.set_active_tool("")
-            self.tool_selected.emit("")
 
     def _update_color_swatch(self, rgb: tuple) -> None:
         r, g, b = rgb

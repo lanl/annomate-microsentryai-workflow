@@ -655,7 +655,7 @@ class AnnoMateWindow(QWidget):
         ca_layout.setContentsMargins(0, 0, 0, 0)
         ca_layout.setSpacing(0)
 
-        self.tool_palette = ToolPalette(self)
+        self.tool_palette = ToolPalette(self, calibration_model=self._calib_model)
         ca_layout.addWidget(self.tool_palette)
 
         splitter = StyledSplitter(Qt.Horizontal, margin=0)
@@ -927,8 +927,7 @@ class AnnoMateWindow(QWidget):
 
         if tool_name == "measure":
             self._set_active_tool("measure")
-            self.tool_palette.deselect_all()
-            self.viewport_actions.set_active_tool("measure")
+            self.viewport_actions.set_active_tool("")
             self.canvas.set_tool(MEASURE)
             self.status_bar.set_tool("measure")
             return
@@ -1693,7 +1692,7 @@ class AnnoMateWindow(QWidget):
         elif event.key() == Qt.Key_C:
             self.viewport_actions.toggle_calibrate()
         elif event.key() == Qt.Key_M:
-            self.viewport_actions.toggle_measure()
+            self.tool_palette.toggle_measure()
         elif event.key() == Qt.Key_Delete:
             self._delete_selected_annotation()
         super().keyPressEvent(event)

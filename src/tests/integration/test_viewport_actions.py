@@ -100,13 +100,12 @@ def test_hidden_annotation_overlays_keep_index_but_clear_selection(canvas):
     assert canvas.selected_polygon_idx == -1
 
 
-def test_calibrate_and_measure_emit_tool_requests(canvas, calibrated_model, qtbot):
-    """Verify that calibrate and measure buttons emit tool_selected and behave as mutually exclusive toggles.
+def test_calibrate_emits_tool_requests(canvas, calibrated_model, qtbot):
+    """Verify that the calibrate button emits tool_selected and toggles as expected.
 
-    Clicking calibrate emits 'calibrate' and checks the button while unchecking measure.
-    Clicking measure emits 'measure' and checks measure while unchecking calibrate.
-    Clicking an already-checked measure deactivates it and emits an empty string.
-    Success means all three interactions produce the correct signal values and button states.
+    Clicking calibrate emits 'calibrate' and checks the button; clicking it again
+    deactivates it and emits an empty string. The measure tool now lives on
+    ToolPalette (see test_tool_palette.py), not here.
     """
     bar = ViewportActionsBar(canvas, calibrated_model, canvas)
     bar.set_image_loaded(True)
@@ -118,22 +117,16 @@ def test_calibrate_and_measure_emit_tool_requests(canvas, calibrated_model, qtbo
     qtbot.mouseClick(bar._btn_calibrate_points, Qt.LeftButton)
     assert requested[-1] == "calibrate"
     assert bar._btn_calibrate_points.isChecked()
-    assert not bar._btn_measure.isChecked()
 
-    qtbot.mouseClick(bar._btn_measure, Qt.LeftButton)
-    assert requested[-1] == "measure"
-    assert bar._btn_measure.isChecked()
+    qtbot.mouseClick(bar._btn_calibrate_points, Qt.LeftButton)
+    assert requested[-1] == ""
     assert not bar._btn_calibrate_points.isChecked()
 
-    qtbot.mouseClick(bar._btn_measure, Qt.LeftButton)
-    assert requested[-1] == ""
-    assert not bar._btn_measure.isChecked()
 
-
-def test_measure_and_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
+def test_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
     """Verify that calibration and grid controls are all enabled and show correct defaults in pixel mode.
 
-    In the default uncalibrated state (1px:1px), calibrate, measure, and grid controls
+    In the default uncalibrated state (1px:1px), calibrate and grid controls
     should all be enabled, the status label should display '1px:1px', and the grid
     checkbox should be checked. These states should persist after applying calibration.
     Success means all assertions pass both before and after calibration.
@@ -144,7 +137,6 @@ def test_measure_and_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
     qtbot.addWidget(bar)
 
     assert bar._btn_calibrate_points.isEnabled()
-    assert bar._btn_measure.isEnabled()
     assert bar._grid_chk.isEnabled()
     assert model.grid_visible() is False
     assert not bar._grid_chk.isChecked()
@@ -153,7 +145,6 @@ def test_measure_and_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
     model.set_calib_points((0.0, 0.0), (100.0, 0.0))
     assert model.apply_calibration(5.0, "mm")
 
-    assert bar._btn_measure.isEnabled()
     assert bar._grid_chk.isEnabled()
     assert model.grid_visible() is True
     assert bar._grid_chk.isChecked()
@@ -206,7 +197,6 @@ def test_settings_controls_update_calibration_model(canvas, calibrated_model, qt
     assert calibrated_model.is_calibrated() is False
     assert calibrated_model.has_scale() is True
     assert calibrated_model.unit() == "px"
-    assert bar._btn_measure.isEnabled()
     assert bar._grid_chk.isEnabled()
 
 

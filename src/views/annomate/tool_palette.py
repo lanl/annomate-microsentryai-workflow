@@ -3,8 +3,8 @@ ToolPalette — left tool column for the AnnoMate main window.
 
 Layout (top to bottom):
   hexagon        Polygon tool
-  ── divider ──
   auto_fix_high  SAM Segment tool
+  straighten     Measure Distance tool (disabled until a calibration scale exists)
 
 Tool-specific settings (brush thickness, SAM options, ...) live in the
 "Active Tool" tab of the right activity bar, not here -- this column is
@@ -36,12 +36,13 @@ class ToolPalette(QFrame):
 
     tool_selected = Signal(str)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, calibration_model=None) -> None:
         super().__init__(parent)
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
         self.setFixedWidth(56)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
+        self._calib_model = calibration_model
         self._btn_tool: dict = {}
         self._active_tool: str = ""
         self._btn_group = QButtonGroup(self)
@@ -68,14 +69,6 @@ class ToolPalette(QFrame):
         self._drawing_btns.append(poly_btn)
 
         # ------------------------------------------------------------------ #
-        # Divider
-        # ------------------------------------------------------------------ #
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(divider)
-
-        # ------------------------------------------------------------------ #
         # SAM tool
         # ------------------------------------------------------------------ #
         sam_btn = QToolButton()
@@ -89,7 +82,25 @@ class ToolPalette(QFrame):
         layout.addWidget(sam_btn)
         self._drawing_btns.append(sam_btn)
 
+        # ------------------------------------------------------------------ #
+        # Measure tool -- needs a calibration scale to do anything useful
+        # ------------------------------------------------------------------ #
+        measure_btn = QToolButton()
+        measure_btn.setIcon(material_icon("straighten", size=_ICON_SIZE, color="black"))
+        measure_btn.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
+        measure_btn.setToolTip("Measure Distance (M)")
+        measure_btn.setFixedSize(_BTN_W, _BTN_H)
+        measure_btn.setCheckable(True)
+        self._btn_tool[measure_btn] = "measure"
+        self._btn_group.addButton(measure_btn)
+        layout.addWidget(measure_btn)
+        self._btn_measure = measure_btn
+
         self._btn_group.buttonClicked.connect(self._on_btn_clicked)
+
+        if self._calib_model is not None:
+            self._calib_model.calibration_changed.connect(self._refresh_measure_enabled)
+        self._refresh_measure_enabled()
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -123,9 +134,23 @@ class ToolPalette(QFrame):
         """Toggle the SAM segment tool on/off."""
         self._toggle_tool("sam_bbox")
 
+    def toggle_measure(self) -> None:
+        """Toggle the measure tool on/off (no-op without a calibration scale)."""
+        if self._btn_measure.isEnabled():
+            self._toggle_tool("measure")
+
     # ------------------------------------------------------------------ #
     # Internal slots
     # ------------------------------------------------------------------ #
+
+    def _refresh_measure_enabled(self) -> None:
+        scale_available = (
+            self._calib_model is not None and self._calib_model.has_scale()
+        )
+        self._btn_measure.setEnabled(scale_available)
+        if not scale_available and self._active_tool == "measure":
+            self.deselect_all()
+            self.tool_selected.emit("")
 
     def _on_btn_clicked(self, btn: QToolButton) -> None:
         tool_name = self._btn_tool.get(btn, "")
@@ -144,8 +169,9 @@ class ToolPalette(QFrame):
                     self.tool_selected.emit("")
                 else:
                     self._active_tool = tool_name
-                    self._btn_group.setExclusive(False)
+                    # The group stays exclusive=True, so checking btn here
+                    # already auto-unchecks whichever tool was previously
+                    # active -- no need to toggle exclusivity off and on.
                     btn.setChecked(True)
-                    self._btn_group.setExclusive(True)
                     self.tool_selected.emit(tool_name)
                 return
