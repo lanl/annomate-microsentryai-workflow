@@ -224,6 +224,7 @@ class AppWindow(QMainWindow):
         # overwrite it with the stale path from the project file.
         if saved_image_dir and not relocated:
             self._remember_recent_image_dir(saved_image_dir)
+        self.annomate_view.restore_last_panel_state()
         self._refresh_project_start_state()
 
     def _open_recent_project(self, path: str) -> None:
@@ -253,6 +254,7 @@ class AppWindow(QMainWindow):
         self.annomate_view.reset_model_state()
         self.io_controller.load_folder(directory)
         self._remember_recent_image_dir(directory)
+        self.annomate_view.restore_last_panel_state()
         self._refresh_project_start_state()
 
     # ================================================================== #
@@ -264,6 +266,7 @@ class AppWindow(QMainWindow):
             return
         self.annomate_view.reset_model_state()
         self.project_controller.new_project()
+        self.annomate_view.show_dataset_setup()
         self._refresh_project_start_state()
 
     def _open_project(self) -> None:
@@ -339,6 +342,7 @@ class AppWindow(QMainWindow):
             return
         self.annomate_view.reset_model_state()
         self.io_controller.load_folder(directory)
+        self.annomate_view.restore_last_panel_state()
 
     def _prompt_missing_image_dir(self, saved_dir: str) -> bool:
         """Inform the user the project's image folder is missing and offer

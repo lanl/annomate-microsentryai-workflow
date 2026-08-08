@@ -12,6 +12,13 @@ Overlays. View Overlays' contents (Grid, Anomaly Constraints, Center
 Crop) are still placeholders -- each its own collapsible section, since
 all three currently still live in the viewport floating bar and will
 migrate in as separate follow-up steps.
+
+The panel always starts collapsed at construction (no project is loaded
+yet at that point). Two explicit calls decide what happens once one is:
+show_dataset_setup() forces Dataset Setup open for a brand-new project;
+restore_last_state() reapplies whatever tab/expanded state was persisted
+via QSettings the last time a project was open, for everything else
+(opening an existing project or image folder).
 """
 
 from PySide6.QtCore import QSettings, QSize, Qt, Signal
@@ -282,11 +289,17 @@ class RightPanel(QWidget):
 
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         last_tab = settings.value(_SETTINGS_TAB_KEY, "classes", type=str)
-        start_collapsed = settings.value(_SETTINGS_COLLAPSED_KEY, False, type=bool)
         if last_tab not in self._page_index:
             last_tab = "classes"
-        self._show_tab(last_tab)
-        self.set_collapsed(start_collapsed)
+        # Pre-select the remembered tab's content without marking the rail
+        # active, so the first click on that same tab correctly expands it
+        # instead of reading as "click the already-active tab" (collapse).
+        self._set_stack_page(last_tab)
+        # Always collapsed until a project is opened -- no project is loaded
+        # yet at construction time, so there's nothing to show. New Project
+        # opens straight to Dataset Setup (show_dataset_setup()); otherwise
+        # it stays collapsed until the user clicks a tab themselves.
+        self.set_collapsed(True)
 
     # ------------------------------------------------------------------ #
     # Tab construction
@@ -305,18 +318,40 @@ class RightPanel(QWidget):
     # ------------------------------------------------------------------ #
 
     def _on_tab_clicked(self, key: str) -> None:
+        """Handle a real user-driven (or explicitly forced) tab change.
+
+        This is the only place that persists collapsed state -- set_collapsed()
+        itself doesn't, so the constructor's mandatory initial collapse can't
+        clobber whatever a prior session had saved before restore_last_state()
+        gets a chance to read it.
+        """
+        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         if key:
             self._show_tab(key)
             self.set_collapsed(False)
-            QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(_SETTINGS_TAB_KEY, key)
+            settings.setValue(_SETTINGS_TAB_KEY, key)
         else:
             self.set_collapsed(True)
+        settings.setValue(_SETTINGS_COLLAPSED_KEY, self._collapsed)
 
     def _show_tab(self, key: str) -> None:
-        self._stack.setCurrentIndex(self._page_index[key])
+        self._set_stack_page(key)
         self._rail.set_active(key)
 
+    def _set_stack_page(self, key: str) -> None:
+        """Pre-select *key*'s page in the stack without marking its rail
+        button active -- used at construction so the panel has something
+        ready to show without the rail looking like it's already expanded."""
+        self._stack.setCurrentIndex(self._page_index[key])
+
     def set_collapsed(self, collapsed: bool) -> None:
+        """Apply expand/collapse to the UI only -- does not persist.
+
+        Callers that represent a real state change the user should get back
+        next time (a tab click, restore_last_state(), show_dataset_setup())
+        persist explicitly; the constructor's mandatory initial collapse must
+        NOT overwrite whatever was saved from a prior session.
+        """
         if self._collapsed == collapsed:
             return
         self._collapsed = collapsed
@@ -328,13 +363,30 @@ class RightPanel(QWidget):
             self.setMinimumWidth(_EXPANDED_MIN_WIDTH)
             self.setMaximumWidth(16777215)
             self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(
-            _SETTINGS_COLLAPSED_KEY, collapsed
-        )
         self.collapsed_changed.emit(collapsed)
 
     def is_collapsed(self) -> bool:
         return self._collapsed
+
+    def show_dataset_setup(self) -> None:
+        """Force the Dataset Setup tab open -- called when starting a new project."""
+        self._on_tab_clicked("classes")
+
+    def restore_last_state(self) -> None:
+        """Restore the last tab/expanded state -- called when an existing
+        project or image folder is opened (a brand-new project instead
+        calls show_dataset_setup(), which forces Dataset Setup open)."""
+        settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
+        last_tab = settings.value(_SETTINGS_TAB_KEY, "classes", type=str)
+        if last_tab not in self._page_index:
+            last_tab = "classes"
+        collapsed = settings.value(_SETTINGS_COLLAPSED_KEY, True, type=bool)
+        if collapsed:
+            self._set_stack_page(last_tab)
+            self.set_collapsed(True)
+        else:
+            self._show_tab(last_tab)
+            self.set_collapsed(False)
 
     def set_current_row(self, row: int) -> None:
         """Update the annotation-classes section for the new image."""

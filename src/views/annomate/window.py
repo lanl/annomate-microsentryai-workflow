@@ -1360,6 +1360,14 @@ class AnnoMateWindow(QWidget):
         """Called by AppWindow after opening a project to record the saved model path."""
         self._saved_model_path = path
 
+    def show_dataset_setup(self) -> None:
+        """Called by AppWindow when starting a new project."""
+        self.right_panel.show_dataset_setup()
+
+    def restore_last_panel_state(self) -> None:
+        """Called by AppWindow after opening an existing project or image folder."""
+        self.right_panel.restore_last_state()
+
     def refresh_inference_panel(self) -> None:
         """Called by AppWindow after opening a project to sync the inference panel.
 
