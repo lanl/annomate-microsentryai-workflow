@@ -1,21 +1,13 @@
-from PySide6.QtCore import QItemSelectionModel, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetrics
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QApplication,
     QColorDialog,
-    QFrame,
     QHBoxLayout,
-    QHeaderView,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
-    QStyle,
-    QStyleOptionButton,
-    QStyleOptionViewItem,
-    QStyledItemDelegate,
-    QTableView,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -23,8 +15,6 @@ from PySide6.QtWidgets import (
 from models.classes_model import (
     CLASS_NAME_ROLE,
     COLOR_ROLE,
-    IMAGE_LEVEL_MODE_ROLE,
-    IMAGE_TAG_KIND_ROLE,
     VISIBLE_ROLE,
     ClassColumns,
     ClassSortProxyModel,
@@ -33,154 +23,139 @@ from models.classes_model import (
 
 from views.icons import material_icon
 
+from ._shared import _ClickableFrame, _COLOR_SELECTED_BG
+
 _ICON_BTN_SIZE = 16
-_TAG_COL_W = 28
-_COLOR_TAG_ACTIVE = QColor("#ff9800")  # amber — current mode's tags
-_COLOR_TAG_INACTIVE = QColor("#4a90d9")  # blue  — other mode's tags
-_COLOR_COL_W = 44
+_ICON_BTN_W = 28
 _SWATCH_W = 24
-_COUNT_W = 56
-_VISIBILITY_W = 40
-_DELETE_W = 40
-_NAME_MIN_W = 70
+_HEADER_FONT_PX = 10
+_CELL_FONT_PX = 11
+_COLUMN_TEXT_PADDING = 2
+_HEADER_STYLE = f"font-size: {_HEADER_FONT_PX}px; font-weight: bold; color: black;"
 
 
-class _ColorSwatchDelegate(QStyledItemDelegate):
-    """Paint class colors as compact swatches."""
-
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        rgb = index.data(COLOR_ROLE)
-        if not rgb:
-            super().paint(painter, option, index)
-            return
-
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-        opt.text = ""
-        style = opt.widget.style() if opt.widget is not None else None
-        if style is not None:
-            style.drawControl(QStyle.CE_ItemViewItem, opt, painter)
-
-        rect = option.rect
-        x = rect.x() + (rect.width() - _SWATCH_W) // 2
-        y = rect.y() + (rect.height() - _SWATCH_W) // 2
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setPen(QPen(QColor(120, 120, 120), 1))
-        painter.setBrush(QColor(*rgb))
-        painter.drawRoundedRect(x, y, _SWATCH_W, _SWATCH_W, 3, 3)
-        painter.restore()
+def _header_label_width(text: str) -> int:
+    """Width needed to show *text* in the header font, plus a little breathing room."""
+    font = QFont()
+    font.setPixelSize(_HEADER_FONT_PX)
+    font.setBold(True)
+    return QFontMetrics(font).horizontalAdvance(text) + _COLUMN_TEXT_PADDING
 
 
-class _IconButtonDelegate(QStyledItemDelegate):
-    """Paint action cells with a native button frame and compact icon."""
-
-    def __init__(self, action: str, parent=None) -> None:
-        super().__init__(parent)
-        self._action = action
-
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-        opt.text = ""
-
-        style = opt.widget.style() if opt.widget is not None else QApplication.style()
-        style.drawControl(QStyle.CE_ItemViewItem, opt, painter)
-
-        button = QStyleOptionButton()
-        if option.widget is not None:
-            button.initFrom(option.widget)
-        button.rect = option.rect.adjusted(5, 3, -5, -3)
-        button.state = QStyle.State_Enabled | QStyle.State_Raised
-        if option.state & QStyle.State_MouseOver:
-            button.state |= QStyle.State_MouseOver
-        style.drawControl(QStyle.CE_PushButton, button, painter)
-        self._paint_icon(painter, button.rect, opt.palette, index)
-
-    def _paint_icon(self, painter: QPainter, rect, palette, index) -> None:
-        if self._action == "visibility":
-            name = "visibility" if bool(index.data(VISIBLE_ROLE)) else "visibility_off"
-        else:
-            name = "delete"
-        color = palette.buttonText().color().name()
-        pixmap = material_icon(name, size=_ICON_BTN_SIZE, color=color).pixmap(
-            _ICON_BTN_SIZE, _ICON_BTN_SIZE
-        )
-        x = rect.x() + (rect.width() - _ICON_BTN_SIZE) // 2
-        y = rect.y() + (rect.height() - _ICON_BTN_SIZE) // 2
-        painter.drawPixmap(x, y, pixmap)
+def _cell_text_width(text: str) -> int:
+    """Width needed for a numeric cell value without clipping."""
+    font = QFont()
+    font.setPixelSize(_CELL_FONT_PX)
+    return QFontMetrics(font).horizontalAdvance(text) + _COLUMN_TEXT_PADDING
 
 
-class _ImageTagDelegate(QStyledItemDelegate):
-    """Paint image-level class tag toggle cells in the class table.
+class _ClassRow(_ClickableFrame):
+    """One annotation class as a plain widget row (no table/delegates involved).
 
-    When interactive (image-level mode + rejected image): draws a colored
-    rounded square with a checkmark if tagged, or an empty square if not.
-    When not interactive: draws a faint grey square with a dimmed checkmark
-    if tagged (read-only reference), or nothing if not tagged.
+    Signals:
+        activated (str): This class's name, on click anywhere outside the
+            swatch / eye / delete controls.
+        color_clicked (str): Class name whose swatch was clicked.
+        visibility_toggled (str): Class name whose eye button was clicked.
+        delete_requested (str): Class name whose trash button was clicked.
     """
 
-    _TAG_W = 14
+    activated = Signal(str)
+    color_clicked = Signal(str)
+    visibility_toggled = Signal(str)
+    delete_requested = Signal(str)
 
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        opt = QStyleOptionViewItem(option)
-        self.initStyleOption(opt, index)
-        opt.text = ""
-        style = opt.widget.style() if opt.widget is not None else None
-        if style is not None:
-            style.drawControl(QStyle.CE_ItemViewItem, opt, painter)
-
-        kind = index.data(IMAGE_TAG_KIND_ROLE)  # "active" | "inactive" | "none"
-        interactive = bool(index.flags() & Qt.ItemIsSelectable)
-        in_mode = bool(index.data(IMAGE_LEVEL_MODE_ROLE))
-
-        if kind == "none" and not interactive and not in_mode:
-            return  # pixel mode, untagged — draw nothing beyond the row background
-
-        rect = option.rect
-        cx = rect.x() + rect.width() // 2
-        cy = rect.y() + rect.height() // 2
-        half = self._TAG_W // 2
-        sq = QRectF(cx - half, cy - half, self._TAG_W, self._TAG_W)
-
-        painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
-
-        if kind == "active":
-            painter.setBrush(_COLOR_TAG_ACTIVE)
-            painter.setPen(QPen(_COLOR_TAG_ACTIVE.darker(130), 1))
-            painter.drawRoundedRect(sq, 3, 3)
-            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-            self._draw_check(painter, sq)
-        elif kind == "inactive":
-            painter.setBrush(_COLOR_TAG_INACTIVE)
-            painter.setPen(QPen(_COLOR_TAG_INACTIVE.darker(130), 1))
-            painter.drawRoundedRect(sq, 3, 3)
-            painter.setPen(QPen(QColor(255, 255, 255), 1.5))
-            self._draw_check(painter, sq)
-        elif interactive:
-            # No tag yet but interactive — empty outlined square (click to tag)
-            painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QColor(160, 160, 160), 1))
-            painter.drawRoundedRect(sq, 3, 3)
-        else:
-            # In image-level mode, not interactive, not tagged — faint square
-            painter.setBrush(Qt.NoBrush)
-            painter.setPen(QPen(QColor(190, 190, 190, 100), 1))
-            painter.drawRoundedRect(sq, 3, 3)
-
-        painter.restore()
-
-    def _draw_check(self, painter: QPainter, sq: QRectF) -> None:
-        x, t, w, h = sq.left(), sq.top(), sq.width(), sq.height()
-        painter.drawLine(
-            int(x + 2), int(t + h * 0.55), int(x + w * 0.4), int(t + h - 2)
+    def __init__(
+        self,
+        proxy_row: int,
+        proxy_model,
+        total_count_w: int,
+        parent: QWidget = None,
+    ) -> None:
+        super().__init__(parent)
+        self._name = str(
+            proxy_model.index(proxy_row, ClassColumns.CLASS).data(CLASS_NAME_ROLE) or ""
         )
-        painter.drawLine(int(x + w * 0.4), int(t + h - 2), int(x + w - 1), int(t + 2))
+        self.setCursor(Qt.PointingHandCursor)
+        self.clicked.connect(lambda: self.activated.emit(self._name))
+
+        h = QHBoxLayout(self)
+        h.setContentsMargins(4, 3, 4, 3)
+        h.setSpacing(6)
+
+        rgb = proxy_model.index(proxy_row, ClassColumns.COLOR).data(COLOR_ROLE)
+        # A QToolButton (not _ClickableFrame) so its press is always accepted --
+        # an unaccepted mouse press on a plain QFrame propagates to the parent
+        # row and would also fire the row's own `activated`/select behavior.
+        self._swatch = QToolButton()
+        self._swatch.setFixedSize(_SWATCH_W, _SWATCH_W)
+        self._swatch.setCursor(Qt.PointingHandCursor)
+        self._swatch.setAutoRaise(True)
+        self._swatch.setToolTip(
+            proxy_model.index(proxy_row, ClassColumns.COLOR).data(Qt.ToolTipRole) or ""
+        )
+        self._set_swatch_color(rgb)
+        self._swatch.clicked.connect(lambda: self.color_clicked.emit(self._name))
+        h.addWidget(self._swatch)
+
+        name_lbl = QLabel(self._name)
+        name_lbl.setStyleSheet("color: black; font-size: 12px;")
+        h.addWidget(name_lbl, 1)
+
+        total_count = proxy_model.index(proxy_row, ClassColumns.TOTAL).data(
+            Qt.DisplayRole
+        )
+        self._total_lbl = QLabel(str(total_count or "0"))
+        self._total_lbl.setFixedWidth(total_count_w)
+        self._total_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._total_lbl.setStyleSheet("color: black; font-size: 11px;")
+        h.addWidget(self._total_lbl)
+
+        visible = bool(
+            proxy_model.index(proxy_row, ClassColumns.VISIBILITY).data(VISIBLE_ROLE)
+        )
+        self._eye_btn = QToolButton()
+        self._eye_btn.setFixedSize(_ICON_BTN_W, _ICON_BTN_W)
+        self._eye_btn.setAutoRaise(True)
+        self._eye_btn.setToolTip("Show or hide this class's annotations")
+        self._set_eye_icon(visible)
+        self._eye_btn.clicked.connect(lambda: self.visibility_toggled.emit(self._name))
+        h.addWidget(self._eye_btn)
+
+        self._delete_btn = QToolButton()
+        self._delete_btn.setFixedSize(_ICON_BTN_W, _ICON_BTN_W)
+        self._delete_btn.setAutoRaise(True)
+        self._delete_btn.setToolTip(f'Delete "{self._name}"')
+        self._delete_btn.setIcon(material_icon("delete", size=_ICON_BTN_SIZE, color="black"))
+        self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self._name))
+        h.addWidget(self._delete_btn)
+
+    def _set_swatch_color(self, rgb) -> None:
+        if rgb:
+            self._swatch.setStyleSheet(
+                f"QToolButton {{ background-color: rgb{tuple(rgb)}; border: 1px solid "
+                f"rgba(120,120,120,150); border-radius: 4px; }}"
+            )
+
+    def _set_eye_icon(self, visible: bool) -> None:
+        name = "visibility" if visible else "visibility_off"
+        self._eye_btn.setIcon(material_icon(name, size=_ICON_BTN_SIZE, color="black"))
+
+    def set_selected(self, selected: bool) -> None:
+        self.setStyleSheet(
+            f"background-color: {_COLOR_SELECTED_BG};" if selected else ""
+        )
+
+    def set_visibility_control_visible(self, visible: bool) -> None:
+        self._eye_btn.setVisible(visible)
 
 
 class ClassesSection(QWidget):
-    """Sortable annotation class table with add/delete and count summaries.
+    """Plain-widget list of annotation classes with add/delete and count summaries.
+
+    Sorted alphabetically by class name (fixed, no user-facing sort control).
+    Each class is a `_ClassRow`, rebuilt whenever the underlying model resets
+    or its data changes (add/delete/recolor/visibility/mode-switch all do).
 
     Signals:
         class_selected (str): Emitted when the user clicks a class row.
@@ -195,23 +170,25 @@ class ClassesSection(QWidget):
         self.dataset_model = dataset_model
         self._selected_name: str = ""
         self._current_row: int = -1
-        self._tag_interactive: bool = False
+        self._is_image_level: bool = False
+        self._rows: dict[str, _ClassRow] = {}
+        self._total_col_w: int = 0
 
         self._table_model = ClassTableModel(dataset_model, self)
         self._proxy = ClassSortProxyModel(self)
         self._proxy.setSourceModel(self._table_model)
+        self._proxy.sort(ClassColumns.CLASS, Qt.AscendingOrder)
 
         self._init_ui()
         self._table_model.modelReset.connect(self._on_class_model_reset)
-        self._proxy.layoutChanged.connect(self._sync_selection)
-        self._proxy.modelReset.connect(self._sync_selection)
+        self._table_model.dataChanged.connect(self._on_class_model_reset)
         dataset_model.dataChanged.connect(self._on_dataset_data_changed)
         dataset_model.annotation_mode_changed.connect(self._on_annotation_mode_changed)
 
     def _init_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setSpacing(2)
 
         # Mode selector: two connected buttons acting as a segmented control
         mode_row = QWidget()
@@ -266,82 +243,16 @@ class ClassesSection(QWidget):
         mode_h.addWidget(self._image_btn, stretch=1)
         layout.addWidget(mode_row)
 
-        self._table = QTableView()
-        self._table.setModel(self._proxy)
-        self._table.setItemDelegateForColumn(
-            ClassColumns.IMAGE_TAG, _ImageTagDelegate(self._table)
-        )
-        self._table.setItemDelegateForColumn(
-            ClassColumns.COLOR, _ColorSwatchDelegate(self._table)
-        )
-        self._table.setItemDelegateForColumn(
-            ClassColumns.VISIBILITY, _IconButtonDelegate("visibility", self._table)
-        )
-        self._table.setItemDelegateForColumn(
-            ClassColumns.DELETE, _IconButtonDelegate("delete", self._table)
-        )
-        self._table.setFrameShape(QFrame.NoFrame)
-        self._table.setAlternatingRowColors(True)
-        self._table.setShowGrid(False)
-        self._table.setWordWrap(False)
-        self._table.setSortingEnabled(True)
-        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self._table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self._table.setFocusPolicy(Qt.NoFocus)
-        self._table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._table.clicked.connect(self._on_table_index_activated)
-        self._table.activated.connect(self._on_table_index_activated)
-        self._table.setStyleSheet(
-            """
-            QTableView {
-                selection-background-color: palette(highlight);
-                selection-color: palette(highlighted-text);
-            }
-            QTableView::item {
-                padding: 1px 4px;
-            }
-            QTableView::item:focus {
-                outline: none;
-            }
-            QHeaderView::section {
-                font-size: 12px;
-                font-weight: bold;
-                padding: 2px 4px;
-            }
-            """
-        )
+        self._header_row = self._build_header_row()
+        layout.addWidget(self._header_row)
 
-        vertical_header = self._table.verticalHeader()
-        vertical_header.setVisible(False)
-        vertical_header.setDefaultSectionSize(28)
-        vertical_header.setMinimumSectionSize(24)
+        self._rows_container = QWidget()
+        self._rows_layout = QVBoxLayout(self._rows_container)
+        self._rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._rows_layout.setSpacing(2)
+        layout.addWidget(self._rows_container)
 
-        header = self._table.horizontalHeader()
-        header.setHighlightSections(False)
-        header.setSectionsClickable(True)
-        header.setSortIndicatorShown(True)
-        header.setMinimumSectionSize(24)
-        header.setSectionResizeMode(ClassColumns.IMAGE_TAG, QHeaderView.Fixed)
-        header.setSectionResizeMode(ClassColumns.COLOR, QHeaderView.Fixed)
-        header.setSectionResizeMode(ClassColumns.CLASS, QHeaderView.Stretch)
-        header.setSectionResizeMode(ClassColumns.IMAGE, QHeaderView.Fixed)
-        header.setSectionResizeMode(ClassColumns.TOTAL, QHeaderView.Fixed)
-        header.setSectionResizeMode(ClassColumns.VISIBILITY, QHeaderView.Fixed)
-        header.setSectionResizeMode(ClassColumns.DELETE, QHeaderView.Fixed)
-        self._table.setColumnWidth(ClassColumns.IMAGE_TAG, _TAG_COL_W)
-        self._table.setColumnWidth(ClassColumns.COLOR, _COLOR_COL_W)
-        self._table.setColumnWidth(ClassColumns.CLASS, _NAME_MIN_W)
-        self._table.setColumnWidth(ClassColumns.IMAGE, _COUNT_W)
-        self._table.setColumnWidth(ClassColumns.TOTAL, _COUNT_W)
-        self._table.setColumnWidth(ClassColumns.VISIBILITY, _VISIBILITY_W)
-        self._table.setColumnWidth(ClassColumns.DELETE, _DELETE_W)
-        self._table.sortByColumn(ClassColumns.CLASS, Qt.AscendingOrder)
-        self._sync_table_height()
-
-        layout.addWidget(self._table)
+        self._rebuild_rows()
 
         add_row = QWidget()
         add_h = QHBoxLayout(add_row)
@@ -359,33 +270,54 @@ class ClassesSection(QWidget):
 
         layout.addWidget(add_row)
 
-    def _sync_table_height(self) -> None:
-        """Grow the table viewport to fit every class row without scrolling."""
-        if not hasattr(self, "_table"):
-            return
-        header_h = self._table.horizontalHeader().sizeHint().height()
-        rows_h = 0
-        for row in range(self._proxy.rowCount()):
-            rows_h += self._table.verticalHeader().sectionSize(row)
-        frame_h = self._table.frameWidth() * 2
-        self._table.setFixedHeight(header_h + rows_h + frame_h + 2)
-        self._table.updateGeometry()
+    def _build_header_row(self) -> QWidget:
+        """Column labels above the rows -- blank over the swatch/eye/delete slots."""
+        row = QWidget()
+        h = QHBoxLayout(row)
+        h.setContentsMargins(4, 2, 4, 2)
+        h.setSpacing(6)
+
+        swatch_spacer = QLabel()
+        swatch_spacer.setFixedWidth(_SWATCH_W)
+        h.addWidget(swatch_spacer)
+
+        class_lbl = QLabel(
+            self._table_model.headerData(ClassColumns.CLASS, Qt.Horizontal)
+        )
+        class_lbl.setStyleSheet(_HEADER_STYLE)
+        h.addWidget(class_lbl, 1)
+
+        total_header_text = self._table_model.headerData(
+            ClassColumns.TOTAL, Qt.Horizontal
+        )
+        self._total_col_w = _header_label_width(total_header_text)
+        self._total_header_lbl = QLabel(total_header_text)
+        self._total_header_lbl.setToolTip(
+            self._table_model.headerData(ClassColumns.TOTAL, Qt.Horizontal, Qt.ToolTipRole)
+        )
+        self._total_header_lbl.setFixedWidth(self._total_col_w)
+        self._total_header_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._total_header_lbl.setStyleSheet(_HEADER_STYLE)
+        h.addWidget(self._total_header_lbl)
+
+        self._eye_header_spacer = QLabel()
+        self._eye_header_spacer.setFixedWidth(_ICON_BTN_W)
+        h.addWidget(self._eye_header_spacer)
+
+        delete_spacer = QLabel()
+        delete_spacer.setFixedWidth(_ICON_BTN_W)
+        h.addWidget(delete_spacer)
+
+        return row
 
     def set_current_row(self, row: int) -> None:
         self._current_row = row
-        self._update_tag_interactive()
         self._table_model.set_current_row(row)
-
-    def _update_tag_interactive(self) -> None:
-        mode = self.dataset_model.get_annotation_mode()
-        decision = self.dataset_model.get_review_decision(self._current_row)
-        self._tag_interactive = mode == "image_level" and decision == "reject"
 
     def _on_dataset_data_changed(self, top_left, bottom_right, roles=None) -> None:
         if self._current_row < 0:
             return
         if top_left.row() <= self._current_row <= bottom_right.row():
-            self._update_tag_interactive()
             self._table_model.set_current_row(self._current_row)
 
     def _on_mode_btn_clicked(self, mode: str) -> None:
@@ -401,77 +333,50 @@ class ClassesSection(QWidget):
         self._image_btn.setChecked(is_image)
         self._pixel_btn.blockSignals(False)
         self._image_btn.blockSignals(False)
-        self._table.setColumnHidden(ClassColumns.IMAGE, is_image)
-        self._table.setColumnHidden(ClassColumns.VISIBILITY, is_image)
+
+        self._is_image_level = is_image
+        self._eye_header_spacer.setVisible(not is_image)
+        for row_widget in self._rows.values():
+            row_widget.set_visibility_control_visible(not is_image)
 
     def _on_annotation_mode_changed(self, mode: str) -> None:
         self.set_annotation_mode(mode)
-        self._update_tag_interactive()
         self._table_model.set_current_row(self._current_row)
 
-    def _on_table_index_activated(self, proxy_index) -> None:
-        if not proxy_index.isValid():
-            return
-        name = self._class_name_from_proxy(proxy_index)
-        if not name:
-            return
+    def _refresh_count_column_widths(self) -> None:
+        """Fit the Tot column to its header or widest visible value."""
+        self._total_col_w = self._widest_column_text(
+            ClassColumns.TOTAL, self._total_header_lbl.text()
+        )
+        self._total_header_lbl.setFixedWidth(self._total_col_w)
 
-        column = proxy_index.column()
-        if column == ClassColumns.IMAGE_TAG:
-            if self._tag_interactive:
-                self._toggle_image_tag(name)
-            return
-        if column == ClassColumns.COLOR:
-            self._change_color(name)
-            return
-        if column == ClassColumns.VISIBILITY:
-            self._toggle_visibility(name)
-            return
-        if column == ClassColumns.DELETE:
-            self._delete_class(name)
-            return
-        self._select_class(name, emit=True)
-
-    def _toggle_image_tag(self, name: str) -> None:
-        if self._current_row < 0:
-            return
-        current = self.dataset_model.get_image_classes(self._current_row)
-        if name in current:
-            pixel_count = self.dataset_model.get_pixel_annotation_count_for_class(
-                self._current_row, name
-            )
-            if pixel_count > 0:
-                QMessageBox.warning(
-                    self,
-                    "Cannot Remove Tag",
-                    f"'{name}' has {pixel_count} pixel-level annotation(s) on this image.\n"
-                    "To remove this class, switch to pixel-level mode and delete those "
-                    "annotations first.",
-                )
-                return
-            current.remove(name)
-        else:
-            current.append(name)
-        self.dataset_model.set_image_classes(self._current_row, current)
-        self._table_model.set_current_row(self._current_row)
-
-    def _class_name_from_proxy(self, proxy_index) -> str:
-        value = proxy_index.data(CLASS_NAME_ROLE)
-        return str(value) if value else ""
-
-    def _source_row_for_class(self, name: str) -> int:
+    def _widest_column_text(self, column: int, header_text: str) -> int:
+        width = _header_label_width(header_text)
         for row in range(self._table_model.rowCount()):
-            if self._table_model.class_name(row) == name:
-                return row
-        return -1
+            value = self._table_model.index(row, column).data(Qt.DisplayRole)
+            width = max(width, _cell_text_width(str(value or "")))
+        return width
 
-    def _proxy_row_for_class(self, name: str) -> int:
-        source_row = self._source_row_for_class(name)
-        if source_row < 0:
-            return -1
-        source_index = self._table_model.index(source_row, ClassColumns.CLASS)
-        proxy_index = self._proxy.mapFromSource(source_index)
-        return proxy_index.row() if proxy_index.isValid() else -1
+    def _rebuild_rows(self) -> None:
+        while self._rows_layout.count():
+            item = self._rows_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self._rows.clear()
+
+        for proxy_row in range(self._proxy.rowCount()):
+            row_widget = _ClassRow(proxy_row, self._proxy, self._total_col_w)
+            row_widget.set_visibility_control_visible(not self._is_image_level)
+            row_widget.activated.connect(self._on_row_activated)
+            row_widget.color_clicked.connect(self._change_color)
+            row_widget.visibility_toggled.connect(self._toggle_visibility)
+            row_widget.delete_requested.connect(self._delete_class)
+            self._rows_layout.addWidget(row_widget)
+            self._rows[row_widget._name] = row_widget
+
+    def _on_row_activated(self, name: str) -> None:
+        self._select_class(name, emit=True)
 
     def _select_class(self, name: str, emit: bool) -> None:
         if name not in self.dataset_model.get_class_names():
@@ -481,32 +386,15 @@ class ClassesSection(QWidget):
         if emit:
             self.class_selected.emit(name)
 
-    def _sync_selection(self, *args) -> None:
-        if not hasattr(self, "_table"):
-            return
-        selection_model = self._table.selectionModel()
-        if selection_model is None:
-            return
-        if not self._selected_name:
-            selection_model.clearSelection()
-            return
+    def _sync_selection(self) -> None:
+        for name, row_widget in self._rows.items():
+            row_widget.set_selected(name == self._selected_name)
 
-        proxy_row = self._proxy_row_for_class(self._selected_name)
-        if proxy_row < 0:
-            selection_model.clearSelection()
-            return
-
-        proxy_index = self._proxy.index(proxy_row, ClassColumns.CLASS)
-        selection_model.setCurrentIndex(
-            proxy_index,
-            QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
-        )
-        self._table.scrollTo(proxy_index, QAbstractItemView.EnsureVisible)
-
-    def _on_class_model_reset(self) -> None:
+    def _on_class_model_reset(self, *args) -> None:
         if self._selected_name not in self.dataset_model.get_class_names():
             self._selected_name = ""
-        self._sync_table_height()
+        self._refresh_count_column_widths()
+        self._rebuild_rows()
         self._sync_selection()
 
     def _change_color(self, name: str) -> None:

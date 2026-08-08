@@ -48,21 +48,16 @@ def test_class_rows_reflect_dataset_class_names():
     ]
 
 
-def test_count_headers_are_compact_with_descriptive_tooltips():
-    """Verify that the image and total count column headers are compact with full tooltips.
+def test_total_count_header_is_compact_with_descriptive_tooltip():
+    """Verify that the total count column header is compact with a full tooltip.
 
-    The Img and Tot headers must use short abbreviations for display but expose full
-    descriptions as tooltips. Success means both headers and their tooltips match the
+    The Tot header must use a short abbreviation for display but expose a full
+    description as its tooltip. Success means the header and tooltip match the
     expected strings exactly.
     """
     table_model = ClassTableModel(_make_model())
 
-    assert table_model.headerData(ClassColumns.IMAGE, Qt.Horizontal) == "Img"
     assert table_model.headerData(ClassColumns.TOTAL, Qt.Horizontal) == "Tot"
-    assert (
-        table_model.headerData(ClassColumns.IMAGE, Qt.Horizontal, Qt.ToolTipRole)
-        == "Class count for this image"
-    )
     assert (
         table_model.headerData(ClassColumns.TOTAL, Qt.Horizontal, Qt.ToolTipRole)
         == "Class count for the whole dataset"
@@ -105,21 +100,16 @@ def test_class_name_sort_is_case_insensitive():
     assert _proxy_names(proxy) == ["alpha", "beta", "gamma"]
 
 
-def test_image_and_total_counts_sort_numerically():
-    """Verify that image and total annotation count columns sort numerically.
+def test_total_counts_sort_numerically():
+    """Verify that the total annotation count column sorts numerically.
 
-    Image 0 has 2 beta + 1 alpha annotations; Image 1 has 1 gamma. Sorting by
-    IMAGE descending should put 'beta' (2) first, then 'alpha' (1), then 'gamma' (0).
-    Sorting by TOTAL ascending should put 'alpha' (1) and 'gamma' (1) before 'beta' (2).
-    Success means both sort orders return the correct class name sequences.
+    'alpha' and 'gamma' each have 1 annotation dataset-wide; 'beta' has 2.
+    Sorting by TOTAL ascending should put 'alpha' and 'gamma' before 'beta'.
     """
     table_model = ClassTableModel(_make_model())
     table_model.set_current_row(0)
     proxy = ClassSortProxyModel()
     proxy.setSourceModel(table_model)
-
-    proxy.sort(ClassColumns.IMAGE, Qt.DescendingOrder)
-    assert _proxy_names(proxy) == ["beta", "alpha", "gamma"]
 
     proxy.sort(ClassColumns.TOTAL, Qt.AscendingOrder)
     assert _proxy_names(proxy) == ["alpha", "gamma", "beta"]
