@@ -548,7 +548,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.draw_attempted.connect(self._on_draw_attempted)
 
         # Route thickness signal directly to canvas setter
-        self.tool_palette.thickness_changed.connect(self._on_thickness_changed)
+        self.right_panel.thickness_changed.connect(self._on_thickness_changed)
 
         # Anomaly constraint checks
         self._anomaly_controller.violations_updated.connect(
@@ -564,7 +564,7 @@ class AnnoMateWindow(QWidget):
 
         # SAM tool
         self.canvas.samBboxDrawn.connect(self._on_sam_bbox_drawn)
-        self.tool_palette.sam_variant_changed.connect(self._on_sam_variant_changed)
+        self.right_panel.sam_variant_changed.connect(self._on_sam_variant_changed)
 
         # Calibration tool
         self.canvas.calibrationPointsPlaced.connect(self._on_calibration_points_placed)
@@ -574,7 +574,7 @@ class AnnoMateWindow(QWidget):
         self._sam_controller.loading_failed.connect(self._on_sam_loading_failed)
 
         # Auto-load SAM silently if the checkpoint is already on disk
-        variant = self.tool_palette.current_sam_variant()
+        variant = self.right_panel.current_sam_variant()
         logger.info(
             "AnnoMateWindow startup: checking for cached SAM weights (%s)", variant
         )
@@ -897,22 +897,28 @@ class AnnoMateWindow(QWidget):
     # Tool slots
     # ------------------------------------------------------------------ #
 
+    def _set_active_tool(self, tool_name: str) -> None:
+        """Single choke point for `_active_tool` writes -- keeps the Active
+        Tool tab's settings in sync with whichever tool is actually selected."""
+        self._active_tool = tool_name
+        self.right_panel.set_active_tool(tool_name)
+
     def _on_tool_selected(self, tool_name: str) -> None:
         if tool_name == "sam_bbox":
-            self._active_tool = "sam_bbox"
+            self._set_active_tool("sam_bbox")
             self.viewport_actions.set_active_tool("")
             self.canvas.set_tool(SAM_BBOX)
             self.status_bar.set_tool("sam_bbox")
             if not self._sam_loading:
                 self._sam_loading = True
-                variant = self.tool_palette.current_sam_variant()
+                variant = self.right_panel.current_sam_variant()
                 self._sam_controller.set_variant(variant)
                 self.status_bar.set_sam_hint("Loading SAM model…")
                 self._sam_controller.ensure_loaded_async()
             return
 
         if tool_name == "calibrate":
-            self._active_tool = "calibrate"
+            self._set_active_tool("calibrate")
             self.tool_palette.deselect_all()
             self.viewport_actions.set_active_tool("calibrate")
             self.canvas.set_tool(CALIBRATE)
@@ -920,14 +926,14 @@ class AnnoMateWindow(QWidget):
             return
 
         if tool_name == "measure":
-            self._active_tool = "measure"
+            self._set_active_tool("measure")
             self.tool_palette.deselect_all()
             self.viewport_actions.set_active_tool("measure")
             self.canvas.set_tool(MEASURE)
             self.status_bar.set_tool("measure")
             return
 
-        self._active_tool = tool_name
+        self._set_active_tool(tool_name)
         self.viewport_actions.set_active_tool("")
         self.canvas.set_tool("polygon" if tool_name == "polygon" else None)
         self.status_bar.set_tool(tool_name)
@@ -935,7 +941,7 @@ class AnnoMateWindow(QWidget):
     def _on_tool_canceled(self) -> None:
         self.tool_palette.deselect_all()
         self.viewport_actions.set_active_tool("")
-        self._active_tool = ""
+        self._set_active_tool("")
         self.status_bar.set_tool("")
         self.status_bar.set_sam_hint("")
 
@@ -959,7 +965,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.set_tool(None)  # clears _pending_calib_pts, resets cursor
         self.tool_palette.deselect_all()
         self.viewport_actions.set_active_tool("")
-        self._active_tool = ""
+        self._set_active_tool("")
         self.status_bar.set_tool("")
 
     def _on_draw_attempted(self) -> None:
@@ -969,7 +975,7 @@ class AnnoMateWindow(QWidget):
             self.canvas.set_tool(None)
             self.tool_palette.deselect_all()
             self.viewport_actions.set_active_tool("")
-            self._active_tool = ""
+            self._set_active_tool("")
             self.status_bar.set_tool("")
             QMessageBox.warning(
                 self, "No Classes Defined", "Add an annotation class before drawing."
@@ -987,7 +993,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.set_tool(None)
         self.tool_palette.deselect_all()
         self.viewport_actions.set_active_tool("")
-        self._active_tool = ""
+        self._set_active_tool("")
         self.status_bar.set_tool("")
         self.canvas.set_center_crop(
             enabled=True,
@@ -1209,7 +1215,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.set_tool(None)
         self.tool_palette.deselect_all()
         self.viewport_actions.set_active_tool("")
-        self._active_tool = ""
+        self._set_active_tool("")
         self.status_bar.set_tool("")
         self._manual_popup.set_classes(class_names)
         bbox = self.canvas.get_pending_polygon_view_rect()
@@ -1284,14 +1290,7 @@ class AnnoMateWindow(QWidget):
             annos = self.dataset_model.get_annotations(self._current_row)
             if 0 <= idx < len(annos):
                 thick = annos[idx].get("thickness", 2.0)
-
-                # Block signals so setting the slider doesn't accidentally trigger a drawing update
-                self.tool_palette.slider_thickness.blockSignals(True)
-                self.tool_palette.slider_thickness.setValue(
-                    int(thick * 4)
-                )  # slider is 1-40
-                self.tool_palette.lbl_thickness.setText(f"{thick:.2f} px")
-                self.tool_palette.slider_thickness.blockSignals(False)
+                self.right_panel.set_thickness(thick)
 
                 self.canvas.set_line_thickness(thick)
 
@@ -1711,18 +1710,12 @@ class AnnoMateWindow(QWidget):
     def _on_sam_variant_changed(self, variant: str) -> None:
         self._sam_controller.set_variant(variant)
         self._sam_loading = False
-        self.tool_palette.sam_status_lbl.setText("Model: not loaded")
-        self.tool_palette.sam_status_lbl.setStyleSheet(
-            "color: grey; font-style: italic;"
-        )
+        self.right_panel.set_sam_status("Model: not loaded", "grey", italic=True)
 
     def _on_sam_loading_done(self) -> None:
         self._sam_loading = False
-        display_name = self.tool_palette.sam_variant_combo.currentText()
-        self.tool_palette.sam_status_lbl.setText(f"Ready: {display_name}")
-        self.tool_palette.sam_status_lbl.setStyleSheet(
-            "color: green; font-style: normal;"
-        )
+        display_name = self.right_panel.sam_variant_display_name()
+        self.right_panel.set_sam_status(f"Ready: {display_name}", "green", italic=False)
         if self._active_tool == "sam_bbox":
             self.status_bar.set_sam_hint(
                 f"Ready: {display_name}  ·  draw bbox to segment"
@@ -1731,14 +1724,11 @@ class AnnoMateWindow(QWidget):
     def _on_sam_loading_failed(self, msg: str) -> None:
         self._sam_loading = False
         self.tool_palette.deselect_all()
-        self._active_tool = ""
+        self._set_active_tool("")
         self.canvas.set_tool(None)
         self.status_bar.set_tool("")
         self.status_bar.set_sam_hint("")
-        self.tool_palette.sam_status_lbl.setText("Load failed")
-        self.tool_palette.sam_status_lbl.setStyleSheet(
-            "color: red; font-style: normal;"
-        )
+        self.right_panel.set_sam_status("Load failed", "red", italic=False)
         QMessageBox.critical(self, "SAM Load Error", f"Could not load model:\n{msg}")
 
     def _on_sam_bbox_drawn(self, x1: float, y1: float, x2: float, y2: float) -> None:

@@ -7,9 +7,10 @@ page and expands the panel. Clicking the active tab again collapses the
 panel back down to just the rail, so the icons stay reachable without the
 panel taking up canvas space.
 
-Only "Annotation Classes" and "Microsentry" have real pages today — the
-rest are icon-only placeholders for settings that currently still live in
-the tool palette / viewport floating bar (see the redesign plan) and will
+Four tabs total: Active Tool, Dataset Setup, Microsentry, and View
+Overlays. View Overlays' contents (Grid, Anomaly Constraints, Center
+Crop) are still placeholders -- each its own collapsible section, since
+all three currently still live in the viewport floating bar and will
 migrate in as separate follow-up steps.
 """
 
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from views.annomate.sections import (
+    ActiveToolSection,
     ClassesSection,
     MicrosentrySection,
     _CollapsibleSection,
@@ -44,14 +46,9 @@ _SETTINGS_APP = "AnnoMateMicroSentryAI"
 _SETTINGS_TAB_KEY = "ui/right_panel_active_tab"
 _SETTINGS_COLLAPSED_KEY = "ui/right_panel_collapsed"
 
-# Tabs with no page built yet -- icon-only stubs standing in for settings
-# that will migrate in from the tool palette / viewport floating bar.
-_PLACEHOLDER_TABS = (
-    ("active_tool", "draw", "Active Tool"),
-    ("measurement", "straighten", "Measurement & Calibration"),
-    ("constraints", "warning", "Constraints"),
-    ("overlays", "crop_free", "View Overlays"),
-)
+# View Overlays tab: features that still live in the viewport floating bar,
+# each staged here as its own collapsible section until it migrates in.
+_OVERLAY_SECTIONS = ("Grid", "Anomaly Constraints", "Center Crop")
 
 
 def _stack_sections(sections: list) -> QWidget:
@@ -104,6 +101,15 @@ class _PlaceholderPage(QWidget):
         text_lbl.setAlignment(Qt.AlignCenter)
         text_lbl.setStyleSheet("color: grey;")
         layout.addWidget(text_lbl)
+
+
+def _placeholder_body(text: str = "Coming soon") -> QWidget:
+    """Small stand-in body for a single collapsible section within a tab."""
+    lbl = QLabel(text)
+    lbl.setAlignment(Qt.AlignCenter)
+    lbl.setStyleSheet("color: grey;")
+    lbl.setContentsMargins(0, 4, 0, 4)
+    return lbl
 
 
 class _ActivityRail(QFrame):
@@ -186,6 +192,8 @@ class RightPanel(QWidget):
     accept_polygons_requested = Signal()
     annotation_mode_changed = Signal(str)  # "pixel" | "image_level"
     collapsed_changed = Signal(bool)
+    thickness_changed = Signal(float)
+    sam_variant_changed = Signal(str)
 
     def __init__(
         self,
@@ -215,11 +223,17 @@ class RightPanel(QWidget):
         self._page_index: dict[str, int] = {}
         self._collapsed = False
 
-        self._add_tab(*_PLACEHOLDER_TABS[0])
+        # ---- Active Tool tab -- Common (stroke width) plus a per-tool
+        # section that swaps its body to match whichever tool is selected;
+        # new tools register their own settings widget the same way SAM did. ----
+        self.active_tool = ActiveToolSection()
+        self.active_tool.thickness_changed.connect(self.thickness_changed)
+        self.active_tool.sam_variant_changed.connect(self.sam_variant_changed)
+        self._add_tab("active_tool", "draw", "Active Tool", self.active_tool)
 
-        # ---- Classes / Dataset Setup tab -- one collapsible section per
-        # feature, so future dataset-setup features can join "Annotation
-        # Classes" here without disturbing it. ----
+        # ---- Dataset Setup tab -- one collapsible section per feature, so
+        # future dataset-setup features can join "Annotation Classes" here
+        # without disturbing it. ----
         self.classes = ClassesSection(dataset_model)
         self.classes.class_selected.connect(self.class_selected)
         self.classes.annotation_mode_changed.connect(self.annotation_mode_changed)
@@ -227,7 +241,7 @@ class RightPanel(QWidget):
         classes_section.body_layout().setContentsMargins(0, 0, 0, 4)
         classes_section.body_layout().addWidget(self.classes)
         classes_page = _stack_sections([classes_section])
-        self._add_tab("classes", "label", "Annotation Classes", classes_page)
+        self._add_tab("classes", "dataset", "Dataset Setup", classes_page)
 
         # ---- AI / Microsentry tab -- same idea: current AI capabilities
         # (Microsentry) and any future ones each get their own collapsible
@@ -254,8 +268,17 @@ class RightPanel(QWidget):
         ms_page = _stack_sections([ms_section])
         self._add_tab("microsentry", "auto_awesome", "Microsentry AI", ms_page)
 
-        for key, icon_name, title in _PLACEHOLDER_TABS[1:]:
-            self._add_tab(key, icon_name, title)
+        # ---- View Overlays tab -- Grid, Anomaly Constraints, and Center
+        # Crop all currently live in the viewport floating bar; each gets
+        # its own collapsible placeholder here until it migrates in. ----
+        overlay_sections = [
+            _CollapsibleSection(title, expanded=False) for title in _OVERLAY_SECTIONS
+        ]
+        for section in overlay_sections:
+            section.body_layout().setContentsMargins(0, 0, 0, 4)
+            section.body_layout().addWidget(_placeholder_body())
+        overlays_page = _stack_sections(overlay_sections)
+        self._add_tab("overlays", "layers", "View Overlays", overlays_page)
 
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         last_tab = settings.value(_SETTINGS_TAB_KEY, "classes", type=str)
@@ -316,6 +339,26 @@ class RightPanel(QWidget):
     def set_current_row(self, row: int) -> None:
         """Update the annotation-classes section for the new image."""
         self.classes.set_current_row(row)
+
+    # ------------------------------------------------------------------ #
+    # Active Tool pass-throughs
+    # ------------------------------------------------------------------ #
+
+    def set_active_tool(self, tool_key: str) -> None:
+        """Update the Active Tool tab to show *tool_key*'s settings ("" = none)."""
+        self.active_tool.set_active_tool(tool_key)
+
+    def set_thickness(self, value: float) -> None:
+        self.active_tool.set_thickness(value)
+
+    def current_sam_variant(self) -> str:
+        return self.active_tool.current_sam_variant()
+
+    def sam_variant_display_name(self) -> str:
+        return self.active_tool.sam_variant_display_name()
+
+    def set_sam_status(self, text: str, color: str = "grey", italic: bool = True) -> None:
+        self.active_tool.set_sam_status(text, color, italic)
 
     # ------------------------------------------------------------------ #
     # Microsentry pass-throughs

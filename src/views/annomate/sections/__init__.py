@@ -5,6 +5,7 @@ from .annotations import AnnotationsSection
 from ._image_classes import ImageClassesSection
 from .metadata import MetadataSection
 from .microsentry import MicrosentrySection
+from .active_tool import ActiveToolSection
 
 __all__ = [
     "_CollapsibleSection",
@@ -14,4 +15,5 @@ __all__ = [
     "ImageClassesSection",
     "MetadataSection",
     "MicrosentrySection",
+    "ActiveToolSection",
 ]
