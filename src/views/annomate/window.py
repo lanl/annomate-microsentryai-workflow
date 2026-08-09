@@ -710,6 +710,7 @@ class AnnoMateWindow(QWidget):
             self.inference_model,
             canvas=self.canvas,
             center_template_model=self._center_template_model,
+            calibration_model=self._calib_model,
             parent=self,
         )
         self.right_panel.collapsed_changed.connect(

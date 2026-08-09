@@ -7,6 +7,7 @@ from .metadata import MetadataSection
 from .microsentry import MicrosentrySection
 from .active_tool import ActiveToolSection
 from .center_crop import CenterCropSection
+from .grid import GridSection
 
 __all__ = [
     "_CollapsibleSection",
@@ -18,4 +19,5 @@ __all__ = [
     "MicrosentrySection",
     "ActiveToolSection",
     "CenterCropSection",
+    "GridSection",
 ]

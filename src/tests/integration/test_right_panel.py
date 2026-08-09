@@ -147,12 +147,11 @@ def test_restore_last_state_stays_collapsed_if_that_was_last_left(
     assert panel.is_collapsed() is False
 
 
-def test_center_crop_is_first_overlays_section(qtbot, isolated_settings):
-    """Verify Center Crop leads the View Overlays tab, ahead of the placeholders.
+def test_overlays_section_order_matches_migration_order(qtbot, isolated_settings):
+    """Verify View Overlays lists migrated sections before the remaining placeholder.
 
-    Center Crop migrated in from the viewport floating bar and must be the
-    first collapsible section a user sees under View Overlays -- Grid and
-    Anomaly Constraints (still placeholders) come after it.
+    Center Crop and Grid have migrated in from the viewport floating bar, in
+    that order; Anomaly Constraints (still a placeholder) comes last.
     """
     panel = _make_panel(qtbot)
 
@@ -167,7 +166,7 @@ def test_center_crop_is_first_overlays_section(qtbot, isolated_settings):
         for i in range(layout.count())
         if layout.itemAt(i).widget() is not None
     ]
-    assert titles_in_order[0] == "Center Crop"
+    assert titles_in_order[:3] == ["Center Crop", "Grid", "Anomaly Constraints"]
 
 
 def test_center_crop_signals_forward_through_right_panel(qtbot, isolated_settings):
@@ -201,3 +200,26 @@ def test_center_crop_signals_forward_through_right_panel(qtbot, isolated_setting
     assert template_cleared == [True]
     assert template_import == ["/tmp/t.png"]
     assert crop_toggled == [True]
+
+
+def test_grid_section_wired_to_calibration_model(qtbot, isolated_settings):
+    """Verify RightPanel passes its calibration_model through to GridSection.
+
+    Toggling the grid checkbox on panel.grid should update the same
+    CalibrationModel instance RightPanel was constructed with.
+    """
+    from core.states.calibration_state import CalibrationState
+    from models.calibration_model import CalibrationModel
+
+    dataset_model = DatasetTableModel(DatasetState())
+    calib_model = CalibrationModel(CalibrationState())
+    calib_model.set_calib_points((0.0, 0.0), (100.0, 0.0))
+    assert calib_model.apply_calibration(10.0, "mm")
+
+    panel = RightPanel(dataset_model, calibration_model=calib_model)
+    qtbot.addWidget(panel)
+
+    assert panel.grid._grid_chk.isEnabled()
+    panel.grid._grid_chk.click()
+
+    assert calib_model.grid_visible() is False

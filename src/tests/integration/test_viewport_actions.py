@@ -121,13 +121,11 @@ def test_calibrate_emits_tool_requests(canvas, calibrated_model, qtbot):
     assert not bar._btn_calibrate_points.isChecked()
 
 
-def test_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
-    """Verify that calibration and grid controls are all enabled and show correct defaults in pixel mode.
+def test_calibrate_points_enabled_in_default_pixel_mode(canvas, qtbot):
+    """Verify calibrate-points is enabled and status shows '1px:1px' before any calibration.
 
-    In the default uncalibrated state (1px:1px), calibrate and grid controls
-    should all be enabled, the status label should display '1px:1px', and the grid
-    checkbox should be checked. These states should persist after applying calibration.
-    Success means all assertions pass both before and after calibration.
+    In the default uncalibrated state, the calibrate-points button should be
+    enabled and the status label should display '1px:1px'.
     """
     model = CalibrationModel(CalibrationState())
     bar = ViewportActionsBar(canvas, model, canvas)
@@ -135,54 +133,19 @@ def test_grid_settings_enabled_in_default_pixel_mode(canvas, qtbot):
     qtbot.addWidget(bar)
 
     assert bar._btn_calibrate_points.isEnabled()
-    assert bar._grid_chk.isEnabled()
-    assert model.grid_visible() is False
-    assert not bar._grid_chk.isChecked()
     assert "1px:1px" in bar._calib_status_lbl.text()
-
-    model.set_calib_points((0.0, 0.0), (100.0, 0.0))
-    assert model.apply_calibration(5.0, "mm")
-
-    assert bar._grid_chk.isEnabled()
-    assert model.grid_visible() is True
-    assert bar._grid_chk.isChecked()
-
-
-def test_grid_toggle_in_settings_updates_model(canvas, calibrated_model, qtbot):
-    """Verify that clicking the grid visibility checkbox updates the calibration model's grid_visible flag.
-
-    The grid starts visible. Clicking the grid checkbox should hide the grid in the
-    model and uncheck the control. Success means grid_visible() is False and the
-    checkbox is unchecked after the click.
-    """
-    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
-    qtbot.addWidget(bar)
-
-    assert calibrated_model.grid_visible() is True
-    bar._grid_chk.click()
-
-    assert calibrated_model.grid_visible() is False
-    assert not bar._grid_chk.isChecked()
 
 
 def test_settings_controls_update_calibration_model(canvas, calibrated_model, qtbot):
-    """Verify that all ViewportActionsBar settings controls update the calibration model and canvas state.
+    """Verify that ViewportActionsBar's calibration controls update the model and canvas state.
 
-    Tests opacity slider, fixed spacing input, measurement display, clear measurement
-    button, and reset calibration button. Success means each control produces the
-    corresponding model or canvas state change.
+    Tests the measurement display, clear measurement button, and reset
+    calibration button. Success means each control produces the corresponding
+    model or canvas state change.
     """
     bar = ViewportActionsBar(canvas, calibrated_model, canvas)
     bar.set_image_loaded(True)
     qtbot.addWidget(bar)
-
-    bar._opacity_slider.setValue(75)
-    assert calibrated_model.grid_opacity() == 0.75
-
-    bar._spacing_edit.setText("2.5")
-    bar._radio_fixed.setChecked(True)
-    assert calibrated_model.grid_spacing_auto() is False
-    assert calibrated_model.grid_spacing_world() == 2.5
 
     calibrated_model.set_meas_p1((0.0, 0.0))
     calibrated_model.set_meas_p2((100.0, 0.0))
@@ -195,7 +158,6 @@ def test_settings_controls_update_calibration_model(canvas, calibrated_model, qt
     assert calibrated_model.is_calibrated() is False
     assert calibrated_model.has_scale() is True
     assert calibrated_model.unit() == "px"
-    assert bar._grid_chk.isEnabled()
 
 
 def test_center_crop_defaults_to_605px_radius(qtbot):
