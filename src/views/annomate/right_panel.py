@@ -209,6 +209,7 @@ class RightPanel(QWidget):
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet("RightPanel { border-left: 1px solid palette(mid); }")
 
         outer = QHBoxLayout(self)
@@ -248,7 +249,7 @@ class RightPanel(QWidget):
         classes_section.body_layout().setContentsMargins(0, 0, 0, 4)
         classes_section.body_layout().addWidget(self.classes)
         classes_page = _stack_sections([classes_section])
-        self._add_tab("classes", "dataset", "Dataset Setup", classes_page)
+        self._add_tab("classes", "data_table", "Dataset Setup", classes_page)
 
         # ---- AI / Microsentry tab -- same idea: current AI capabilities
         # (Microsentry) and any future ones each get their own collapsible

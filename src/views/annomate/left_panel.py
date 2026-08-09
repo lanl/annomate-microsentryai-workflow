@@ -147,6 +147,7 @@ class LeftPanel(QWidget):
     ) -> None:
         super().__init__(parent)
         # Right border separating the panel from the tool palette
+        self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet("LeftPanel { border-right: 1px solid palette(mid); }")
 
         outer = QVBoxLayout(self)

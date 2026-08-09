@@ -13,7 +13,7 @@ tool selection only.
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame,
+    QWidget,
     QVBoxLayout,
     QToolButton,
     QButtonGroup,
@@ -27,7 +27,7 @@ _BTN_H = 40
 _ICON_SIZE = 22
 
 
-class ToolPalette(QFrame):
+class ToolPalette(QWidget):
     """Single-column tool panel.
 
     Signals:
@@ -38,7 +38,8 @@ class ToolPalette(QFrame):
 
     def __init__(self, parent=None, calibration_model=None) -> None:
         super().__init__(parent)
-        self.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet("ToolPalette { border-right: 1px solid palette(mid); }")
         self.setFixedWidth(56)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
