@@ -6,6 +6,7 @@ from ._image_classes import ImageClassesSection
 from .metadata import MetadataSection
 from .microsentry import MicrosentrySection
 from .active_tool import ActiveToolSection
+from .center_crop import CenterCropSection
 
 __all__ = [
     "_CollapsibleSection",
@@ -16,4 +17,5 @@ __all__ = [
     "MetadataSection",
     "MicrosentrySection",
     "ActiveToolSection",
+    "CenterCropSection",
 ]

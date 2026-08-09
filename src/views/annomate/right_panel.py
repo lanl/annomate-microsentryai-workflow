@@ -8,10 +8,10 @@ panel back down to just the rail, so the icons stay reachable without the
 panel taking up canvas space.
 
 Four tabs total: Active Tool, Dataset Setup, Microsentry, and View
-Overlays. View Overlays' contents (Grid, Anomaly Constraints, Center
-Crop) are still placeholders -- each its own collapsible section, since
-all three currently still live in the viewport floating bar and will
-migrate in as separate follow-up steps.
+Overlays. View Overlays' first section, Center Crop, has migrated in
+from the viewport floating bar; Grid and Anomaly Constraints are still
+placeholders -- each its own collapsible section -- until they migrate
+in as separate follow-up steps.
 
 The panel always starts collapsed at construction (no project is loaded
 yet at that point). Two explicit calls decide what happens once one is:
@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from views.annomate.sections import (
     ActiveToolSection,
+    CenterCropSection,
     ClassesSection,
     MicrosentrySection,
     _CollapsibleSection,
@@ -54,8 +55,9 @@ _SETTINGS_TAB_KEY = "ui/right_panel_active_tab"
 _SETTINGS_COLLAPSED_KEY = "ui/right_panel_collapsed"
 
 # View Overlays tab: features that still live in the viewport floating bar,
-# each staged here as its own collapsible section until it migrates in.
-_OVERLAY_SECTIONS = ("Grid", "Anomaly Constraints", "Center Crop")
+# each staged here as its own collapsible placeholder section until it
+# migrates in (Center Crop has already migrated -- see _add_tab call).
+_OVERLAY_SECTIONS = ("Grid", "Anomaly Constraints")
 
 
 def _stack_sections(sections: list) -> QWidget:
@@ -201,11 +203,18 @@ class RightPanel(QWidget):
     collapsed_changed = Signal(bool)
     thickness_changed = Signal(float)
     sam_variant_changed = Signal(str)
+    crop_overlay_toggled = Signal(bool)
+    center_calibration_started = Signal()
+    center_calibration_accepted = Signal()
+    center_template_cleared = Signal()
+    center_template_import_requested = Signal(str)
 
     def __init__(
         self,
         dataset_model,
         inference_model=None,
+        canvas=None,
+        center_template_model=None,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
@@ -276,13 +285,31 @@ class RightPanel(QWidget):
         ms_page = _stack_sections([ms_section])
         self._add_tab("microsentry", "auto_awesome", "Microsentry AI", ms_page)
 
-        # ---- View Overlays tab -- Grid, Anomaly Constraints, and Center
-        # Crop all currently live in the viewport floating bar; each gets
-        # its own collapsible placeholder here until it migrates in. ----
-        overlay_sections = [
+        # ---- View Overlays tab -- Center Crop has migrated in from the
+        # viewport floating bar and leads the tab; Grid and Anomaly
+        # Constraints are still placeholders until they migrate in too. ----
+        self.center_crop = CenterCropSection(canvas, center_template_model)
+        self.center_crop.crop_overlay_toggled.connect(self.crop_overlay_toggled)
+        self.center_crop.center_calibration_started.connect(
+            self.center_calibration_started
+        )
+        self.center_crop.center_calibration_accepted.connect(
+            self.center_calibration_accepted
+        )
+        self.center_crop.center_template_cleared.connect(
+            self.center_template_cleared
+        )
+        self.center_crop.center_template_import_requested.connect(
+            self.center_template_import_requested
+        )
+        center_crop_section = _CollapsibleSection("Center Crop", expanded=False)
+        center_crop_section.body_layout().setContentsMargins(0, 0, 0, 4)
+        center_crop_section.body_layout().addWidget(self.center_crop)
+
+        overlay_sections = [center_crop_section] + [
             _CollapsibleSection(title, expanded=False) for title in _OVERLAY_SECTIONS
         ]
-        for section in overlay_sections:
+        for section in overlay_sections[1:]:
             section.body_layout().setContentsMargins(0, 0, 0, 4)
             section.body_layout().addWidget(_placeholder_body())
         overlays_page = _stack_sections(overlay_sections)

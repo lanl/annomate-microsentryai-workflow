@@ -530,19 +530,19 @@ class AnnoMateWindow(QWidget):
         # Tool palette
         self.tool_palette.tool_selected.connect(self._on_tool_selected)
         self.viewport_actions.tool_selected.connect(self._on_tool_selected)
-        self.viewport_actions.center_calibration_started.connect(
+        self.right_panel.center_calibration_started.connect(
             self._on_center_calibration_started
         )
-        self.viewport_actions.center_calibration_accepted.connect(
+        self.right_panel.center_calibration_accepted.connect(
             self._on_center_calibration_accepted
         )
-        self.viewport_actions.center_template_cleared.connect(
+        self.right_panel.center_template_cleared.connect(
             self._on_center_template_cleared
         )
-        self.viewport_actions.center_template_import_requested.connect(
+        self.right_panel.center_template_import_requested.connect(
             self._on_center_template_import_requested
         )
-        self.viewport_actions.crop_overlay_toggled.connect(
+        self.right_panel.crop_overlay_toggled.connect(
             self._on_crop_overlay_toggled
         )
         self.canvas.draw_attempted.connect(self._on_draw_attempted)
@@ -670,7 +670,6 @@ class AnnoMateWindow(QWidget):
             self.canvas,
             self._calib_model,
             self.canvas,
-            center_template_model=self._center_template_model,
             anomaly_constraint_model=self._anomaly_model,
         )
         self.viewport_actions.raise_()
@@ -706,7 +705,13 @@ class AnnoMateWindow(QWidget):
 
         self.canvas.installEventFilter(self)
 
-        self.right_panel = RightPanel(self.dataset_model, self.inference_model, self)
+        self.right_panel = RightPanel(
+            self.dataset_model,
+            self.inference_model,
+            canvas=self.canvas,
+            center_template_model=self._center_template_model,
+            parent=self,
+        )
         self.right_panel.collapsed_changed.connect(
             self._on_right_panel_collapsed_changed
         )
@@ -825,6 +830,7 @@ class AnnoMateWindow(QWidget):
             self._ai_popup.setVisible(False)
             self._manual_popup.setVisible(False)
             self.viewport_actions.set_image_loaded(False)
+            self.right_panel.center_crop.set_has_image(False)
             self.viewport_actions.set_active_tool("")
             self.canvas.clear_image()
             self.right_panel.set_current_row(-1)
@@ -863,6 +869,7 @@ class AnnoMateWindow(QWidget):
         self._review_bar.setVisible(True)
         self._review_bar.reposition(self.canvas.size())
         self.viewport_actions.set_image_loaded(True)
+        self.right_panel.center_crop.set_has_image(True)
         self.viewport_actions.reposition(self.canvas.size())
         self._ai_popup.setVisible(False)
         self._selected_ai_idx = -1
@@ -981,8 +988,11 @@ class AnnoMateWindow(QWidget):
             )
 
     # ------------------------------------------------------------------ #
-    # Center template slots
+    # Center crop / template slots
     # ------------------------------------------------------------------ #
+
+    def _set_center_calibrating(self, active: bool) -> None:
+        self.right_panel.center_crop.set_calibrating(active)
 
     def _on_center_calibration_started(self) -> None:
         if self._current_bgr is None:
@@ -999,7 +1009,7 @@ class AnnoMateWindow(QWidget):
             center_dot=True,
             calibrating=True,
         )
-        self.viewport_actions.set_center_calibrating(True)
+        self._set_center_calibrating(True)
 
     def _on_center_calibration_accepted(self) -> None:
         if self._center_template_controller is None or self._current_bgr is None:
@@ -1072,7 +1082,7 @@ class AnnoMateWindow(QWidget):
             return
 
         self.canvas.set_center_crop(calibrating=False)
-        self.viewport_actions.set_center_calibrating(False)
+        self._set_center_calibrating(False)
         self._start_pending_center_crop_preload()
 
     def _on_crop_overlay_toggled(self, checked: bool) -> None:
@@ -1113,7 +1123,7 @@ class AnnoMateWindow(QWidget):
         logger.info("Center template cleared by user.")
         self._center_template_controller.clear_template()
         self.canvas.set_center_crop(enabled=False, calibrating=False)
-        self.viewport_actions.set_center_calibrating(False)
+        self._set_center_calibrating(False)
 
     def _apply_center_template_match(self, bgr) -> None:
         if (
@@ -1155,7 +1165,7 @@ class AnnoMateWindow(QWidget):
             center_y=center_y,
             calibrating=False,
         )
-        self.viewport_actions.set_center_calibrating(False)
+        self._set_center_calibrating(False)
 
     # ------------------------------------------------------------------ #
     # Annotation slots
@@ -1562,7 +1572,7 @@ class AnnoMateWindow(QWidget):
             center_y=cy,
             calibrating=False,
         )
-        self.viewport_actions.set_center_calibrating(False)
+        self._set_center_calibrating(False)
 
     def _on_inference_result(self, path: str, score: float, score_map) -> None:
         self.inference_model.set_score_map(path, score, score_map)

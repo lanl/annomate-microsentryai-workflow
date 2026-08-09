@@ -145,3 +145,59 @@ def test_restore_last_state_stays_collapsed_if_that_was_last_left(
 
     panel._rail.button("microsentry").click()
     assert panel.is_collapsed() is False
+
+
+def test_center_crop_is_first_overlays_section(qtbot, isolated_settings):
+    """Verify Center Crop leads the View Overlays tab, ahead of the placeholders.
+
+    Center Crop migrated in from the viewport floating bar and must be the
+    first collapsible section a user sees under View Overlays -- Grid and
+    Anomaly Constraints (still placeholders) come after it.
+    """
+    panel = _make_panel(qtbot)
+
+    # Each tab page is wrapped in a QScrollArea by _add_tab; unwrap it to
+    # reach the actual page, whose layout holds the _CollapsibleSection
+    # children in the order they were added.
+    scroll = panel._stack.widget(panel._page_index["overlays"])
+    overlays_page = scroll.widget().layout().itemAt(0).widget()
+    layout = overlays_page.layout()
+    titles_in_order = [
+        layout.itemAt(i).widget()._title
+        for i in range(layout.count())
+        if layout.itemAt(i).widget() is not None
+    ]
+    assert titles_in_order[0] == "Center Crop"
+
+
+def test_center_crop_signals_forward_through_right_panel(qtbot, isolated_settings):
+    """Verify RightPanel forwards CenterCropSection's signals under its own name.
+
+    window.py wires up center-crop/template handling against RightPanel's
+    signals, not CenterCropSection's directly -- this confirms the forwarding
+    is actually connected.
+    """
+    panel = _make_panel(qtbot)
+
+    calibration_started = []
+    calibration_accepted = []
+    template_cleared = []
+    template_import = []
+    crop_toggled = []
+    panel.center_calibration_started.connect(lambda: calibration_started.append(True))
+    panel.center_calibration_accepted.connect(lambda: calibration_accepted.append(True))
+    panel.center_template_cleared.connect(lambda: template_cleared.append(True))
+    panel.center_template_import_requested.connect(template_import.append)
+    panel.crop_overlay_toggled.connect(crop_toggled.append)
+
+    panel.center_crop.center_calibration_started.emit()
+    panel.center_crop.center_calibration_accepted.emit()
+    panel.center_crop.center_template_cleared.emit()
+    panel.center_crop.center_template_import_requested.emit("/tmp/t.png")
+    panel.center_crop.crop_overlay_toggled.emit(True)
+
+    assert calibration_started == [True]
+    assert calibration_accepted == [True]
+    assert template_cleared == [True]
+    assert template_import == ["/tmp/t.png"]
+    assert crop_toggled == [True]

@@ -4,9 +4,7 @@ from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
 
 from core.states.calibration_state import CalibrationState
-from core.states.center_template_state import CenterTemplateState
 from models.calibration_model import CalibrationModel
-from models.center_template_model import CenterTemplateModel
 from views.annomate.image_label import ImageLabel
 from views.annomate.viewport_actions import ViewportActionsBar
 
@@ -200,39 +198,6 @@ def test_settings_controls_update_calibration_model(canvas, calibrated_model, qt
     assert bar._grid_chk.isEnabled()
 
 
-def test_center_crop_controls_update_canvas(canvas, calibrated_model, qtbot):
-    """Verify that center crop controls in the actions bar drive canvas crop settings.
-
-    Enables the crop overlay, changes width, height, shape to circle, and opacity.
-    For circular crops, width and height are kept equal (the smaller dimension). Success
-    means all canvas crop settings reflect the control values, with width and height
-    constrained to the circle constraint.
-    """
-    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
-    bar.set_image_dimensions(100, 100)
-    qtbot.addWidget(bar)
-
-    assert not canvas.center_crop_settings()["enabled"]
-
-    bar._crop_chk.click()
-    bar._crop_width_spin.setValue(40)
-    bar._crop_height_spin.setValue(30)
-    bar._crop_shape_combo.setCurrentText("Circle")
-    bar._crop_height_spin.setValue(15)
-    bar._crop_opacity_slider.setValue(80)
-    bar._crop_center_dot_chk.setChecked(True)
-
-    settings = canvas.center_crop_settings()
-    assert settings["enabled"] is True
-    assert settings["width"] == 30
-    assert settings["height"] == 30
-    assert settings["shape"] == "circle"
-    assert settings["opacity"] == 0.8
-    assert settings["center_dot"] is True
-    assert bar._crop_width_spin.value() == 30
-    assert bar._crop_height_spin.value() == 15
-
-
 def test_center_crop_defaults_to_605px_radius(qtbot):
     """Verify that a new ImageLabel loaded with a 1080x1080 image defaults to a 1210px circle crop.
 
@@ -247,80 +212,6 @@ def test_center_crop_defaults_to_605px_radius(qtbot):
     assert settings["shape"] == "circle"
     assert settings["width"] == 1210
     assert settings["height"] == 1210
-
-
-def test_center_crop_reset_restores_defaults(canvas, calibrated_model, qtbot):
-    """Verify that clicking the crop reset button restores all crop settings to factory defaults.
-
-    Changes shape, dimensions, and opacity away from defaults, then clicks reset.
-    Success means all settings return to their defaults: circle shape, 1210x1210 size,
-    opacity 0.37, center_dot False, and the height spin shows 605 (the radius input).
-    """
-    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
-    bar.set_image_dimensions(100, 100)
-    qtbot.addWidget(bar)
-
-    bar._crop_shape_combo.setCurrentText("Rectangle")
-    bar._crop_width_spin.setValue(40)
-    bar._crop_height_spin.setValue(30)
-    bar._crop_opacity_slider.setValue(80)
-
-    qtbot.mouseClick(bar._btn_reset_crop, Qt.LeftButton)
-
-    settings = canvas.center_crop_settings()
-    assert settings["shape"] == "circle"
-    assert settings["width"] == 1210
-    assert settings["height"] == 1210
-    assert settings["opacity"] == 0.37
-    assert settings["center_dot"] is False
-    assert bar._crop_height_spin.value() == 605
-
-
-def test_center_template_actions_emit_requests(canvas, calibrated_model, qtbot):
-    """Verify that center template calibration and clear buttons emit the correct signals.
-
-    Clicks calibrate center (emits center_calibration_started), accepts the calibration
-    (emits center_calibration_accepted), sets a template on the model, then clears it
-    (emits center_template_cleared). Success means each signal fires exactly once in
-    the correct sequence.
-    """
-    template_model = CenterTemplateModel(CenterTemplateState())
-    bar = ViewportActionsBar(
-        canvas,
-        calibrated_model,
-        canvas,
-        center_template_model=template_model,
-    )
-    bar.set_image_loaded(True)
-    qtbot.addWidget(bar)
-
-    started = []
-    accepted = []
-    cleared = []
-    bar.center_calibration_started.connect(lambda: started.append(True))
-    bar.center_calibration_accepted.connect(lambda: accepted.append(True))
-    bar.center_template_cleared.connect(lambda: cleared.append(True))
-
-    qtbot.mouseClick(bar._btn_calibrate_center, Qt.LeftButton)
-    bar.set_center_calibrating(True)
-    qtbot.mouseClick(bar._btn_accept_center, Qt.LeftButton)
-
-    template_model.set_template(
-        "center_template.png",
-        "/tmp/center_template.png",
-        10,
-        10,
-        "circle",
-        1210,
-        1210,
-        50,
-        50,
-    )
-    qtbot.mouseClick(bar._btn_clear_template, Qt.LeftButton)
-
-    assert started == [True]
-    assert accepted == [True]
-    assert cleared == [True]
 
 
 def test_center_crop_drag_updates_original_center(canvas, calibrated_model, qtbot):
