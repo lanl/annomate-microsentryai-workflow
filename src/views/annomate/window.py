@@ -1222,11 +1222,6 @@ class AnnoMateWindow(QWidget):
             return
         self._pending_manual_pts = pts
         self.canvas.set_pending_polygon(pts)
-        self.canvas.set_tool(None)
-        self.tool_palette.deselect_all()
-        self.viewport_actions.set_active_tool("")
-        self._set_active_tool("")
-        self.status_bar.set_tool("")
         self._manual_popup.set_classes(class_names)
         bbox = self.canvas.get_pending_polygon_view_rect()
         self._manual_popup.show_at_polygon(bbox)
