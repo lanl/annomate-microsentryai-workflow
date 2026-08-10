@@ -323,14 +323,21 @@ class DataNavigatorSection(QWidget):
         self._filter_panel.set_class_filter(self._proxy.class_filter())
         n = self._proxy.active_filter_count()
         self._btn_filter.setText("Filter" if n == 0 else f"Filter ({n})")
-        # invalidateFilter()/invalidateRowsFilter() don't reliably emit
-        # layoutChanged in this Qt build -- force a relayout explicitly
-        # rather than depending on QListView picking it up on its own.
+        # An explicit filter-panel change must still hide the open row if it
+        # no longer matches -- drop its pin before pruning, then restore it
+        # (if it's still selected) so future implicit data edits stay
+        # protected. invalidateFilter()/invalidateRowsFilter() don't
+        # reliably emit layoutChanged in this Qt build -- force a relayout
+        # explicitly rather than depending on QListView picking it up.
+        self._proxy.set_pinned_source_row(-1)
         self._list.doItemsLayout()
         self._prune_selection_if_filtered_out()
+        if self._selected_row >= 0:
+            self._proxy.set_pinned_source_row(self._selected_row)
         self._reposition_expanded_card()
 
     def _on_model_reset(self) -> None:
+        self._proxy.set_pinned_source_row(-1)  # old row index is meaningless against the new model
         self._collapse_expanded_widget()
         has_images = self.dataset_model.rowCount() > 0
         self._btn_prev.setVisible(has_images)
@@ -422,6 +429,7 @@ class DataNavigatorSection(QWidget):
         self.image_selected.emit(source_row)
 
     def _select_source_row(self, row: int, scroll: bool) -> None:
+        self._proxy.set_pinned_source_row(row)
         proxy_row = self._proxy_row_from_source(row)
         if proxy_row < 0:
             self._selected_row = row

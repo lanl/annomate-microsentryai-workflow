@@ -432,6 +432,16 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
         self._decision_filter: set = set()
         self._status_filter: set = set()
         self._class_filter: set = set()
+        self._pinned_source_row: int = -1
+
+    def set_pinned_source_row(self, source_row: int) -> None:
+        """Exempt *source_row* from filtering so editing the open image can't
+        make its own row vanish out from under it. Pass -1 to clear.
+        """
+        if source_row == self._pinned_source_row:
+            return
+        self._pinned_source_row = source_row
+        self.invalidateFilter()
 
     def set_decision_filter_active(self, decision: str, active: bool) -> None:
         """decision is "accept" or "reject". Empty set imposes no restriction."""
@@ -480,6 +490,8 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
         )
 
     def filterAcceptsRow(self, source_row: int, parent: QModelIndex) -> bool:
+        if source_row == self._pinned_source_row:
+            return True
         if not self._decision_filter and not self._status_filter and not self._class_filter:
             return True
         model = self.sourceModel()
