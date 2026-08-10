@@ -12,10 +12,12 @@ from views.icons import material_icon
 _ICON_SIZE = QSize(16, 16)
 _ICON_EXPANDED = "expand_more"  # chevron down -- body visible
 _ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
+_SEP_SPACING = 4  # px gap on each side of the end-of-section separator
+_SEP_HEIGHT = 2  # px thickness of the separator itself
 
 
 class _CollapsibleSection(QWidget):
-    """Bold toggle-header + separator + collapsible body.
+    """Bold toggle-header + collapsible body + separator marking the section's end.
 
     Args:
         expandable: When True, the section uses an Expanding vertical size
@@ -59,11 +61,6 @@ class _CollapsibleSection(QWidget):
         self._toggle_btn.clicked.connect(self._on_toggle)
         root.addWidget(self._toggle_btn)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        root.addWidget(sep)
-
         self._body = QWidget()
         if expandable:
             self._body.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -72,6 +69,16 @@ class _CollapsibleSection(QWidget):
         self._body_layout.setSpacing(4)
         root.addWidget(self._body, stretch=1 if expandable else 0)
         self._body.setVisible(expanded)
+
+        # Always visible (independent of expanded/collapsed) and placed after
+        # the body rather than under the header, so it consistently marks
+        # where this section ends -- not just a rule under its own title.
+        root.addSpacing(_SEP_SPACING)
+        sep = QFrame()
+        sep.setFixedHeight(_SEP_HEIGHT)
+        sep.setStyleSheet("background-color: black;")
+        root.addWidget(sep)
+        root.addSpacing(_SEP_SPACING)
 
     def body_layout(self) -> QVBoxLayout:
         return self._body_layout

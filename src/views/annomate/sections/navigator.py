@@ -157,7 +157,7 @@ class DataNavigatorSection(QWidget):
 
         filter_row = QWidget()
         filter_h = QHBoxLayout(filter_row)
-        filter_h.setContentsMargins(8, 0, 0, 0)
+        filter_h.setContentsMargins(8, 0, 4, 0)
         filter_h.setSpacing(6)
 
         _TIP_UNDECIDED = "Undecided: no Accept or Reject decision has been set."
