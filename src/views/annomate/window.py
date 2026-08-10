@@ -670,7 +670,6 @@ class AnnoMateWindow(QWidget):
             self.canvas,
             self._calib_model,
             self.canvas,
-            anomaly_constraint_model=self._anomaly_model,
         )
         self.viewport_actions.raise_()
 
@@ -711,6 +710,7 @@ class AnnoMateWindow(QWidget):
             canvas=self.canvas,
             center_template_model=self._center_template_model,
             calibration_model=self._calib_model,
+            anomaly_constraint_model=self._anomaly_model,
             parent=self,
         )
         self.right_panel.collapsed_changed.connect(
@@ -1178,7 +1178,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.set_violation_highlights(
             area_violations, distance_pairs, dist_values
         )
-        self.viewport_actions.refresh_anomaly_violations(
+        self.right_panel.anomaly.refresh_violations(
             len(area_violations), len(distance_pairs)
         )
 
@@ -1197,7 +1197,7 @@ class AnnoMateWindow(QWidget):
     def _on_calibration_changed_for_anomaly(self) -> None:
         if self._calib_model is not None:
             unit = self._calib_model.unit()
-            self.viewport_actions.update_anomaly_units(unit)
+            self.right_panel.anomaly.update_units(unit)
             self.canvas.set_violation_unit(unit)
         self._run_anomaly_checks()
 

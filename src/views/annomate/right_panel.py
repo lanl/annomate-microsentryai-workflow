@@ -8,10 +8,8 @@ panel back down to just the rail, so the icons stay reachable without the
 panel taking up canvas space.
 
 Four tabs total: Active Tool, Dataset Setup, Microsentry, and View
-Overlays. View Overlays' first two sections, Center Crop and Grid, have
-migrated in from the viewport floating bar; Anomaly Constraints is still
-a placeholder -- its own collapsible section -- until it migrates in as
-a separate follow-up step.
+Overlays. View Overlays' three sections -- Center Crop, Grid, and Anomaly
+Constraints -- have all migrated in from the viewport floating bar.
 
 The panel always starts collapsed at construction (no project is loaded
 yet at that point). Two explicit calls decide what happens once one is:
@@ -37,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from views.annomate.sections import (
     ActiveToolSection,
+    AnomalyConstraintsSection,
     CenterCropSection,
     ClassesSection,
     GridSection,
@@ -54,11 +53,6 @@ _SETTINGS_ORG = "LANL"
 _SETTINGS_APP = "AnnoMateMicroSentryAI"
 _SETTINGS_TAB_KEY = "ui/right_panel_active_tab"
 _SETTINGS_COLLAPSED_KEY = "ui/right_panel_collapsed"
-
-# View Overlays tab: features that still live in the viewport floating bar,
-# each staged here as its own collapsible placeholder section until it
-# migrates in (Center Crop and Grid have already migrated -- see _add_tab call).
-_OVERLAY_SECTIONS = ("Anomaly Constraints",)
 
 
 def _stack_sections(sections: list) -> QWidget:
@@ -113,13 +107,6 @@ class _PlaceholderPage(QWidget):
         layout.addWidget(text_lbl)
 
 
-def _placeholder_body(text: str = "Coming soon") -> QWidget:
-    """Small stand-in body for a single collapsible section within a tab."""
-    lbl = QLabel(text)
-    lbl.setAlignment(Qt.AlignCenter)
-    lbl.setStyleSheet("color: grey;")
-    lbl.setContentsMargins(0, 4, 0, 4)
-    return lbl
 
 
 class _ActivityRail(QFrame):
@@ -217,6 +204,7 @@ class RightPanel(QWidget):
         canvas=None,
         center_template_model=None,
         calibration_model=None,
+        anomaly_constraint_model=None,
         parent: QWidget = None,
     ) -> None:
         super().__init__(parent)
@@ -287,9 +275,8 @@ class RightPanel(QWidget):
         ms_page = _stack_sections([ms_section])
         self._add_tab("microsentry", "auto_awesome", "Microsentry AI", ms_page)
 
-        # ---- View Overlays tab -- Center Crop and Grid have migrated in
-        # from the viewport floating bar and lead the tab; Anomaly
-        # Constraints is still a placeholder until it migrates in too. ----
+        # ---- View Overlays tab -- Center Crop, Grid, and Anomaly
+        # Constraints have all migrated in from the viewport floating bar. ----
         self.center_crop = CenterCropSection(canvas, center_template_model)
         self.center_crop.crop_overlay_toggled.connect(self.crop_overlay_toggled)
         self.center_crop.center_calibration_started.connect(
@@ -313,12 +300,12 @@ class RightPanel(QWidget):
         grid_section.body_layout().setContentsMargins(0, 0, 0, 4)
         grid_section.body_layout().addWidget(self.grid)
 
-        overlay_sections = [center_crop_section, grid_section] + [
-            _CollapsibleSection(title, expanded=False) for title in _OVERLAY_SECTIONS
-        ]
-        for section in overlay_sections[2:]:
-            section.body_layout().setContentsMargins(0, 0, 0, 4)
-            section.body_layout().addWidget(_placeholder_body())
+        self.anomaly = AnomalyConstraintsSection(anomaly_constraint_model)
+        anomaly_section = _CollapsibleSection("Anomaly Constraints", expanded=False)
+        anomaly_section.body_layout().setContentsMargins(0, 0, 0, 4)
+        anomaly_section.body_layout().addWidget(self.anomaly)
+
+        overlay_sections = [center_crop_section, grid_section, anomaly_section]
         overlays_page = _stack_sections(overlay_sections)
         self._add_tab("overlays", "layers", "View Overlays", overlays_page)
 

@@ -8,6 +8,7 @@ from .microsentry import MicrosentrySection
 from .active_tool import ActiveToolSection
 from .center_crop import CenterCropSection
 from .grid import GridSection
+from .anomaly import AnomalyConstraintsSection
 
 __all__ = [
     "_CollapsibleSection",
@@ -20,4 +21,5 @@ __all__ = [
     "ActiveToolSection",
     "CenterCropSection",
     "GridSection",
+    "AnomalyConstraintsSection",
 ]
