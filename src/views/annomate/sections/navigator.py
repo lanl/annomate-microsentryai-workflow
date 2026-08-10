@@ -394,6 +394,11 @@ class DataNavigatorSection(QWidget):
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self._list.viewport() and event.type() == QEvent.Resize:
+            # doItemsLayout() first -- same reason as _apply_filters()/
+            # _on_proxy_order_changed(): QListView's cached row rects don't
+            # reliably refresh on their own, so visualRect() below can keep
+            # reporting the pre-resize width without this.
+            self._list.doItemsLayout()
             self._reposition_expanded_card()
         elif (
             obj is self._expanded_card
