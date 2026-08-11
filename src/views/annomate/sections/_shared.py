@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QLabel
+from PySide6.QtWidgets import QFrame, QLabel, QPushButton
 
 _COLOR_REVIEWED = "#4caf50"
 _COLOR_UNDECIDED = "#888888"
@@ -13,6 +13,32 @@ TOOLTIP_STYLESHEET = (
     f"QToolTip {{ background-color: {_COLOR_SELECTED_BG}; color: black; "
     "padding: 2px 4px; border: 1px solid palette(shadow); }"
 )
+
+# Same orange used by the Pixel Level / Image Level mode selector in
+# Annotation Classes, reused so every on/off toggle in the right panel
+# reads the same way: a plain button that turns orange when engaged.
+TOGGLE_BUTTON_STYLESHEET = (
+    "QPushButton {"
+    "  padding: 3px 10px;"
+    "  border: 1px solid palette(mid);"
+    "  border-radius: 4px;"
+    "  background: palette(button);"
+    "  color: palette(button-text);"
+    "}"
+    "QPushButton:checked {"
+    "  background: #ff9800;"
+    "  color: white;"
+    "  border-color: #c96800;"
+    "}"
+)
+
+
+def _toggle_button(text: str) -> QPushButton:
+    """A checkable QPushButton styled as an on/off toggle (orange when checked)."""
+    btn = QPushButton(text)
+    btn.setCheckable(True)
+    btn.setStyleSheet(TOGGLE_BUTTON_STYLESHEET)
+    return btn
 
 
 class _ClickableFrame(QFrame):

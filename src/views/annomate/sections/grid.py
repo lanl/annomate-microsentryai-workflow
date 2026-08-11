@@ -16,7 +16,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
@@ -34,6 +33,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from ._shared import _toggle_button
 
 _DEFAULT_GRID_OPACITY = 0.5
 _DEFAULT_GRID_COLOR = (58, 90, 122)
@@ -134,7 +135,7 @@ class GridSection(QWidget):
 
         layout.addWidget(_hline())
 
-        self._grid_chk = QCheckBox("Show Grid")
+        self._grid_chk = _toggle_button("Enable Grid")
         self._grid_chk.toggled.connect(self._on_grid_toggled)
         layout.addWidget(self._grid_chk)
 

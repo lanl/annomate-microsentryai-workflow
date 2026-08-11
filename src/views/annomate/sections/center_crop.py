@@ -12,7 +12,6 @@ floating Center Crop popup menu.
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox,
     QColorDialog,
     QComboBox,
     QFileDialog,
@@ -26,12 +25,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ._shared import _toggle_button
+
 
 class CenterCropSection(QWidget):
     """Center-crop overlay controls + template calibration workflow.
 
     Signals:
-        crop_overlay_toggled (bool): "Enable" checkbox toggled.
+        crop_overlay_toggled (bool): "Enable Center Crop" button toggled.
         center_calibration_started (): "Calibrate Center" clicked.
         center_calibration_accepted (): "Accept" clicked.
         center_template_cleared (): "Clear" clicked.
@@ -64,7 +65,7 @@ class CenterCropSection(QWidget):
         layout.setSpacing(8)
 
         # Enable
-        self._crop_chk = QCheckBox("Enable")
+        self._crop_chk = _toggle_button("Enable Center Crop")
         self._crop_chk.toggled.connect(self._on_crop_toggled)
         layout.addWidget(self._crop_chk)
 
@@ -150,7 +151,7 @@ class CenterCropSection(QWidget):
         self._update_crop_color_swatch(None)
 
         # Center dot
-        self._crop_center_dot_chk = QCheckBox("Show center dot")
+        self._crop_center_dot_chk = _toggle_button("Enable Center Dot")
         self._crop_center_dot_chk.setToolTip("Show center dot")
         self._crop_center_dot_chk.toggled.connect(self._on_crop_center_dot_toggled)
         layout.addWidget(self._crop_center_dot_chk)

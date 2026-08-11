@@ -11,7 +11,6 @@ computed values into after each check run or calibration change.
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QColorDialog,
     QDoubleSpinBox,
     QFrame,
@@ -19,10 +18,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QRadioButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 from PySide6.QtGui import QColor
+
+from ._shared import _toggle_button
 
 
 class AnomalyConstraintsSection(QWidget):
@@ -37,7 +39,7 @@ class AnomalyConstraintsSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        self._anomaly_enable_chk = QCheckBox("Enable")
+        self._anomaly_enable_chk = _toggle_button("Enable Anomaly Constraints")
         layout.addWidget(self._anomaly_enable_chk)
 
         # ── Area threshold section ──────────────────────────────────────
@@ -50,7 +52,7 @@ class AnomalyConstraintsSection(QWidget):
         area_header.setStyleSheet("font-weight: bold;")
         layout.addWidget(area_header)
 
-        self._anomaly_area_chk = QCheckBox("Check Area")
+        self._anomaly_area_chk = _toggle_button("Enable Area Check")
         layout.addWidget(self._anomaly_area_chk)
 
         area_row = QHBoxLayout()
@@ -63,6 +65,7 @@ class AnomalyConstraintsSection(QWidget):
         self._anomaly_area_spin.setToolTip(
             "Annotations with area above this value will be highlighted"
         )
+        self._anomaly_area_spin.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         area_row.addWidget(self._anomaly_area_spin, 1)
         self._anomaly_area_unit_lbl = QLabel("px²")
         self._anomaly_area_unit_lbl.setFixedWidth(30)
@@ -94,7 +97,7 @@ class AnomalyConstraintsSection(QWidget):
         dist_header.setStyleSheet("font-weight: bold;")
         layout.addWidget(dist_header)
 
-        self._anomaly_dist_chk = QCheckBox("Check Distance")
+        self._anomaly_dist_chk = _toggle_button("Enable Distance Check")
         layout.addWidget(self._anomaly_dist_chk)
 
         method_row = QHBoxLayout()
@@ -121,6 +124,7 @@ class AnomalyConstraintsSection(QWidget):
         self._anomaly_dist_spin.setToolTip(
             "Annotation pairs closer than this distance will be highlighted"
         )
+        self._anomaly_dist_spin.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         dist_row.addWidget(self._anomaly_dist_spin, 1)
         self._anomaly_dist_unit_lbl = QLabel("px")
         self._anomaly_dist_unit_lbl.setFixedWidth(30)

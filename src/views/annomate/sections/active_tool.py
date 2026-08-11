@@ -83,7 +83,7 @@ class ActiveToolSection(QWidget):
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
 
-        h.addWidget(QLabel("Stroke width"))
+        h.addWidget(QLabel("Line Width"))
 
         self.slider_thickness = QSlider(Qt.Horizontal)
         self.slider_thickness.setRange(1, 40)
