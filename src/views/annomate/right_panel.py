@@ -36,9 +36,11 @@ from PySide6.QtWidgets import (
 from views.annomate.sections import (
     ActiveToolSection,
     AnomalyConstraintsSection,
+    BrightnessContrastSection,
     CenterCropSection,
     ClassesSection,
     GridSection,
+    HSVSection,
     MicrosentrySection,
     _CollapsibleSection,
 )
@@ -314,6 +316,26 @@ class RightPanel(QWidget):
         overlay_sections = [center_crop_section, grid_section, anomaly_section]
         overlays_page = _stack_sections(overlay_sections)
         self._add_tab("overlays", "layers", "View Overlays", overlays_page)
+
+        # ---- Image Adjustments tab -- read-only HSV and Brightness/Contrast
+        # previews, driven directly against the canvas like Center Crop's
+        # overlay settings. ----
+        self.hsv = HSVSection(canvas)
+        hsv_section = _CollapsibleSection("HSV", expanded=False)
+        hsv_section.body_layout().setContentsMargins(0, 4, 0, 0)
+        hsv_section.body_layout().addWidget(self.hsv)
+
+        self.brightness_contrast = BrightnessContrastSection(canvas)
+        brightness_contrast_section = _CollapsibleSection(
+            "Brightness/Contrast", expanded=False
+        )
+        brightness_contrast_section.body_layout().setContentsMargins(0, 4, 0, 0)
+        brightness_contrast_section.body_layout().addWidget(self.brightness_contrast)
+
+        image_adjustments_page = _stack_sections(
+            [hsv_section, brightness_contrast_section]
+        )
+        self._add_tab("hsv", "image", "Image Adjustments", image_adjustments_page)
 
         settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         last_tab = settings.value(_SETTINGS_TAB_KEY, "classes", type=str)

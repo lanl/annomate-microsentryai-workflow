@@ -9,6 +9,8 @@ from .active_tool import ActiveToolSection
 from .center_crop import CenterCropSection
 from .grid import GridSection
 from .anomaly import AnomalyConstraintsSection
+from .hsv import HSVSection
+from .brightness_contrast import BrightnessContrastSection
 
 __all__ = [
     "_CollapsibleSection",
@@ -22,4 +24,6 @@ __all__ = [
     "CenterCropSection",
     "GridSection",
     "AnomalyConstraintsSection",
+    "HSVSection",
+    "BrightnessContrastSection",
 ]

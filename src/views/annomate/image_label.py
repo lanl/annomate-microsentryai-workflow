@@ -79,6 +79,8 @@ class ImageLabel(QLabel):
     )  # x1,y1,x2,y2 in original image coords
     calibrationPointsPlaced = Signal(tuple, tuple)  # (p1_orig, p2_orig)
     centerCropChanged = Signal(dict)
+    hsvChanged = Signal(dict)
+    contrastChanged = Signal(dict)
 
     def __init__(self, parent: object = None) -> None:
         """Initialize ImageLabel with default zoom, pan, and annotation state.
@@ -111,6 +113,15 @@ class ImageLabel(QLabel):
         self._center_crop_calibrating: bool = False
         self._dragging_center_crop: bool = False
         self._center_crop_color: Optional[tuple] = None  # None = auto-contrast
+
+        self._resized_bgr: Optional[np.ndarray] = None
+        self._hsv_enabled: bool = False
+        self._hsv_hue: int = 0
+        self._hsv_saturation: int = 100
+        self._hsv_value: int = 100
+        self._contrast_enabled: bool = False
+        self._contrast_min: int = 0
+        self._contrast_max: int = 255
 
         self._base_scale = 1.0
         self._zoom = 1.0
@@ -180,14 +191,8 @@ class ImageLabel(QLabel):
         new_w = int(w * self._base_scale)
         new_h = int(h * self._base_scale)
 
-        resized_bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-        rgb = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
-
-        qimg = QImage(
-            rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format_RGB888
-        )
-        self._display_qpix = QPixmap.fromImage(qimg)
+        self._resized_bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        self._rebuild_display_pixmap()
         self.image_loaded.emit(w, h)
         self.reset_view()
 
@@ -274,6 +279,7 @@ class ImageLabel(QLabel):
         """Clear the displayed image and reset all canvas state to blank."""
         self._display_qpix = None
         self._orig_image_bgr = None
+        self._resized_bgr = None
         self._heatmap_pix = None
         self._heatmap_alpha = 0.0
         self._zoom = 1.0
@@ -414,6 +420,112 @@ class ImageLabel(QLabel):
             "calibrating": self._center_crop_calibrating,
             "border_color": self._center_crop_color,
         }
+
+    def set_hsv_adjustment(
+        self,
+        enabled: Optional[bool] = None,
+        hue: Optional[int] = None,
+        saturation: Optional[int] = None,
+        value: Optional[int] = None,
+    ) -> None:
+        """Set the hue/saturation/value preview applied to the displayed image.
+
+        This is a read-only display filter: it recomputes the pixmap shown
+        in the viewport but never touches the source image data, annotations,
+        or the heatmap overlay. Settings persist across image switches --
+        each call to set_image() re-applies whatever is currently held here.
+        """
+        if enabled is not None:
+            self._hsv_enabled = bool(enabled)
+        if hue is not None:
+            self._hsv_hue = max(-179, min(179, int(hue)))
+        if saturation is not None:
+            self._hsv_saturation = max(0, min(200, int(saturation)))
+        if value is not None:
+            self._hsv_value = max(0, min(200, int(value)))
+        self._rebuild_display_pixmap()
+        self.update()
+        self.hsvChanged.emit(self.hsv_settings())
+
+    def hsv_settings(self) -> dict:
+        """Return the current HSV preview settings."""
+        return {
+            "enabled": self._hsv_enabled,
+            "hue": self._hsv_hue,
+            "saturation": self._hsv_saturation,
+            "value": self._hsv_value,
+        }
+
+    def set_contrast_adjustment(
+        self,
+        enabled: Optional[bool] = None,
+        min_value: Optional[int] = None,
+        max_value: Optional[int] = None,
+    ) -> None:
+        """Set the min/max linear contrast-stretch preview applied to the
+        displayed image (the same window/level Fiji applies to RGB pixel
+        values directly). Read-only display filter -- never touches source
+        image data, annotations, or the heatmap overlay. Settings persist
+        across image switches -- each call to set_image() re-applies
+        whatever is currently held here.
+        """
+        if enabled is not None:
+            self._contrast_enabled = bool(enabled)
+        if min_value is not None:
+            self._contrast_min = max(0, min(254, int(min_value)))
+            if self._contrast_max <= self._contrast_min:
+                self._contrast_max = self._contrast_min + 1
+        if max_value is not None:
+            self._contrast_max = max(1, min(255, int(max_value)))
+            if self._contrast_min >= self._contrast_max:
+                self._contrast_min = self._contrast_max - 1
+        self._rebuild_display_pixmap()
+        self.update()
+        self.contrastChanged.emit(self.contrast_settings())
+
+    def contrast_settings(self) -> dict:
+        """Return the current contrast-stretch preview settings."""
+        return {
+            "enabled": self._contrast_enabled,
+            "min": self._contrast_min,
+            "max": self._contrast_max,
+        }
+
+    def _rebuild_display_pixmap(self) -> None:
+        """Rebuild ``_display_qpix`` from ``_resized_bgr``, applying the
+        contrast stretch and HSV preview when enabled. Called on every image
+        load and every setting change -- cheap enough (tens of ms at display
+        resolution) to redo from scratch rather than cache."""
+        if self._resized_bgr is None:
+            self._display_qpix = None
+            return
+        bgr = self._resized_bgr
+        if self._contrast_enabled:
+            bgr = self._apply_contrast(bgr)
+        if self._hsv_enabled:
+            bgr = self._apply_hsv(bgr)
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        rgb = np.ascontiguousarray(rgb)
+        qimg = QImage(
+            rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format_RGB888
+        )
+        self._display_qpix = QPixmap.fromImage(qimg.copy())
+
+    def _apply_hsv(self, bgr: np.ndarray) -> np.ndarray:
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.int16)
+        if self._hsv_hue:
+            hsv[..., 0] = (hsv[..., 0] + self._hsv_hue) % 180
+        if self._hsv_saturation != 100:
+            hsv[..., 1] = np.clip(hsv[..., 1] * (self._hsv_saturation / 100.0), 0, 255)
+        if self._hsv_value != 100:
+            hsv[..., 2] = np.clip(hsv[..., 2] * (self._hsv_value / 100.0), 0, 255)
+        return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
+    def _apply_contrast(self, bgr: np.ndarray) -> np.ndarray:
+        lo, hi = self._contrast_min, self._contrast_max
+        scale = 255.0 / (hi - lo)
+        out = (bgr.astype(np.float32) - lo) * scale
+        return np.clip(out, 0, 255).astype(np.uint8)
 
     def _ensure_center_crop_defaults(self, img_w: int, img_h: int) -> None:
         if self._center_crop_width is None:
