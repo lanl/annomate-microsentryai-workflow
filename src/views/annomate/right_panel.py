@@ -245,7 +245,7 @@ class RightPanel(QWidget):
         self.classes.class_selected.connect(self.class_selected)
         self.classes.annotation_mode_changed.connect(self.annotation_mode_changed)
         classes_section = _CollapsibleSection("Annotation Classes", expanded=True)
-        classes_section.body_layout().setContentsMargins(0, 0, 0, 0)
+        classes_section.body_layout().setContentsMargins(0, 4, 0, 0)
         classes_section.body_layout().addWidget(self.classes)
         classes_page = _stack_sections([classes_section])
         self._add_tab("classes", "data_table", "Dataset Setup", classes_page)
@@ -265,7 +265,7 @@ class RightPanel(QWidget):
         _ms_settings = QSettings(_SETTINGS_ORG, _SETTINGS_APP)
         _ms_expanded = _ms_settings.value("ui/microsentry_expanded", False, type=bool)
         ms_section = _CollapsibleSection("Microsentry", expanded=_ms_expanded)
-        ms_section.body_layout().setContentsMargins(0, 0, 0, 0)
+        ms_section.body_layout().setContentsMargins(0, 4, 0, 0)
         ms_section.body_layout().addWidget(self._ms_section)
         ms_section.toggled.connect(
             lambda checked: QSettings(_SETTINGS_ORG, _SETTINGS_APP).setValue(
@@ -292,17 +292,17 @@ class RightPanel(QWidget):
             self.center_template_import_requested
         )
         center_crop_section = _CollapsibleSection("Center Crop", expanded=False)
-        center_crop_section.body_layout().setContentsMargins(0, 0, 0, 0)
+        center_crop_section.body_layout().setContentsMargins(0, 4, 0, 0)
         center_crop_section.body_layout().addWidget(self.center_crop)
 
         self.grid = GridSection(calibration_model)
         grid_section = _CollapsibleSection("Grid", expanded=False)
-        grid_section.body_layout().setContentsMargins(0, 0, 0, 0)
+        grid_section.body_layout().setContentsMargins(0, 4, 0, 0)
         grid_section.body_layout().addWidget(self.grid)
 
         self.anomaly = AnomalyConstraintsSection(anomaly_constraint_model)
         anomaly_section = _CollapsibleSection("Anomaly Constraints", expanded=False)
-        anomaly_section.body_layout().setContentsMargins(0, 0, 0, 0)
+        anomaly_section.body_layout().setContentsMargins(0, 4, 0, 0)
         anomaly_section.body_layout().addWidget(self.anomaly)
 
         overlay_sections = [center_crop_section, grid_section, anomaly_section]

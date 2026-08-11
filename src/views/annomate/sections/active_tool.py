@@ -52,12 +52,12 @@ class ActiveToolSection(QWidget):
         layout.setSpacing(0)
 
         common = _CollapsibleSection("Common", expanded=True)
-        common.body_layout().setContentsMargins(0, 0, 0, 4)
+        common.body_layout().setContentsMargins(0, 4, 0, 0)
         common.body_layout().addWidget(self._build_thickness_row())
         layout.addWidget(common)
 
         self._tool_section = _CollapsibleSection("Tool Options", expanded=True)
-        self._tool_section.body_layout().setContentsMargins(0, 0, 0, 4)
+        self._tool_section.body_layout().setContentsMargins(0, 4, 0, 0)
         self._tool_stack = QStackedWidget()
         self._tool_section.body_layout().addWidget(self._tool_stack)
         layout.addWidget(self._tool_section)
