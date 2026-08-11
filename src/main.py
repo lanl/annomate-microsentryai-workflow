@@ -35,7 +35,6 @@ from controllers.io_controller import IOController
 from controllers.inference_controller import InferenceController
 from controllers.project_controller import ProjectController
 from controllers.center_template_controller import CenterTemplateController
-from controllers.help_controller import HelpController
 
 from views.app_window import AppWindow
 
@@ -69,7 +68,6 @@ def main() -> None:
     io_controller = IOController(dataset_model)
     inference_controller = InferenceController(dataset_model, inference_model)
     center_template_controller = CenterTemplateController(center_template_model)
-    help_controller = HelpController()
     project_controller = ProjectController(
         dataset_model,
         inference_model,
@@ -91,7 +89,6 @@ def main() -> None:
         center_template_model=center_template_model,
         center_template_controller=center_template_controller,
         anomaly_constraint_model=anomaly_constraint_model,
-        help_controller=help_controller,
     )
     window.show()
 

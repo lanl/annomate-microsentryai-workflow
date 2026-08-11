@@ -144,7 +144,6 @@ class MetadataSection(QWidget):
         inspector_row.addWidget(self._inspector_edit)
 
         self._set_inspector_btn = QPushButton("Set Inspector")
-        self._set_inspector_btn.setObjectName("metadataSetInspectorButton")
         self._set_inspector_btn.setFixedWidth(95)
         self._set_inspector_btn.setToolTip(
             "Set as session inspector - auto-fills new images as you navigate"
@@ -153,7 +152,6 @@ class MetadataSection(QWidget):
         inspector_row.addWidget(self._set_inspector_btn)
 
         self._set_all_btn = QPushButton("Set All")
-        self._set_all_btn.setObjectName("metadataSetAllButton")
         self._set_all_btn.setFixedWidth(60)
         self._set_all_btn.setToolTip(
             "Bulk-assign an inspector name to a filtered set of images"

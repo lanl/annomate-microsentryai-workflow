@@ -143,7 +143,6 @@ class _ReviewBar(QFrame):
         layout.addWidget(self._drag_handle)
 
         self._btn_accept = QToolButton()
-        self._btn_accept.setObjectName("reviewAcceptButton")
         self._btn_accept.setText("✓ Accept")
         self._btn_accept.setToolTip("Mark this image as accepted")
         self._btn_accept.setCheckable(True)
@@ -155,7 +154,6 @@ class _ReviewBar(QFrame):
         layout.addWidget(self._btn_accept)
 
         self._btn_reject = QToolButton()
-        self._btn_reject.setObjectName("reviewRejectButton")
         self._btn_reject.setText("✗ Reject")
         self._btn_reject.setToolTip("Mark this image as rejected")
         self._btn_reject.setCheckable(True)

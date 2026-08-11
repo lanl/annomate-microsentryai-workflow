@@ -75,12 +75,10 @@ class MicrosentrySection(QWidget):
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.setSpacing(4)
         self._btn_load_prev = QPushButton("Load Previous")
-        self._btn_load_prev.setObjectName("microsentryLoadPreviousButton")
         self._btn_load_prev.setToolTip("Reload the model saved with this project")
         self._btn_load_prev.setEnabled(False)
         self._btn_load_prev.clicked.connect(self.load_previous_model_requested)
         self._btn_load_new = QPushButton("Load New")
-        self._btn_load_new.setObjectName("microsentryLoadNewButton")
         self._btn_load_new.setToolTip("Browse for a new .pt model file")
         self._btn_load_new.setEnabled(False)
         self._btn_load_new.clicked.connect(self.load_model_requested)
@@ -124,7 +122,6 @@ class MicrosentrySection(QWidget):
 
         # Heatmap toggle + transparency slider inline
         self._btn_heatmap = QToolButton()
-        self._btn_heatmap.setObjectName("microsentryHeatmapButton")
         self._btn_heatmap.setText("Heatmap")
         self._btn_heatmap.setCheckable(True)
         self._btn_heatmap.setToolTip("Overlay anomaly heatmap on the canvas image")
@@ -148,7 +145,6 @@ class MicrosentrySection(QWidget):
 
         # Segmentation toggle + threshold slider inline
         self._btn_seg = QToolButton()
-        self._btn_seg.setObjectName("microsentrySegButton")
         self._btn_seg.setText("Segmentation")
         self._btn_seg.setCheckable(True)
         self._btn_seg.setToolTip("Show AI segmentation polygons on the canvas")
@@ -187,7 +183,6 @@ class MicrosentrySection(QWidget):
 
         # Accept AI Polygons button
         self._btn_accept = QPushButton("Accept AI Polygons")
-        self._btn_accept.setObjectName("microsentryAcceptButton")
         self._btn_accept.setToolTip(
             "Add AI segmentation polygons as annotations on the active class"
         )
@@ -197,7 +192,6 @@ class MicrosentrySection(QWidget):
 
         # ── Advanced Settings (inline collapsible) ──────────────────────── #
         self._btn_advanced = QToolButton()
-        self._btn_advanced.setObjectName("microsentryAdvancedButton")
         self._btn_advanced.setText("▸  Advanced Settings")
         self._btn_advanced.setCheckable(True)
         self._btn_advanced.setChecked(False)

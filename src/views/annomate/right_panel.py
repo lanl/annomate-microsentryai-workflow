@@ -54,9 +54,7 @@ class RightPanel(QWidget):
         # Microsentry — always visible above the splitter, collapsed by default
         _ms_settings = QSettings("LANL", "AnnoMateMicroSentryAI")
         _ms_expanded = _ms_settings.value("ui/microsentry_expanded", False, type=bool)
-        ms_sec = _CollapsibleSection(
-            "Microsentry", expanded=_ms_expanded, object_name="panelMicrosentryHeader"
-        )
+        ms_sec = _CollapsibleSection("Microsentry", expanded=_ms_expanded)
         self._ms_section = MicrosentrySection()
         self._ms_section.load_model_requested.connect(self.load_model_requested)
         self._ms_section.load_previous_model_requested.connect(
@@ -80,9 +78,7 @@ class RightPanel(QWidget):
         splitter.setHandleWidth(8)
         splitter.setChildrenCollapsible(False)
 
-        nav_sec = _CollapsibleSection(
-            "Dataset Navigator", expandable=True, object_name="panelNavigatorHeader"
-        )
+        nav_sec = _CollapsibleSection("Dataset Navigator", expandable=True)
         self._nav_collapsible = nav_sec
         self.navigator = DataNavigatorSection(dataset_model, inference_model)
         self.navigator.image_selected.connect(self.image_selected)
@@ -113,9 +109,7 @@ class RightPanel(QWidget):
         cl.setContentsMargins(0, 0, 0, 0)
         cl.setSpacing(0)
 
-        classes_sec = _CollapsibleSection(
-            "Annotation Classes", object_name="panelClassesHeader"
-        )
+        classes_sec = _CollapsibleSection("Annotation Classes")
         self._classes_collapsible = classes_sec
         self.classes = ClassesSection(dataset_model)
         self.classes.class_selected.connect(self.class_selected)
@@ -124,17 +118,13 @@ class RightPanel(QWidget):
         classes_sec.body_layout().addWidget(self.classes)
         cl.addWidget(classes_sec)
 
-        self._annos_sec = _CollapsibleSection(
-            "Current Image Annotations", object_name="panelAnnotationsHeader"
-        )
+        self._annos_sec = _CollapsibleSection("Current Image Annotations")
         self.annotations = AnnotationsSection(dataset_model, calibration_model)
         self.annotations.annotation_selected.connect(self.annotation_selected)
         self._annos_sec.body_layout().addWidget(self.annotations)
         cl.addWidget(self._annos_sec)
 
-        meta_sec = _CollapsibleSection(
-            "Inspector/Notes", object_name="panelInspectorHeader"
-        )
+        meta_sec = _CollapsibleSection("Inspector/Notes")
         self._meta_collapsible = meta_sec
         self.metadata = MetadataSection(dataset_model)
         meta_sec.body_layout().addWidget(self.metadata)

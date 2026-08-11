@@ -123,19 +123,16 @@ class ViewportActionsBar(QFrame):
         layout.setSpacing(4)
 
         self._btn_zoom_in = self._make_button("+", "Zoom In")
-        self._btn_zoom_in.setObjectName("viewportZoomInButton")
         self._btn_zoom_in.setFont(font)
         self._btn_zoom_in.clicked.connect(canvas.zoom_in)
         layout.addWidget(self._btn_zoom_in)
 
         self._btn_zoom_out = self._make_button("-", "Zoom Out")
-        self._btn_zoom_out.setObjectName("viewportZoomOutButton")
         self._btn_zoom_out.setFont(font)
         self._btn_zoom_out.clicked.connect(canvas.zoom_out)
         layout.addWidget(self._btn_zoom_out)
 
         self._btn_reset = self._make_button("⊡", "Reset View")
-        self._btn_reset.setObjectName("viewportResetViewButton")
         self._btn_reset.setFont(font_large)
         self._btn_reset.clicked.connect(canvas.reset_view)
         layout.addWidget(self._btn_reset)
@@ -143,7 +140,6 @@ class ViewportActionsBar(QFrame):
         self._add_divider(layout)
 
         self._btn_measure = self._make_button("⇔", "Measure Distance (M)")
-        self._btn_measure.setObjectName("viewportMeasureButton")
         self._btn_measure.setCheckable(True)
         self._btn_measure.setFont(font)
         self._btn_measure.clicked.connect(
@@ -152,13 +148,11 @@ class ViewportActionsBar(QFrame):
         layout.addWidget(self._btn_measure)
 
         self._btn_settings = self._make_popup_button("⊞", "Grid Settings")
-        self._btn_settings.setObjectName("viewportGridSettingsButton")
         self._btn_settings.setFont(font_large)
         self._btn_settings.setMenu(self._build_settings_menu())
         layout.addWidget(self._btn_settings)
 
         self._btn_anomaly = self._make_popup_button("⊿", "Anomaly Constraints")
-        self._btn_anomaly.setObjectName("viewportAnomalyButton")
         font_anomaly = QFont()
         font_anomaly.setPointSize(13)
         font_anomaly.setBold(True)
@@ -169,7 +163,6 @@ class ViewportActionsBar(QFrame):
         self._add_divider(layout)
 
         self._btn_crop = self._make_popup_button("⊕", "Center Crop")
-        self._btn_crop.setObjectName("viewportCenterCropButton")
         self._btn_crop.setFont(font_large)
         self._btn_crop.setMenu(self._build_crop_menu())
         layout.addWidget(self._btn_crop)

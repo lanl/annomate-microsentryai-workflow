@@ -11,13 +11,10 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QFileDialog,
     QMessageBox,
-    QLineEdit,
-    QWidgetAction,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
 from views.annomate.window import AnnoMateWindow
-from views.annomate.help_dialog import HelpSearchDialog
 
 _APP_TITLE = "AnnoMate & MicroSentryAI"
 _LAST_IMAGE_DIR_KEY = "recent/last_image_dir"
@@ -37,7 +34,6 @@ class AppWindow(QMainWindow):
         io_controller: IOController instance.
         inference_controller: InferenceController instance.
         project_controller: ProjectController instance.
-        help_controller: HelpController instance.
     """
 
     def __init__(
@@ -51,7 +47,6 @@ class AppWindow(QMainWindow):
         center_template_model=None,
         center_template_controller=None,
         anomaly_constraint_model=None,
-        help_controller=None,
     ) -> None:
         super().__init__()
         self.setWindowTitle(_APP_TITLE)
@@ -65,7 +60,6 @@ class AppWindow(QMainWindow):
         self.calibration_model = calibration_model
         self.center_template_model = center_template_model
         self.center_template_controller = center_template_controller
-        self.help_controller = help_controller
         self._settings = QSettings("LANL", "AnnoMateMicroSentryAI")
 
         # Sub-views
@@ -166,119 +160,13 @@ class AppWindow(QMainWindow):
         data_menu.addSeparator()
         add(data_menu, "Export Project Template…", "", self._export_project_template)
 
-        # A real dropdown menu (like File/Data above) rather than a bare
-        # QAction — on macOS, top-level actions with no submenu can fail to
-        # render in the native merged menu bar.
-        # Trailing U+2060 (WORD JOINER, invisible, not whitespace so it
-        # survives any .trimmed()/.strip() along the way) keeps the visible
-        # label "Help" but avoids an exact title match, so macOS doesn't
-        # also bolt on its own automatic Help-menu search field alongside
-        # our own search box below. A plain trailing space doesn't survive.
-        help_menu = self.menuBar().addMenu("&Help⁠")
-        self._build_help_menu(help_menu, file_menu, data_menu)
-        add(help_menu, "Search Help…", "F1", self._open_help_search)
-        help_menu.addSeparator()
+        help_menu = self.menuBar().addMenu("&Help")
         add(
             help_menu,
             "Show Welcome Tour",
             "",
             lambda: self.annomate_view.start_tour(force=True),
         )
-
-    def _build_help_menu(self, menu, file_menu, data_menu) -> None:
-        """Inline "type to search" box at the top of the Help menu, matching
-        how the native macOS Help-menu search works: typing searches every
-        other menu's commands (File, Data) and lists the matches so you can
-        jump straight to one. Only when NO command matches does a "More on
-        <query>…" entry appear instead, opening the full documentation
-        search (HelpSearchDialog) for that query.
-        """
-        search_action = QWidgetAction(menu)
-        search_edit = QLineEdit()
-        search_edit.setObjectName("HelpMenuSearchEdit")
-        search_edit.setPlaceholderText("Search")
-        search_edit.setMinimumWidth(240)
-        search_edit.setStyleSheet(
-            """
-            QLineEdit#HelpMenuSearchEdit {
-                min-height: 26px;
-                padding: 4px 8px;
-                border-radius: 6px;
-                margin: 2px 4px;
-            }
-            """
-        )
-        search_action.setDefaultWidget(search_edit)
-        menu.addAction(search_action)
-
-        results_marker = menu.addSeparator()
-        menu.addSeparator()
-
-        dynamic_actions: list = []
-
-        def _clean_label(text: str) -> str:
-            return text.replace("&", "").strip()
-
-        def _searchable_actions():
-            for label, src_menu in (("File", file_menu), ("Data", data_menu)):
-                for act in src_menu.actions():
-                    if act.isSeparator() or not act.text():
-                        continue
-                    yield label, act
-
-        def _clear_dynamic() -> None:
-            for act in dynamic_actions:
-                menu.removeAction(act)
-            dynamic_actions.clear()
-
-        def _rebuild(text: str) -> None:
-            _clear_dynamic()
-            query = text.strip()
-            if not query:
-                return
-
-            q_norm = query.lower()
-            matches = [
-                (label, act)
-                for label, act in _searchable_actions()
-                if q_norm in _clean_label(act.text()).lower()
-            ]
-
-            if matches:
-                for label, act in matches[:8]:
-                    proxy = QAction(f"{label}  ▸  {_clean_label(act.text())}", self)
-                    proxy.triggered.connect(lambda _checked=False, a=act: a.trigger())
-                    menu.insertAction(results_marker, proxy)
-                    dynamic_actions.append(proxy)
-            else:
-                more_action = QAction(f'Search Help for "{query}"…', self)
-                more_action.triggered.connect(
-                    lambda _checked=False, q=query: self._open_help_search_for_query(q)
-                )
-                menu.insertAction(results_marker, more_action)
-                dynamic_actions.append(more_action)
-
-        def _on_return_pressed() -> None:
-            if not dynamic_actions:
-                return
-            # Enter in the line edit doesn't trigger Qt's own
-            # close-menu-on-action behavior, so close it explicitly here.
-            # (Not needed when a dynamic QAction itself is clicked — Qt
-            # already closes the menu as part of dispatching that click.)
-            menu.close()
-            dynamic_actions[0].trigger()
-
-        search_edit.textChanged.connect(_rebuild)
-        search_edit.returnPressed.connect(_on_return_pressed)
-        menu.aboutToShow.connect(lambda: (search_edit.clear(), search_edit.setFocus()))
-
-    def _open_help_search(self) -> None:
-        dlg = HelpSearchDialog(self.help_controller, self)
-        dlg.exec()
-
-    def _open_help_search_for_query(self, query: str) -> None:
-        dlg = HelpSearchDialog(self.help_controller, self, initial_query=query)
-        dlg.exec()
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""

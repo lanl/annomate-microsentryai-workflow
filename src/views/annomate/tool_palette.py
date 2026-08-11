@@ -75,7 +75,6 @@ class ToolPalette(QFrame):
         # Polygon tool
         # ------------------------------------------------------------------ #
         poly_btn = QToolButton()
-        poly_btn.setObjectName("toolPolygonButton")
         poly_btn.setText("⬠")
         poly_btn.setToolTip("Polygon (P)")
         poly_btn.setFixedSize(_BTN_W, _BTN_H)
@@ -90,7 +89,6 @@ class ToolPalette(QFrame):
         # Brush thickness popup
         # ------------------------------------------------------------------ #
         btn_thickness = QToolButton()
-        btn_thickness.setObjectName("toolBrushThicknessButton")
         btn_thickness.setText("◢")
         btn_thickness.setToolTip("Brush Thickness")
         btn_thickness.setFixedSize(_BTN_W, _BTN_H)
@@ -134,7 +132,6 @@ class ToolPalette(QFrame):
         # SAM tool
         # ------------------------------------------------------------------ #
         sam_btn = QToolButton()
-        sam_btn.setObjectName("toolSamButton")
         sam_btn.setText("✦")
         sam_btn.setToolTip("SAM Segment (S)")
         sam_btn.setFixedSize(_BTN_W, _BTN_H)
@@ -149,7 +146,6 @@ class ToolPalette(QFrame):
         # SAM options popup
         # ------------------------------------------------------------------ #
         btn_sam_opts = QToolButton()
-        btn_sam_opts.setObjectName("toolSamOptionsButton")
         btn_sam_opts.setText("⚙︎")
         btn_sam_opts.setToolTip("SAM Options")
         btn_sam_opts.setFixedSize(_BTN_W, _BTN_H)

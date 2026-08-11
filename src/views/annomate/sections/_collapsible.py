@@ -29,7 +29,6 @@ class _CollapsibleSection(QWidget):
         parent: QWidget = None,
         expandable: bool = False,
         expanded: bool = True,
-        object_name: str = None,
     ) -> None:
         super().__init__(parent)
         v_policy = QSizePolicy.Expanding if expandable else QSizePolicy.Maximum
@@ -43,8 +42,6 @@ class _CollapsibleSection(QWidget):
 
         arrow = "▾" if expanded else "▸"
         self._toggle_btn = QPushButton(f"{arrow}  {title}")
-        if object_name:
-            self._toggle_btn.setObjectName(object_name)
         self._toggle_btn.setCheckable(True)
         self._toggle_btn.setChecked(expanded)
         self._toggle_btn.setStyleSheet(
@@ -73,13 +70,6 @@ class _CollapsibleSection(QWidget):
     def header_widget(self) -> QWidget:
         """Return the toggle-button header, which stays visible when collapsed."""
         return self._toggle_btn
-
-    def set_expanded(self, expanded: bool) -> None:
-        """Expand or collapse the section, as if its header had been clicked."""
-        if expanded == self._expanded:
-            return
-        self._toggle_btn.setChecked(expanded)
-        self._on_toggle(expanded)
 
     def _on_toggle(self, checked: bool) -> None:
         self._expanded = checked
