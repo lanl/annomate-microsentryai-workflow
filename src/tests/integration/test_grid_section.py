@@ -1,4 +1,5 @@
 import pytest
+from PySide6.QtCore import Qt
 
 from core.states.calibration_state import CalibrationState
 from models.calibration_model import CalibrationModel
@@ -68,3 +69,67 @@ def test_opacity_and_spacing_controls_update_model(calibrated_model, qtbot):
     section._radio_fixed.setChecked(True)
     assert calibrated_model.grid_spacing_auto() is False
     assert calibrated_model.grid_spacing_world() == 2.5
+
+
+def test_calibrate_button_emits_tool_toggled(qtbot):
+    """Verify clicking the calibrate button emits calibrate_tool_toggled and toggles as expected.
+
+    Clicking calibrate emits True and checks the button; clicking it again
+    emits False and unchecks it.
+    """
+    model = CalibrationModel(CalibrationState())
+    section = GridSection(model)
+    section.set_has_image(True)
+    qtbot.addWidget(section)
+
+    requested = []
+    section.calibrate_tool_toggled.connect(requested.append)
+
+    qtbot.mouseClick(section._btn_calibrate_points, Qt.LeftButton)
+    assert requested[-1] is True
+    assert section._btn_calibrate_points.isChecked()
+
+    qtbot.mouseClick(section._btn_calibrate_points, Qt.LeftButton)
+    assert requested[-1] is False
+    assert not section._btn_calibrate_points.isChecked()
+
+
+def test_calibrate_points_enabled_in_default_pixel_mode(qtbot):
+    """Verify calibrate-points is enabled and status shows '1px:1px' before any calibration.
+
+    In the default uncalibrated state, the calibrate-points button should be
+    enabled (once an image is loaded) and the status label should display
+    '1px:1px'.
+    """
+    model = CalibrationModel(CalibrationState())
+    section = GridSection(model)
+    section.set_has_image(True)
+    qtbot.addWidget(section)
+
+    assert section._btn_calibrate_points.isEnabled()
+    assert "1px:1px" in section._calib_status_lbl.text()
+
+
+def test_reset_defaults_button_resets_calibration_and_grid_display(
+    calibrated_model, qtbot
+):
+    """Verify Reset to Defaults clears calibration AND restores grid display settings.
+
+    Unlike the old "Reset to pixels" button, this resets the whole section --
+    calibration, plus opacity/color, which aren't touched by clear_calibration()
+    on their own.
+    """
+    section = GridSection(calibrated_model)
+    section.set_has_image(True)
+    qtbot.addWidget(section)
+
+    calibrated_model.set_grid_opacity(0.9)
+    calibrated_model.set_grid_color((10, 20, 30))
+
+    qtbot.mouseClick(section._btn_reset_defaults, Qt.LeftButton)
+
+    assert calibrated_model.is_calibrated() is False
+    assert calibrated_model.has_scale() is True
+    assert calibrated_model.unit() == "px"
+    assert calibrated_model.grid_opacity() == pytest.approx(0.5)
+    assert calibrated_model.grid_color() == (58, 90, 122)

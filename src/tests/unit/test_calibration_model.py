@@ -95,6 +95,25 @@ class TestApplyCalibration:
         assert model.unit() == "px"
         assert model.calib_points() == (None, None)
 
+    def test_clear_calibration_forces_grid_spacing_back_to_auto(self, model):
+        """Verify clearing calibration restores Auto grid spacing.
+
+        Regression: a Fixed spacing value typed in the old real-world unit
+        (e.g. "5" while calibrated to mm) must not silently carry over as
+        pixels once the unit resets to 'px' -- that produces a grid spaced
+        too tightly to ever render. Reset should force Auto and a sane
+        default spacing regardless of which mode was active before.
+        """
+        model.set_calib_points((0.0, 0.0), (100.0, 0.0))
+        model.apply_calibration(5.0, "mm")
+        model.set_grid_spacing(2.5)
+        assert model.grid_spacing_auto() is False
+
+        model.clear_calibration()
+
+        assert model.grid_spacing_auto() is True
+        assert model.grid_spacing_world() == pytest.approx(100.0)
+
 
 class TestNiceSpacing:
     def _spacing(self, scale):

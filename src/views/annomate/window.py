@@ -529,7 +529,7 @@ class AnnoMateWindow(QWidget):
 
         # Tool palette
         self.tool_palette.tool_selected.connect(self._on_tool_selected)
-        self.viewport_actions.tool_selected.connect(self._on_tool_selected)
+        self.right_panel.tool_selected.connect(self._on_tool_selected)
         self.right_panel.center_calibration_started.connect(
             self._on_center_calibration_started
         )
@@ -668,8 +668,7 @@ class AnnoMateWindow(QWidget):
 
         self.viewport_actions = ViewportActionsBar(
             self.canvas,
-            self._calib_model,
-            self.canvas,
+            parent=self.canvas,
         )
         self.viewport_actions.raise_()
 
@@ -832,7 +831,7 @@ class AnnoMateWindow(QWidget):
             self._manual_popup.setVisible(False)
             self.viewport_actions.set_image_loaded(False)
             self.right_panel.center_crop.set_has_image(False)
-            self.viewport_actions.set_active_tool("")
+            self.right_panel.grid.set_has_image(False)
             self.canvas.clear_image()
             self.right_panel.set_current_row(-1)
             self._set_start_screen_visible(True)
@@ -871,6 +870,7 @@ class AnnoMateWindow(QWidget):
         self._review_bar.reposition(self.canvas.size())
         self.viewport_actions.set_image_loaded(True)
         self.right_panel.center_crop.set_has_image(True)
+        self.right_panel.grid.set_has_image(True)
         self.viewport_actions.reposition(self.canvas.size())
         self._ai_popup.setVisible(False)
         self._selected_ai_idx = -1
@@ -914,7 +914,6 @@ class AnnoMateWindow(QWidget):
     def _on_tool_selected(self, tool_name: str) -> None:
         if tool_name == "sam_bbox":
             self._set_active_tool("sam_bbox")
-            self.viewport_actions.set_active_tool("")
             self.canvas.set_tool(SAM_BBOX)
             self.status_bar.set_tool("sam_bbox")
             if not self._sam_loading:
@@ -928,26 +927,22 @@ class AnnoMateWindow(QWidget):
         if tool_name == "calibrate":
             self._set_active_tool("calibrate")
             self.tool_palette.deselect_all()
-            self.viewport_actions.set_active_tool("calibrate")
             self.canvas.set_tool(CALIBRATE)
             self.status_bar.set_tool("calibrate")
             return
 
         if tool_name == "measure":
             self._set_active_tool("measure")
-            self.viewport_actions.set_active_tool("")
             self.canvas.set_tool(MEASURE)
             self.status_bar.set_tool("measure")
             return
 
         self._set_active_tool(tool_name)
-        self.viewport_actions.set_active_tool("")
         self.canvas.set_tool("polygon" if tool_name == "polygon" else None)
         self.status_bar.set_tool(tool_name)
 
     def _on_tool_canceled(self) -> None:
         self.tool_palette.deselect_all()
-        self.viewport_actions.set_active_tool("")
         self._set_active_tool("")
         self.status_bar.set_tool("")
         self.status_bar.set_sam_hint("")
@@ -971,7 +966,6 @@ class AnnoMateWindow(QWidget):
                 )
         self.canvas.set_tool(None)  # clears _pending_calib_pts, resets cursor
         self.tool_palette.deselect_all()
-        self.viewport_actions.set_active_tool("")
         self._set_active_tool("")
         self.status_bar.set_tool("")
 
@@ -981,7 +975,6 @@ class AnnoMateWindow(QWidget):
         if not class_names:
             self.canvas.set_tool(None)
             self.tool_palette.deselect_all()
-            self.viewport_actions.set_active_tool("")
             self._set_active_tool("")
             self.status_bar.set_tool("")
             QMessageBox.warning(
@@ -1002,7 +995,6 @@ class AnnoMateWindow(QWidget):
         logger.info("Center template calibration started on row %d.", self._current_row)
         self.canvas.set_tool(None)
         self.tool_palette.deselect_all()
-        self.viewport_actions.set_active_tool("")
         self._set_active_tool("")
         self.status_bar.set_tool("")
         self.canvas.set_center_crop(
@@ -1704,7 +1696,7 @@ class AnnoMateWindow(QWidget):
             if self.dataset_model.get_annotation_mode() == "pixel":
                 self.tool_palette.toggle_sam()
         elif event.key() == Qt.Key_C:
-            self.viewport_actions.toggle_calibrate()
+            self.right_panel.grid.toggle_calibrate()
         elif event.key() == Qt.Key_M:
             self.tool_palette.toggle_measure()
         elif event.key() == Qt.Key_Delete:

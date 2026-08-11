@@ -180,6 +180,8 @@ class RightPanel(QWidget):
         load_model_requested (): Forwarded from MicrosentrySection.
         microsentry_settings_changed (): Forwarded from MicrosentrySection.
         collapsed_changed (bool): Emitted after the panel expands/collapses.
+        tool_selected (str): Forwarded from GridSection's calibrate button
+            ("calibrate" when checked, "" when unchecked).
     """
 
     class_selected = Signal(str)
@@ -196,6 +198,7 @@ class RightPanel(QWidget):
     center_calibration_accepted = Signal()
     center_template_cleared = Signal()
     center_template_import_requested = Signal(str)
+    tool_selected = Signal(str)
 
     def __init__(
         self,
@@ -233,7 +236,7 @@ class RightPanel(QWidget):
         # ---- Active Tool tab -- Common (stroke width) plus a per-tool
         # section that swaps its body to match whichever tool is selected;
         # new tools register their own settings widget the same way SAM did. ----
-        self.active_tool = ActiveToolSection()
+        self.active_tool = ActiveToolSection(calibration_model)
         self.active_tool.thickness_changed.connect(self.thickness_changed)
         self.active_tool.sam_variant_changed.connect(self.sam_variant_changed)
         self._add_tab("active_tool", "draw", "Active Tool", self.active_tool)
@@ -296,6 +299,9 @@ class RightPanel(QWidget):
         center_crop_section.body_layout().addWidget(self.center_crop)
 
         self.grid = GridSection(calibration_model)
+        self.grid.calibrate_tool_toggled.connect(
+            lambda checked: self.tool_selected.emit("calibrate" if checked else "")
+        )
         grid_section = _CollapsibleSection("Grid", expanded=False)
         grid_section.body_layout().setContentsMargins(0, 4, 0, 0)
         grid_section.body_layout().addWidget(self.grid)
@@ -419,8 +425,9 @@ class RightPanel(QWidget):
     # ------------------------------------------------------------------ #
 
     def set_active_tool(self, tool_key: str) -> None:
-        """Update the Active Tool tab to show *tool_key*'s settings ("" = none)."""
+        """Update the Active Tool tab and sync Grid's calibrate button ("" = none)."""
         self.active_tool.set_active_tool(tool_key)
+        self.grid.set_active_tool(tool_key)
 
     def set_thickness(self, value: float) -> None:
         self.active_tool.set_thickness(value)

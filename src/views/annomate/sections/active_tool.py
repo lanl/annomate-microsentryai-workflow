@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QSlider,
     QStackedWidget,
     QVBoxLayout,
@@ -45,8 +46,9 @@ class ActiveToolSection(QWidget):
     thickness_changed = Signal(float)
     sam_variant_changed = Signal(str)
 
-    def __init__(self, parent: QWidget = None) -> None:
+    def __init__(self, calibration_model=None, parent: QWidget = None) -> None:
         super().__init__(parent)
+        self._calib_model = calibration_model
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -70,6 +72,7 @@ class ActiveToolSection(QWidget):
         layout.addStretch()
 
         self.add_tool_options("sam_bbox", self._build_sam_options())
+        self.add_tool_options("measure", self._build_measure_options())
 
     # ------------------------------------------------------------------ #
     # Common: stroke width
@@ -164,6 +167,26 @@ class ActiveToolSection(QWidget):
 
     def _on_sam_combo_changed(self, display_name: str) -> None:
         self.sam_variant_changed.emit(_SAM_VARIANT_MAP.get(display_name, "sam2_t.pt"))
+
+    # ------------------------------------------------------------------ #
+    # Measure options page
+    # ------------------------------------------------------------------ #
+
+    def _build_measure_options(self) -> QWidget:
+        """The distance readout is drawn live on the canvas -- this page only
+        holds the action to clear an in-progress measurement."""
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 0, 0)
+
+        btn_clear = QPushButton("Clear Measurement")
+        btn_clear.clicked.connect(self._on_clear_measurement_clicked)
+        v.addWidget(btn_clear)
+        return page
+
+    def _on_clear_measurement_clicked(self) -> None:
+        if self._calib_model is not None:
+            self._calib_model.clear_measurement()
 
     def current_sam_variant(self) -> str:
         """Return the internal variant key for the currently selected SAM model."""

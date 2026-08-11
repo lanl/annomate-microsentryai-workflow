@@ -202,6 +202,29 @@ def test_center_crop_signals_forward_through_right_panel(qtbot, isolated_setting
     assert crop_toggled == [True]
 
 
+def test_grid_calibrate_signal_forwards_through_right_panel(qtbot, isolated_settings):
+    """Verify RightPanel forwards GridSection's calibrate button as tool_selected.
+
+    window.py wires the calibrate/measure/polygon/SAM tool-selection handler
+    against RightPanel's tool_selected signal, not GridSection's directly --
+    this confirms the forwarding is actually connected, and that
+    set_active_tool syncs the button back in the other direction.
+    """
+    dataset_model = DatasetTableModel(DatasetState())
+    panel = RightPanel(dataset_model)
+    qtbot.addWidget(panel)
+    panel.grid.set_has_image(True)
+
+    requested = []
+    panel.tool_selected.connect(requested.append)
+
+    panel.grid._btn_calibrate_points.click()
+    assert requested[-1] == "calibrate"
+
+    panel.set_active_tool("")
+    assert not panel.grid._btn_calibrate_points.isChecked()
+
+
 def test_grid_section_wired_to_calibration_model(qtbot, isolated_settings):
     """Verify RightPanel passes its calibration_model through to GridSection.
 

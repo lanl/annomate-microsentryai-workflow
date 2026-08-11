@@ -27,14 +27,14 @@ def canvas(qtbot):
     return widget
 
 
-def test_zoom_buttons_drive_canvas(canvas, calibrated_model, qtbot):
+def test_zoom_buttons_drive_canvas(canvas, qtbot):
     """Verify that zoom-in, zoom-out, and reset buttons correctly change the canvas zoom level.
 
     Starts at fit-zoom, clicks zoom-in (zoom increases), clicks reset (zoom returns to fit),
     then clicks zoom-out (zoom decreases below fit). Success means each button produces
     the expected zoom change.
     """
-    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
+    bar = ViewportActionsBar(canvas, canvas)
     qtbot.addWidget(bar)
 
     fit_zoom = canvas._zoom
@@ -96,68 +96,6 @@ def test_hidden_annotation_overlays_keep_index_but_clear_selection(canvas):
     assert canvas._overlays[0][3] is False
     assert canvas._overlays[1][3] is True
     assert canvas.selected_polygon_idx == -1
-
-
-def test_calibrate_emits_tool_requests(canvas, calibrated_model, qtbot):
-    """Verify that the calibrate button emits tool_selected and toggles as expected.
-
-    Clicking calibrate emits 'calibrate' and checks the button; clicking it again
-    deactivates it and emits an empty string. The measure tool now lives on
-    ToolPalette (see test_tool_palette.py), not here.
-    """
-    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
-    bar.set_image_loaded(True)
-    qtbot.addWidget(bar)
-
-    requested = []
-    bar.tool_selected.connect(requested.append)
-
-    qtbot.mouseClick(bar._btn_calibrate_points, Qt.LeftButton)
-    assert requested[-1] == "calibrate"
-    assert bar._btn_calibrate_points.isChecked()
-
-    qtbot.mouseClick(bar._btn_calibrate_points, Qt.LeftButton)
-    assert requested[-1] == ""
-    assert not bar._btn_calibrate_points.isChecked()
-
-
-def test_calibrate_points_enabled_in_default_pixel_mode(canvas, qtbot):
-    """Verify calibrate-points is enabled and status shows '1px:1px' before any calibration.
-
-    In the default uncalibrated state, the calibrate-points button should be
-    enabled and the status label should display '1px:1px'.
-    """
-    model = CalibrationModel(CalibrationState())
-    bar = ViewportActionsBar(canvas, model, canvas)
-    bar.set_image_loaded(True)
-    qtbot.addWidget(bar)
-
-    assert bar._btn_calibrate_points.isEnabled()
-    assert "1px:1px" in bar._calib_status_lbl.text()
-
-
-def test_settings_controls_update_calibration_model(canvas, calibrated_model, qtbot):
-    """Verify that ViewportActionsBar's calibration controls update the model and canvas state.
-
-    Tests the measurement display, clear measurement button, and reset
-    calibration button. Success means each control produces the corresponding
-    model or canvas state change.
-    """
-    bar = ViewportActionsBar(canvas, calibrated_model, canvas)
-    bar.set_image_loaded(True)
-    qtbot.addWidget(bar)
-
-    calibrated_model.set_meas_p1((0.0, 0.0))
-    calibrated_model.set_meas_p2((100.0, 0.0))
-    assert "10" in bar._meas_lbl.text()
-
-    qtbot.mouseClick(bar._btn_clear_measurement, Qt.LeftButton)
-    assert calibrated_model.meas_points() == (None, None)
-
-    qtbot.mouseClick(bar._btn_reset_calibration, Qt.LeftButton)
-    assert calibrated_model.is_calibrated() is False
-    assert calibrated_model.has_scale() is True
-    assert calibrated_model.unit() == "px"
 
 
 def test_center_crop_defaults_to_605px_radius(qtbot):

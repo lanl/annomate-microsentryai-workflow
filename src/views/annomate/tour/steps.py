@@ -67,9 +67,7 @@ def build_default_steps() -> list[TourStep]:
             key="viewport_actions",
             title="Viewport Controls",
             body=(
-                "Zoom, distance measurement, calibration/grid settings, "
-                "anomaly-constraint checks, and center-crop tools all live "
-                "in this floating bar."
+                "Zoom and view controls live in this floating bar."
             ),
             target=lambda w: w.viewport_actions,
             placement="above",
