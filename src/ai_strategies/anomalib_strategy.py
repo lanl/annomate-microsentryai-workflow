@@ -388,8 +388,12 @@ class AnomalibStrategy:
             try:
                 # Attempt 1: Anomalib TorchInferencer (monkey-patch forces CPU deserialisation)
                 try:
+                    # pickle_module=DynamicPickleModule lets Attempt 1 survive the same
+                    # non-fatal pickling artifacts (e.g. POSIX-only signal constants baked
+                    # into a checkpoint exported on Linux) that Attempt 2 already tolerates,
+                    # instead of falling back to the raw/legacy path for those checkpoints.
                     torch.load = functools.partial(
-                        original_torch_load, map_location="cpu"
+                        original_torch_load, map_location="cpu", pickle_module=DynamicPickleModule
                     )
                     if platform.system() == "Windows":
                         pathlib.PosixPath = pathlib.WindowsPath
@@ -434,6 +438,8 @@ class AnomalibStrategy:
                     pre_processor = getattr(self.torch_inferencer.model, "pre_processor", None)
                     if pre_processor is not None and getattr(pre_processor, "transform", None) is not None:
                         pre_processor.export_transform = pre_processor.transform
+
+                    self._patch_missing_attention_gates(self.torch_inferencer.model)
 
                     self.model_name = f"Anomalib (Torch) [{final_device}]"
                     logger.info("Loaded %s via TorchInferencer", self.model_name)
@@ -499,6 +505,28 @@ class AnomalibStrategy:
         except Exception as e:
             logger.error("Critical failure loading model: %s", e)
             raise RuntimeError(f"Load Error: {e}")
+
+    @staticmethod
+    def _patch_missing_attention_gates(model) -> None:
+        """Restore ``gate = None`` on Attention modules pickled before timm added gating.
+
+        timm's ``Attention`` block now always sets ``self.gate`` in ``__init__``
+        (a ``Linear`` layer, or ``None`` when the block was built with
+        ``gated=False``). Checkpoints trained against older timm versions never
+        had this attribute at all, and unpickling restores an object's
+        ``__dict__`` directly without re-running ``__init__`` — so those
+        checkpoints' Attention modules are missing ``gate`` entirely rather than
+        having it set to ``None``, and ``forward()`` raises ``AttributeError``.
+        Since these checkpoints' weights contain no gate parameters, ``gate``
+        was always meant to be ``None`` for them; setting it explicitly restores
+        the exact behaviour they were trained with.
+
+        Args:
+            model: Loaded inference model to patch in place.
+        """
+        for module in model.modules():
+            if type(module).__name__ == "Attention" and not hasattr(module, "gate"):
+                module.gate = None
 
     def predict(self, image_path: str) -> Tuple[float, np.ndarray]:
         """Run inference on a single image using whichever backend is loaded.
