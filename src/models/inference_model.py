@@ -136,7 +136,7 @@ class InferenceModel:
     def clear_active_heatmaps(self) -> None:
         """Discard the active model's cached heatmap arrays and reset dirty.
 
-        Loading a model's weights (Load New / Load Previous) is a deliberate
+        Loading a model's weights (Load New Model) is a deliberate
         request for fresh inference results, even if this key was already
         active with cached heatmaps from a previous session — those may be
         stale relative to whatever checkpoint was just loaded. Call this

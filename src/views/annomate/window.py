@@ -567,7 +567,6 @@ class AnnoMateWindow(QWidget):
         self._current_ai_contours: list = []
         self._selected_ai_idx: int = -1
         self._accepting_ai: bool = False
-        self._saved_model_path: str = ""
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
         self._tour_manager = TourManager(self, parent=self)
@@ -602,9 +601,6 @@ class AnnoMateWindow(QWidget):
 
         # Right panel
         self.right_panel.load_model_requested.connect(self._on_load_model_requested)
-        self.right_panel.load_previous_model_requested.connect(
-            self._on_load_previous_model_requested
-        )
         self.right_panel.microsentry_settings_changed.connect(
             self._refresh_canvas_render
         )
@@ -1459,11 +1455,6 @@ class AnnoMateWindow(QWidget):
         self.right_panel.set_no_model()
         self.right_panel.set_known_models({}, "")
         self.right_panel.set_scores_dirty(False)
-        self._saved_model_path = ""
-
-    def set_saved_model_path(self, path: str) -> None:
-        """Called by AppWindow after opening a project to record the saved model path."""
-        self._saved_model_path = path
 
     def show_dataset_setup(self) -> None:
         """Called by AppWindow when starting a new project."""
@@ -1567,26 +1558,6 @@ class AnnoMateWindow(QWidget):
         )
         if loaded_path and os.path.splitext(os.path.basename(loaded_path))[0] == key:
             self._start_pending_inference()
-
-    def _on_load_previous_model_requested(self) -> None:
-        if self.inference_controller is None:
-            return
-        if not self._saved_model_path:
-            QMessageBox.information(
-                self,
-                "Load Previous Model",
-                "No model path found in the current project.\n"
-                "Open a project that was saved with a model loaded, or use 'Load New'.",
-            )
-            return
-        if not os.path.isfile(self._saved_model_path):
-            QMessageBox.warning(
-                self,
-                "Load Previous Model",
-                f"The saved model file no longer exists:\n{self._saved_model_path}\n\nUse 'Load New' to browse for it.",
-            )
-            return
-        self._load_model_from_path(self._saved_model_path)
 
     def _on_load_model_requested(self) -> None:
         if self.inference_controller is None:

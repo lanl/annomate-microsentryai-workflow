@@ -188,7 +188,6 @@ class RightPanel(QWidget):
 
     class_selected = Signal(str)
     load_model_requested = Signal()
-    load_previous_model_requested = Signal()
     microsentry_settings_changed = Signal()
     cached_model_changed = Signal(str)
     accept_polygons_requested = Signal()
@@ -261,9 +260,6 @@ class RightPanel(QWidget):
         # section stacked in this one tab. ----
         self._ms_section = MicrosentrySection()
         self._ms_section.load_model_requested.connect(self.load_model_requested)
-        self._ms_section.load_previous_model_requested.connect(
-            self.load_previous_model_requested
-        )
         self._ms_section.settings_changed.connect(self.microsentry_settings_changed)
         self._ms_section.cached_model_changed.connect(self.cached_model_changed)
         self._ms_section.accept_polygons_requested.connect(

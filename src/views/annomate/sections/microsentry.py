@@ -2,8 +2,9 @@
 MicrosentrySection — unified Microsentry controls panel for the AnnoMate right panel.
 
 Layout (when model loaded):
-  Load Model button
-  Model name label
+  Load New Model button
+  Model name line + backend line (only shown when a model is actually loaded
+      for inference — not shown for cached-only viewing)
   Cached Model dropdown (only shown when >1 model has cached results)
   Unsaved-scores indicator (only shown when the active model is dirty)
   [Enable Heatmap] toggle
@@ -86,7 +87,6 @@ class MicrosentrySection(QWidget):
     """
 
     load_model_requested = Signal()
-    load_previous_model_requested = Signal()
     settings_changed = Signal()
     accept_polygons_requested = Signal()
     cached_model_changed = Signal(str)  # model key the user picked from the dropdown
@@ -105,21 +105,12 @@ class MicrosentrySection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        # Load buttons row (always visible)
-        btn_row = QHBoxLayout()
-        btn_row.setContentsMargins(0, 0, 0, 0)
-        btn_row.setSpacing(4)
-        self._btn_load_prev = QPushButton(material_icon("folder_open"), "Load Previous")
-        self._btn_load_prev.setToolTip("Reload the model saved with this project")
-        self._btn_load_prev.setEnabled(False)
-        self._btn_load_prev.clicked.connect(self.load_previous_model_requested)
-        self._btn_load_new = QPushButton(material_icon("folder_open"), "Load New")
+        # Load button (always visible)
+        self._btn_load_new = QPushButton("Load New Model")
         self._btn_load_new.setToolTip("Browse for a new .pt model file")
         self._btn_load_new.setEnabled(False)
         self._btn_load_new.clicked.connect(self.load_model_requested)
-        btn_row.addWidget(self._btn_load_prev)
-        btn_row.addWidget(self._btn_load_new)
-        layout.addLayout(btn_row)
+        layout.addWidget(self._btn_load_new)
 
         # Save-project hint (shown when no project is saved)
         self._lbl_save_hint = QLabel("Save the project first to enable model loading.")
@@ -141,22 +132,26 @@ class MicrosentrySection(QWidget):
         lw.setContentsMargins(0, 0, 0, 0)
         lw.setSpacing(2)
 
-        model_info_row = QHBoxLayout()
-        model_info_row.setContentsMargins(0, 0, 0, 0)
-        model_info_row.setSpacing(6)
+        # Model name + backend, on their own lines — only shown while an
+        # actual PyTorch model is loaded and available for inference, never
+        # for cached-only viewing (see set_model_loaded/set_scoremaps_loaded).
+        self._model_info_widget = QWidget()
+        model_info_col = QVBoxLayout(self._model_info_widget)
+        model_info_col.setContentsMargins(0, 0, 0, 0)
+        model_info_col.setSpacing(0)
         self._lbl_model_file = QLabel("")
         self._lbl_model_file.setStyleSheet("font-size: 11px; font-weight: bold;")
         self._lbl_model_backend = QLabel("")
         self._lbl_model_backend.setStyleSheet("font-size: 10px; color: grey;")
-        self._lbl_model_backend.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        model_info_row.addWidget(self._lbl_model_file)
-        model_info_row.addWidget(self._lbl_model_backend, stretch=1)
-        lw.addLayout(model_info_row)
+        model_info_col.addWidget(self._lbl_model_file)
+        model_info_col.addWidget(self._lbl_model_backend)
+        self._model_info_widget.setVisible(False)
+        lw.addWidget(self._model_info_widget)
 
         # Cached-model selector — shown only when this project has cached
         # results for more than one model. Switching here just swaps which
         # model's cached scores/heatmap are displayed; it does not load
-        # weights or run new inference (see "Load Previous"/"Load New" for that).
+        # weights or run new inference (see "Load New Model" for that).
         self._cached_model_row_widget = QWidget()
         cached_model_row = QHBoxLayout(self._cached_model_row_widget)
         cached_model_row.setContentsMargins(0, 0, 0, 0)
@@ -381,24 +376,31 @@ class MicrosentrySection(QWidget):
     # ------------------------------------------------------------------ #
 
     def set_project_saved(self, has_project: bool) -> None:
-        self._btn_load_prev.setEnabled(has_project)
         self._btn_load_new.setEnabled(has_project)
         self._lbl_save_hint.setVisible(not has_project)
 
     def set_model_loaded(self, name: str, path: str = "") -> None:
+        """A real PyTorch model is loaded and available for inference."""
         filename = os.path.basename(path) if path else name
         self._lbl_model_file.setText(filename)
         self._lbl_model_backend.setText(name)
+        self._model_info_widget.setVisible(True)
         self._lbl_no_model.setVisible(False)
         self._loaded_widget.setVisible(True)
 
     def set_scoremaps_loaded(self) -> None:
-        self._lbl_model_file.setText("Scoremaps loaded")
-        self._lbl_model_backend.setText("no model")
+        """Cached results exist for this project, but no model is loaded.
+
+        The rest of the panel (cached-model dropdown, heatmap controls)
+        still works against the cached data, but the model name/backend
+        lines only apply to an actual loaded model, so stay hidden here.
+        """
+        self._model_info_widget.setVisible(False)
         self._lbl_no_model.setVisible(False)
         self._loaded_widget.setVisible(True)
 
     def set_no_model(self) -> None:
+        self._model_info_widget.setVisible(False)
         self._lbl_model_file.setText("")
         self._lbl_model_backend.setText("")
         self._lbl_no_model.setVisible(True)
