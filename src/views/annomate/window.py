@@ -1605,7 +1605,14 @@ class AnnoMateWindow(QWidget):
 
         # Heatmap layer — drawn as a semi-transparent QPixmap over the original
         if ms["heatmap_enabled"]:
-            self.canvas.set_heatmap_layer(s, ms["alpha"], ms["heat_min"])
+            self.canvas.set_heatmap_layer(
+                s,
+                ms["alpha"],
+                ms["heat_min"],
+                ms["colormap"],
+                ms["heat_ceiling"],
+                ms["heat_gamma"],
+            )
         else:
             self.canvas.clear_heatmap_layer()
 

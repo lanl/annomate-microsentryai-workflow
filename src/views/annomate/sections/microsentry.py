@@ -12,6 +12,9 @@ Layout (when model loaded):
   chevron_right  Advanced Settings (collapsible)
       Simplify Tolerance slider
       Heatmap Minimum slider
+      Heatmap Ceiling slider
+      Heatmap Gamma slider
+      Heatmap Colormap dropdown
 """
 
 import os
@@ -25,6 +28,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSlider,
     QToolButton,
+    QComboBox,
 )
 
 from views.icons import material_icon
@@ -33,6 +37,16 @@ from ._shared import _toggle_button
 
 _ICON_ADVANCED_EXPANDED = "expand_more"
 _ICON_ADVANCED_COLLAPSED = "chevron_right"
+
+# (display label, colormap key understood by ImageLabel.set_heatmap_layer)
+HEATMAP_COLORMAPS = [
+    ("Inferno", "inferno"),
+    ("Magma", "magma"),
+    ("Viridis", "viridis"),
+    ("Turbo", "turbo"),
+    ("Jet", "jet"),
+    ("Hot", "hot"),
+]
 
 
 def _slider_row(
@@ -252,16 +266,56 @@ class MicrosentrySection(QWidget):
             _slider_row("Simplify Tolerance", self._epsilon_val, self._epsilon)
         )
 
-        self._heat_min_val = QLabel("0%")
+        self._heat_min_val = QLabel("48%")
         self._heat_min_val.setStyleSheet("font-size: 11px;")
         self._heat_min_val.setFixedWidth(30)
         self._heat_min = QSlider(Qt.Horizontal)
         self._heat_min.setRange(0, 100)
-        self._heat_min.setValue(0)
+        self._heat_min.setValue(48)
         self._heat_min.valueChanged.connect(
             lambda v: (self._heat_min_val.setText(f"{v}%"), self._debounce.start())
         )
         aw.addWidget(_slider_row("Heatmap Minimum", self._heat_min_val, self._heat_min))
+
+        self._heat_ceiling_val = QLabel("62%")
+        self._heat_ceiling_val.setStyleSheet("font-size: 11px;")
+        self._heat_ceiling_val.setFixedWidth(30)
+        self._heat_ceiling = QSlider(Qt.Horizontal)
+        self._heat_ceiling.setRange(50, 100)
+        self._heat_ceiling.setValue(62)
+        self._heat_ceiling.valueChanged.connect(
+            lambda v: (self._heat_ceiling_val.setText(f"{v}%"), self._debounce.start())
+        )
+        aw.addWidget(
+            _slider_row("Heatmap Ceiling", self._heat_ceiling_val, self._heat_ceiling)
+        )
+
+        self._heat_gamma_val = QLabel("0.60")
+        self._heat_gamma_val.setStyleSheet("font-size: 11px;")
+        self._heat_gamma_val.setFixedWidth(30)
+        self._heat_gamma = QSlider(Qt.Horizontal)
+        self._heat_gamma.setRange(10, 100)
+        self._heat_gamma.setValue(60)
+        self._heat_gamma.valueChanged.connect(
+            lambda v: (
+                self._heat_gamma_val.setText(f"{v / 100:.2f}"),
+                self._debounce.start(),
+            )
+        )
+        aw.addWidget(_slider_row("Heatmap Gamma", self._heat_gamma_val, self._heat_gamma))
+
+        colormap_row = QHBoxLayout()
+        colormap_row.setContentsMargins(0, 0, 0, 0)
+        colormap_lbl = QLabel("Heatmap Colormap")
+        colormap_lbl.setStyleSheet("font-size: 11px;")
+        self._colormap = QComboBox()
+        for display_label, key in HEATMAP_COLORMAPS:
+            self._colormap.addItem(display_label, key)
+        self._colormap.currentIndexChanged.connect(self._debounce.start)
+        colormap_row.addWidget(colormap_lbl)
+        colormap_row.addStretch()
+        colormap_row.addWidget(self._colormap)
+        aw.addLayout(colormap_row)
 
         self._advanced_widget.setVisible(False)
         lw.addWidget(self._advanced_widget)
@@ -322,4 +376,7 @@ class MicrosentrySection(QWidget):
             "alpha": self._alpha.value() / 100.0,
             "epsilon": self._epsilon.value(),
             "heat_min": self._heat_min.value(),
+            "heat_ceiling": self._heat_ceiling.value(),
+            "heat_gamma": self._heat_gamma.value() / 100.0,
+            "colormap": self._colormap.currentData(),
         }
