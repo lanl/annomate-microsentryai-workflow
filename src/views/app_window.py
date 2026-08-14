@@ -537,7 +537,7 @@ class AppWindow(QMainWindow):
         name = self.project_controller.project_name
         if name:
             dirty = "*" if self.project_controller.is_dirty else ""
-            self.setWindowTitle(f"{name}{dirty} — {_APP_TITLE}")
+            self.setWindowTitle(f"{name}{dirty} - {_APP_TITLE}")
         else:
             self.setWindowTitle(_APP_TITLE)
 

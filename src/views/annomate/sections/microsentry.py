@@ -155,7 +155,7 @@ class MicrosentrySection(QWidget):
         self._cached_model_row_widget = QWidget()
         cached_model_row = QHBoxLayout(self._cached_model_row_widget)
         cached_model_row.setContentsMargins(0, 0, 0, 0)
-        cached_model_lbl = QLabel("Cached Model")
+        cached_model_lbl = QLabel("Saved Results")
         cached_model_lbl.setStyleSheet("font-size: 11px;")
         self._cached_model = QComboBox()
         # Mouse-only: QComboBox's default keyboard focus enables type-ahead
