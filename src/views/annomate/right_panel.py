@@ -190,6 +190,7 @@ class RightPanel(QWidget):
     load_model_requested = Signal()
     load_previous_model_requested = Signal()
     microsentry_settings_changed = Signal()
+    cached_model_changed = Signal(str)
     accept_polygons_requested = Signal()
     annotation_mode_changed = Signal(str)  # "pixel" | "image_level"
     collapsed_changed = Signal(bool)
@@ -264,6 +265,7 @@ class RightPanel(QWidget):
             self.load_previous_model_requested
         )
         self._ms_section.settings_changed.connect(self.microsentry_settings_changed)
+        self._ms_section.cached_model_changed.connect(self.cached_model_changed)
         self._ms_section.accept_polygons_requested.connect(
             self.accept_polygons_requested
         )
@@ -481,6 +483,12 @@ class RightPanel(QWidget):
 
     def get_microsentry_settings(self) -> dict:
         return self._ms_section.get_settings()
+
+    def set_known_models(self, models: dict, active_key: str) -> None:
+        self._ms_section.set_known_models(models, active_key)
+
+    def set_scores_dirty(self, dirty: bool) -> None:
+        self._ms_section.set_scores_dirty(dirty)
 
     # ------------------------------------------------------------------ #
     # Section header accessors (for tour/onboarding targeting)

@@ -130,3 +130,58 @@ class TestInferenceModelClear:
         model.clear()
         model.set_score_map("new.jpg", 0.4, score_map)
         assert model.get_processed_count() == 1
+
+
+class TestInferenceModelClearActiveHeatmaps:
+    def test_clear_active_heatmaps_makes_images_reprocessable(self, model, score_map):
+        """Verify clear_active_heatmaps() un-marks previously processed images.
+
+        Reproduces the "loading a model does nothing" bug: an image already
+        marked processed (e.g. from cached heatmaps loaded at project-open)
+        must become is_processed()==False again after this call, so a fresh
+        model load actually triggers new inference instead of finding
+        everything "already done".
+        """
+        model.register_model("cfa", "/models/cfa.pt", "scoremaps/cfa-scoremaps.npz")
+        model.switch_active_model("cfa")
+        model.set_score_map("img.jpg", 0.7, score_map)
+        assert model.is_processed("img.jpg") is True
+
+        model.clear_active_heatmaps()
+
+        assert model.is_processed("img.jpg") is False
+
+    def test_clear_active_heatmaps_resets_dirty_flag(self, model, score_map):
+        """Verify clear_active_heatmaps() leaves the dirty flag False.
+
+        There's nothing unsaved right after clearing — dirty should only
+        become True again once new inference results are stored.
+        """
+        model.register_model("cfa", "/models/cfa.pt", "")
+        model.switch_active_model("cfa")
+        model.set_score_map("img.jpg", 0.7, score_map)
+        assert model.is_score_maps_dirty() is True
+
+        model.clear_active_heatmaps()
+
+        assert model.is_score_maps_dirty() is False
+
+    def test_clear_active_heatmaps_does_not_touch_other_models_scores(
+        self, model, score_map
+    ):
+        """Verify clearing the active model's heatmaps doesn't affect other models.
+
+        Only the active model's score_maps should be discarded — scalar
+        scores for every known model, and their on-disk caches, are
+        untouched by this operation.
+        """
+        model.register_model("cfa", "/models/cfa.pt", "")
+        model.switch_active_model("cfa")
+        model.set_score_map("img.jpg", 0.7, score_map)
+
+        model.register_model("efficientad", "/models/efficientad.pt", "")
+        model.switch_active_model("efficientad")
+        model.clear_active_heatmaps()
+
+        model.switch_active_model("cfa")
+        assert model.get_score("img.jpg") == pytest.approx(0.7)

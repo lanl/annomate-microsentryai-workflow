@@ -4,6 +4,8 @@ MicrosentrySection — unified Microsentry controls panel for the AnnoMate right
 Layout (when model loaded):
   Load Model button
   Model name label
+  Cached Model dropdown (only shown when >1 model has cached results)
+  Unsaved-scores indicator (only shown when the active model is dirty)
   [Enable Heatmap] toggle
       Transparency slider (+ nudge buttons)
   [Enable Segmentation] toggle
@@ -87,6 +89,7 @@ class MicrosentrySection(QWidget):
     load_previous_model_requested = Signal()
     settings_changed = Signal()
     accept_polygons_requested = Signal()
+    cached_model_changed = Signal(str)  # model key the user picked from the dropdown
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -94,6 +97,7 @@ class MicrosentrySection(QWidget):
         self._debounce.setSingleShot(True)
         self._debounce.setInterval(200)
         self._debounce.timeout.connect(self.settings_changed)
+        self._updating_cached_model = False
         self._init_ui()
 
     def _init_ui(self) -> None:
@@ -148,6 +152,31 @@ class MicrosentrySection(QWidget):
         model_info_row.addWidget(self._lbl_model_file)
         model_info_row.addWidget(self._lbl_model_backend, stretch=1)
         lw.addLayout(model_info_row)
+
+        # Cached-model selector — shown only when this project has cached
+        # results for more than one model. Switching here just swaps which
+        # model's cached scores/heatmap are displayed; it does not load
+        # weights or run new inference (see "Load Previous"/"Load New" for that).
+        self._cached_model_row_widget = QWidget()
+        cached_model_row = QHBoxLayout(self._cached_model_row_widget)
+        cached_model_row.setContentsMargins(0, 0, 0, 0)
+        cached_model_lbl = QLabel("Cached Model")
+        cached_model_lbl.setStyleSheet("font-size: 11px;")
+        self._cached_model = QComboBox()
+        self._cached_model.currentIndexChanged.connect(self._on_cached_model_changed)
+        cached_model_row.addWidget(cached_model_lbl)
+        cached_model_row.addStretch()
+        cached_model_row.addWidget(self._cached_model)
+        self._cached_model_row_widget.setVisible(False)
+        lw.addWidget(self._cached_model_row_widget)
+
+        # Unsaved-scores indicator — visible whenever the active model's
+        # heatmaps have changes that haven't been written to disk yet.
+        self._lbl_unsaved_scores = QLabel("Unsaved scores - Save Project to keep them")
+        self._lbl_unsaved_scores.setStyleSheet("color: #b05000; font-size: 11px;")
+        self._lbl_unsaved_scores.setWordWrap(True)
+        self._lbl_unsaved_scores.setVisible(False)
+        lw.addWidget(self._lbl_unsaved_scores)
 
         lw.addSpacing(4)
 
@@ -340,6 +369,13 @@ class MicrosentrySection(QWidget):
             )
         )
 
+    def _on_cached_model_changed(self, index: int) -> None:
+        if self._updating_cached_model or index < 0:
+            return
+        key = self._cached_model.itemData(index)
+        if key:
+            self.cached_model_changed.emit(key)
+
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
@@ -367,6 +403,29 @@ class MicrosentrySection(QWidget):
         self._lbl_model_backend.setText("")
         self._lbl_no_model.setVisible(True)
         self._loaded_widget.setVisible(False)
+
+    def set_known_models(self, models: dict, active_key: str) -> None:
+        """Populate the cached-model dropdown, shown only when >1 model is known.
+
+        Args:
+            models (dict): ``{key: {"model_path": str, ...}}`` registry.
+            active_key (str): Currently active model's key, pre-selected.
+        """
+        self._updating_cached_model = True
+        try:
+            self._cached_model.clear()
+            for key in models:
+                self._cached_model.addItem(key, key)
+            idx = self._cached_model.findData(active_key)
+            if idx >= 0:
+                self._cached_model.setCurrentIndex(idx)
+        finally:
+            self._updating_cached_model = False
+        self._cached_model_row_widget.setVisible(len(models) > 1)
+
+    def set_scores_dirty(self, dirty: bool) -> None:
+        """Show or hide the unsaved-scores warning indicator."""
+        self._lbl_unsaved_scores.setVisible(dirty)
 
     def get_settings(self) -> dict:
         return {

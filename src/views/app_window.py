@@ -211,7 +211,7 @@ class AppWindow(QMainWindow):
         if warnings and not relocated:
             QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
 
-        model_path = project_data.get("inference", {}).get("model_path", "")
+        model_path = project_data.get("_resolved_active_model_path", "")
         self.annomate_view.set_saved_model_path(model_path)
         if model_path and not self.inference_controller.has_model():
             self.statusBar().showMessage(

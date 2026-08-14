@@ -191,3 +191,122 @@ class TestInferenceStateClear:
         state.clear()
         state.set_score_map("new.jpg", 0.4, score_map)
         assert state.is_processed("new.jpg")
+
+
+class TestInferenceStateMultiModel:
+    def test_register_model_creates_empty_scores_entry(self, state):
+        """Verify that registering a model creates an empty model_scores entry.
+
+        Registering a new model key should make it queryable in known_models
+        and give it an empty (not missing) entry in model_scores, ready to
+        receive scores once it becomes active. Success means both dicts
+        contain the key.
+        """
+        state.register_model("cfa", "/models/cfa.pt", "scoremaps/cfa-scoremaps.npz")
+        assert state.known_models["cfa"]["model_path"] == "/models/cfa.pt"
+        assert state.model_scores["cfa"] == {}
+
+    def test_reregistering_with_empty_score_maps_file_keeps_existing_path(self, state):
+        """Verify re-registering a known model doesn't erase its saved NPZ path.
+
+        window.py always calls register_model(key, path, "") when loading
+        model weights, since it doesn't know the NPZ path at that point. If
+        this model already has a real cached score_maps_file on record (from
+        a previous save), re-registering it must not clobber that path with
+        an empty string — doing so would orphan its on-disk cache. Success
+        means the original path survives a re-register with "".
+        """
+        state.register_model("cfa", "/models/cfa.pt", "scoremaps/cfa-scoremaps.npz")
+        state.register_model("cfa", "/models/cfa.pt", "")
+        assert (
+            state.known_models["cfa"]["score_maps_file"]
+            == "scoremaps/cfa-scoremaps.npz"
+        )
+
+    def test_switch_active_model_updates_active_key(self, state):
+        """Verify that switching the active model updates active_model_key.
+
+        Success means active_model_key reflects the most recently switched-to key.
+        """
+        state.register_model("cfa", "/models/cfa.pt", "")
+        state.switch_active_model("cfa")
+        assert state.active_model_key == "cfa"
+
+    def test_set_score_map_after_switch_updates_model_scores(self, state, score_map):
+        """Verify that scores set while a model is active land in model_scores too.
+
+        Because `scores` aliases `model_scores[active_model_key]` after a switch,
+        calling set_score_map should update both without any extra plumbing.
+        Success means the score is visible under both `scores` and `model_scores`.
+        """
+        state.register_model("cfa", "/models/cfa.pt", "")
+        state.switch_active_model("cfa")
+        state.set_score_map("img.jpg", 0.8, score_map)
+        assert state.scores["img.jpg"] == pytest.approx(0.8)
+        assert state.model_scores["cfa"]["img.jpg"] == pytest.approx(0.8)
+
+    def test_switching_models_preserves_previous_models_scores(self, state, score_map):
+        """Verify that switching away from a model keeps its scores intact.
+
+        Sets a score under model "cfa", switches to model "efficientad", then
+        switches back. Success means cfa's score for img.jpg is still there —
+        switching does not lose the outgoing model's cached results.
+        """
+        state.register_model("cfa", "/models/cfa.pt", "")
+        state.switch_active_model("cfa")
+        state.set_score_map("img.jpg", 0.8, score_map)
+
+        state.register_model("efficientad", "/models/efficientad.pt", "")
+        state.switch_active_model("efficientad")
+        assert "img.jpg" not in state.scores  # different model, no scores yet
+
+        state.switch_active_model("cfa")
+        assert state.scores["img.jpg"] == pytest.approx(0.8)
+
+    def test_switch_active_model_clears_score_maps(self, state, score_map):
+        """Verify that switching models clears the active heatmap arrays.
+
+        Heatmaps are never kept resident for more than one model at a time —
+        the caller is responsible for loading the new model's heatmaps from
+        disk afterward. Success means score_maps is empty right after a switch.
+        """
+        state.register_model("cfa", "/models/cfa.pt", "")
+        state.switch_active_model("cfa")
+        state.set_score_map("img.jpg", 0.8, score_map)
+
+        state.register_model("efficientad", "/models/efficientad.pt", "")
+        state.switch_active_model("efficientad")
+        assert state.score_maps == {}
+
+    def test_switch_active_model_resets_dirty_flag(self, state, score_map):
+        """Verify that switching models clears the dirty flag.
+
+        The newly-activated model has no unsaved in-memory changes yet (its
+        heatmaps, if any, come from disk). Success means score_maps_dirty is
+        False immediately after switching.
+        """
+        state.register_model("cfa", "/models/cfa.pt", "")
+        state.switch_active_model("cfa")
+        state.set_score_map("img.jpg", 0.8, score_map)
+        assert state.score_maps_dirty is True
+
+        state.register_model("efficientad", "/models/efficientad.pt", "")
+        state.switch_active_model("efficientad")
+        assert state.score_maps_dirty is False
+
+    def test_clear_wipes_model_registry(self, state, score_map):
+        """Verify that clear() resets the entire multi-model registry.
+
+        clear() represents a full reset (e.g. starting a new project), not
+        just deactivating the current model — it should wipe known_models,
+        model_scores, and active_model_key too. Success means all three are
+        empty/blank after clear().
+        """
+        state.register_model("cfa", "/models/cfa.pt", "")
+        state.switch_active_model("cfa")
+        state.set_score_map("img.jpg", 0.8, score_map)
+
+        state.clear()
+        assert state.known_models == {}
+        assert state.model_scores == {}
+        assert state.active_model_key == ""

@@ -49,6 +49,15 @@ def _make_dataset(tmp_path):
     return state
 
 
+def _activate_model(inf, key="testmodel", model_path="/models/testmodel.pt"):
+    """Register and activate a model, mirroring what InferenceController does
+    before any scores are set — tests that poke inf.scores/inf.score_maps
+    directly need an active model for save_project to persist anything."""
+    inf.register_model(key, model_path, "")
+    inf.switch_active_model(key)
+    return key
+
+
 def _write_legacy_project(pio, ds, proj_dir):
     """Write an old-style (v1.0) project: a separate annotations.coco.json,
     referenced by "annotations_file", with no embedded "annotations" key.
@@ -401,9 +410,9 @@ class TestProjectRoundTrip:
         ds = _make_dataset(tmp_path)
         abs_img = str(tmp_path / "images" / "img001.jpg")
         inf = InferenceState()
-        inf.scores = {abs_img: 0.87}
-        inf.labels = {abs_img: "ANOMALY"}
-        inf.inference_cache = {abs_img: 0.87}
+        _activate_model(inf)
+        inf.scores[abs_img] = 0.87
+        inf.inference_cache[abs_img] = 0.87
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf)
 
@@ -439,17 +448,16 @@ class TestProjectRoundTrip:
         abs_nest1 = str(img_dir / "nest1" / "dup.jpg")
         abs_nest3 = str(img_dir / "nest3" / "dup.jpg")
         inf = InferenceState()
-        inf.scores = {abs_nest1: 0.1, abs_nest3: 0.9}
-        inf.labels = {abs_nest1: "NORMAL", abs_nest3: "ANOMALY"}
+        key = _activate_model(inf)
+        inf.scores[abs_nest1] = 0.1
+        inf.scores[abs_nest3] = 0.9
 
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf)
 
         raw = json.loads(Path(path).read_text())
-        assert raw["per_image"]["nest1/dup.jpg"]["score"] == pytest.approx(0.1)
-        assert raw["per_image"]["nest3/dup.jpg"]["score"] == pytest.approx(0.9)
-        assert raw["per_image"]["nest1/dup.jpg"]["label"] == "NORMAL"
-        assert raw["per_image"]["nest3/dup.jpg"]["label"] == "ANOMALY"
+        assert raw["per_image"]["nest1/dup.jpg"]["inference"][key] == pytest.approx(0.1)
+        assert raw["per_image"]["nest3/dup.jpg"]["inference"][key] == pytest.approx(0.9)
 
         data = pio.load_project(path)
         inf2 = InferenceState()
@@ -470,6 +478,7 @@ class TestProjectRoundTrip:
         """
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
+        key = _activate_model(inf)
         arr = np.array([[0.1, 0.9], [0.5, 0.3]], dtype=np.float32)
         inf.score_maps["img001.jpg"] = arr
         inf.score_maps_dirty = True
@@ -477,7 +486,9 @@ class TestProjectRoundTrip:
 
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=True)
-        assert (tmp_path / "proj" / "scoremaps.npz").exists()
+        assert (
+            tmp_path / "proj" / "scoremaps" / f"myproject-{key}-scoremaps.npz"
+        ).exists()
 
         data = pio.load_project(path)
         inf2 = InferenceState()
@@ -500,6 +511,7 @@ class TestProjectRoundTrip:
 
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
+        _activate_model(inf)
         arr = np.array([[0.2, 0.8]], dtype=np.float32)
         abs_key = str(tmp_path / "images" / "img001.jpg")
         inf.score_maps[abs_key] = arr
@@ -897,8 +909,8 @@ class TestProjectRoundTrip:
         ds.review_decisions["img001.jpg"] = "accept"
         abs_img = str(tmp_path / "images" / "img001.jpg")
         inf = InferenceState()
-        inf.scores = {abs_img: 0.42}
-        inf.labels = {abs_img: "NORMAL"}
+        _activate_model(inf)
+        inf.scores[abs_img] = 0.42
 
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf)
@@ -1035,6 +1047,192 @@ class TestProjectRoundTrip:
         saved_dir = raw["dataset"]["image_dir"]
         assert not saved_dir.startswith("/"), "image_dir should be relative"
         assert saved_dir == "../images"
+
+
+class TestMultiModelRoundTrip:
+    def test_all_known_models_scores_persist(self, pio, tmp_path):
+        """Verify every known model's scores round-trip, not just the active one.
+
+        Registers two models, gives each a score for the same image, and makes
+        "cfa" the active model at save time. Success means both models' scores
+        are restored after load — switching away from a model must not lose it.
+        """
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.register_model("cfa", "/models/cfa.pt", "")
+        inf.switch_active_model("cfa")
+        inf.scores[abs_img] = 0.46
+        inf.register_model("efficientad", "/models/efficientad.pt", "")
+        inf.switch_active_model("efficientad")
+        inf.scores[abs_img] = 0.51
+        inf.switch_active_model("cfa")
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["per_image"]["img001.jpg"]["inference"]["cfa"] == pytest.approx(0.46)
+        assert raw["per_image"]["img001.jpg"]["inference"]["efficientad"] == pytest.approx(
+            0.51
+        )
+        assert raw["inference"]["active_model_key"] == "cfa"
+        keys = {m["key"] for m in raw["inference"]["models"]}
+        assert keys == {"cfa", "efficientad"}
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), inf2)
+
+        assert inf2.model_scores["cfa"][abs_img] == pytest.approx(0.46)
+        assert inf2.model_scores["efficientad"][abs_img] == pytest.approx(0.51)
+        assert inf2.active_model_key == "cfa"
+        assert inf2.scores[abs_img] == pytest.approx(0.46)  # active model's view
+
+    def test_only_active_models_heatmaps_are_written(self, pio, tmp_path):
+        """Verify only the active model's NPZ gets written, at its own path.
+
+        Registers two models but only stores a heatmap for the active one
+        ("efficientad"). Success means exactly one NPZ file exists, named
+        after the project and that model's key, and cfa has no NPZ on disk
+        at all.
+        """
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        inf.register_model("cfa", "/models/cfa.pt", "")
+        inf.register_model("efficientad", "/models/efficientad.pt", "")
+        inf.switch_active_model("efficientad")
+        inf.set_score_map("img001.jpg", 0.6, np.full((2, 2), 0.6, dtype=np.float32))
+
+        proj_dir = str(tmp_path / "proj")
+        pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=True)
+
+        scoremaps_dir = Path(proj_dir) / "scoremaps"
+        assert (scoremaps_dir / "myproject-efficientad-scoremaps.npz").exists()
+        assert not (scoremaps_dir / "myproject-cfa-scoremaps.npz").exists()
+
+    def test_scoremaps_filename_prefixed_with_project_name(self, pio, tmp_path):
+        """Verify two differently-named projects in the same folder don't collide.
+
+        Two projects sharing a parent directory and using the same model key
+        ("cfa") must write their heatmaps to different NPZ files — otherwise
+        saving one project would silently overwrite the other's cache.
+        """
+        ds_a = _make_dataset(tmp_path)
+        inf_a = InferenceState()
+        inf_a.register_model("cfa", "/models/cfa.pt", "")
+        inf_a.switch_active_model("cfa")
+        inf_a.set_score_map("img001.jpg", 0.1, np.full((2, 2), 0.1, dtype=np.float32))
+
+        # Same image folder as project A — two projects can legitimately
+        # point at the same dataset while remaining separate projects.
+        ds_b = DatasetState()
+        ds_b.image_dir = ds_a.image_dir
+        ds_b.image_files = list(ds_a.image_files)
+        inf_b = InferenceState()
+        inf_b.register_model("cfa", "/models/cfa.pt", "")
+        inf_b.switch_active_model("cfa")
+        inf_b.set_score_map("img001.jpg", 0.9, np.full((2, 2), 0.9, dtype=np.float32))
+
+        shared_dir = str(tmp_path / "shared")
+        pio.save_project(shared_dir, "project-a", ds_a, inf_a, save_score_maps=True)
+        pio.save_project(shared_dir, "project-b", ds_b, inf_b, save_score_maps=True)
+
+        scoremaps_dir = Path(shared_dir) / "scoremaps"
+        assert (scoremaps_dir / "project-a-cfa-scoremaps.npz").exists()
+        assert (scoremaps_dir / "project-b-cfa-scoremaps.npz").exists()
+
+        arr_a = pio.load_model_scoremaps(
+            str(scoremaps_dir / "project-a-cfa-scoremaps.npz")
+        )
+        arr_b = pio.load_model_scoremaps(
+            str(scoremaps_dir / "project-b-cfa-scoremaps.npz")
+        )
+        assert next(iter(arr_a.values()))[0, 0] == pytest.approx(0.1, abs=1e-3)
+        assert next(iter(arr_b.values()))[0, 0] == pytest.approx(0.9, abs=1e-3)
+
+    def test_switching_active_model_after_load_and_resaving(self, pio, tmp_path):
+        """Verify switching the active model and re-saving updates the registry.
+
+        Loads a project with two known models, switches the active one, and
+        saves again. Success means the newly-active key is what's persisted.
+        """
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.register_model("cfa", "/models/cfa.pt", "")
+        inf.switch_active_model("cfa")
+        inf.scores[abs_img] = 0.46
+        inf.register_model("efficientad", "/models/efficientad.pt", "")
+        inf.switch_active_model("efficientad")
+        inf.scores[abs_img] = 0.51
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), inf2)
+        assert inf2.active_model_key == "efficientad"
+
+        inf2.switch_active_model("cfa")
+        path2 = pio.save_project(proj_dir, "myproject", ds, inf2)
+        raw = json.loads(Path(path2).read_text())
+        assert raw["inference"]["active_model_key"] == "cfa"
+
+    def test_v20_project_migrates_to_single_model_registry(self, pio, tmp_path):
+        """Verify a pre-2.1 project file loads as a one-entry model registry.
+
+        Older project files have a single top-level inference.model_path and
+        inline per_image.score fields instead of the nested registry. Success
+        means the loader treats the model_path's filename stem as the sole
+        known model's key and its score lands under that key.
+        """
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        legacy_data = {
+            "version": "2.0",
+            "dataset": {"image_dir": str(tmp_path / "images")},
+            "per_image": {"img001.jpg": {"score": 0.73}},
+            "inference": {
+                "model_path": "/models/cfa.pt",
+                "score_maps_file": "scoremaps.npz",
+            },
+        }
+
+        inf2 = InferenceState()
+        pio.apply_project_to_states(legacy_data, DatasetState(), inf2)
+
+        assert inf2.active_model_key == "cfa"
+        assert inf2.known_models["cfa"]["model_path"] == "/models/cfa.pt"
+        assert inf2.model_scores["cfa"][abs_img] == pytest.approx(0.73)
+        assert inf2.scores[abs_img] == pytest.approx(0.73)
+        assert inf2.labels[abs_img] == "ANOMALY"
+
+    def test_v20_project_resaved_in_new_schema(self, pio, tmp_path):
+        """Verify saving a migrated v2.0 project writes the new v2.1 schema.
+
+        After loading a legacy project and saving it again, the file should
+        use the new nested registry shape, not the old flat one.
+        """
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        legacy_data = {
+            "version": "2.0",
+            "dataset": {"image_dir": ds.image_dir},
+            "per_image": {"img001.jpg": {"score": 0.73}},
+            "inference": {"model_path": "/models/cfa.pt", "score_maps_file": ""},
+        }
+        inf = InferenceState()
+        pio.apply_project_to_states(legacy_data, DatasetState(), inf)
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["version"] == "2.1"
+        assert "models" in raw["inference"]
+        assert raw["per_image"]["img001.jpg"]["inference"]["cfa"] == pytest.approx(0.73)
+        assert "score" not in raw["per_image"]["img001.jpg"]
 
 
 class TestAnnotationModeRoundTrip:

@@ -608,6 +608,7 @@ class AnnoMateWindow(QWidget):
         self.right_panel.microsentry_settings_changed.connect(
             self._refresh_canvas_render
         )
+        self.right_panel.cached_model_changed.connect(self._on_cached_model_selected)
         self.right_panel.accept_polygons_requested.connect(self._on_accept_ai_polygons)
         self.right_panel.annotation_mode_changed.connect(
             self._on_annotation_mode_changed
@@ -697,6 +698,11 @@ class AnnoMateWindow(QWidget):
             )
             self._project_controller.project_saved.connect(
                 lambda _: self._update_microsentry_availability()
+            )
+            # Saving clears score_maps_dirty on the active model — reflect
+            # that in the "unsaved scores" indicator right away.
+            self._project_controller.project_saved.connect(
+                lambda _: self._sync_microsentry_model_panel()
             )
         self._update_microsentry_availability()
 
@@ -1451,6 +1457,8 @@ class AnnoMateWindow(QWidget):
             self.inference_controller.unload_model()
         self.inference_model.clear()
         self.right_panel.set_no_model()
+        self.right_panel.set_known_models({}, "")
+        self.right_panel.set_scores_dirty(False)
         self._saved_model_path = ""
 
     def set_saved_model_path(self, path: str) -> None:
@@ -1471,6 +1479,7 @@ class AnnoMateWindow(QWidget):
         Shows the inference controls when scoremaps were restored from disk even
         though no model is currently loaded.
         """
+        self._sync_microsentry_model_panel()
         if self.inference_controller and self.inference_controller.has_model():
             return
         if self.inference_model and self.inference_model.get_processed_count() > 0:
@@ -1484,6 +1493,80 @@ class AnnoMateWindow(QWidget):
     # ------------------------------------------------------------------ #
     # Microsentry rendering
     # ------------------------------------------------------------------ #
+
+    def _sync_microsentry_model_panel(self) -> None:
+        """Push the current model registry/dirty state into the right panel."""
+        self.right_panel.set_known_models(
+            self.inference_model.get_known_models(),
+            self.inference_model.get_active_model_key(),
+        )
+        self.right_panel.set_scores_dirty(self.inference_model.is_score_maps_dirty())
+
+    def _confirm_switch_away_from_active_model(self) -> bool:
+        """Prompt to save/discard if the active model has unsaved heatmaps.
+
+        Returns:
+            bool: True if it's safe to proceed with switching (nothing was
+                dirty, the user chose to save, or chose to discard). False
+                if the user cancelled.
+        """
+        if not self.inference_model.is_score_maps_dirty():
+            return True
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Switch Model")
+        box.setText(
+            "The current model has heatmap results that haven't been saved "
+            "to the project yet. Save them before switching?"
+        )
+        save_btn = box.addButton("Save and Switch", QMessageBox.AcceptRole)
+        discard_btn = box.addButton("Discard and Switch", QMessageBox.DestructiveRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(save_btn)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is save_btn:
+            # Direct signal connections run synchronously: the save completes
+            # before control returns here.
+            self.save_project_requested.emit()
+            return True
+        return clicked is discard_btn
+
+    def _perform_model_switch(self, key: str) -> None:
+        """Swap the active cached model. Assumes any needed confirmation
+        already happened via :meth:`_confirm_switch_away_from_active_model`.
+        """
+        if key == self.inference_model.get_active_model_key():
+            return
+        if self._project_controller is not None:
+            self._project_controller.switch_active_model(key)
+        else:
+            self.inference_controller.switch_model(key)
+        self._sync_microsentry_model_panel()
+        self._refresh_canvas_render()
+        # The navigator's Score column and score-based sort order are only
+        # refreshed on explicit signal — without this, switching models
+        # leaves both stale (and A/D navigation, which walks the proxy
+        # model's sorted row order, appears to break as a result).
+        self.left_panel.navigator_refresh_inference()
+
+    def _on_cached_model_selected(self, key: str) -> None:
+        if key == self.inference_model.get_active_model_key():
+            return
+        if not self._confirm_switch_away_from_active_model():
+            self._sync_microsentry_model_panel()  # snap dropdown back
+            return
+        self._perform_model_switch(key)
+        # Resume processing pending images only if this model's weights
+        # happen to already be the ones loaded — picking a cached model from
+        # the dropdown never loads weights or runs inference on its own.
+        loaded_path = (
+            self.inference_controller.get_model_path()
+            if self.inference_controller
+            else ""
+        )
+        if loaded_path and os.path.splitext(os.path.basename(loaded_path))[0] == key:
+            self._start_pending_inference()
 
     def _on_load_previous_model_requested(self) -> None:
         if self.inference_controller is None:
@@ -1519,6 +1602,10 @@ class AnnoMateWindow(QWidget):
         self._load_model_from_path(path)
 
     def _load_model_from_path(self, path: str) -> None:
+        key = os.path.splitext(os.path.basename(path))[0]
+        if key != self.inference_model.get_active_model_key():
+            if not self._confirm_switch_away_from_active_model():
+                return
         self.status_bar.set_model_loading(True)
         QApplication.processEvents()
         try:
@@ -1528,10 +1615,12 @@ class AnnoMateWindow(QWidget):
             QMessageBox.critical(self, "Load Model", f"Could not load model:\n{exc}")
             return
         self.status_bar.set_model_loading(False)
-        # Clear score maps from any previous model so the new model re-processes
-        # everything rather than reusing stale heatmaps.
-        self.inference_model.clear()
-        self._refresh_canvas_render()
+        self.inference_model.register_model(key, path, "")
+        self._perform_model_switch(key)
+        # Loading weights is a deliberate request for fresh inference, even
+        # if this key was already active/cached — its old heatmaps may not
+        # match what this checkpoint actually produces.
+        self.inference_model.clear_active_heatmaps()
         self.right_panel.set_model_loaded(name, path)
         self.left_panel.navigator_enable_inference_columns()
         self._start_pending_inference()
@@ -1670,6 +1759,7 @@ class AnnoMateWindow(QWidget):
 
     def _on_inference_result(self, path: str, score: float, score_map) -> None:
         self.inference_model.set_score_map(path, score, score_map)
+        self.right_panel.set_scores_dirty(True)
         row = self._row_for_path(path)
         if row >= 0:
             self.left_panel.navigator_set_inference(row, score)
