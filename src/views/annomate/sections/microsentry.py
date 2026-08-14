@@ -158,6 +158,11 @@ class MicrosentrySection(QWidget):
         cached_model_lbl = QLabel("Cached Model")
         cached_model_lbl.setStyleSheet("font-size: 11px;")
         self._cached_model = QComboBox()
+        # Mouse-only: QComboBox's default keyboard focus enables type-ahead
+        # (e.g. pressing "a" jumps to an item starting with "a"), which was
+        # swallowing the app's A/D image-navigation shortcuts whenever this
+        # combo box still had focus after a selection.
+        self._cached_model.setFocusPolicy(Qt.NoFocus)
         self._cached_model.currentIndexChanged.connect(self._on_cached_model_changed)
         cached_model_row.addWidget(cached_model_lbl)
         cached_model_row.addStretch()
