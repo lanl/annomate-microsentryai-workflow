@@ -98,11 +98,13 @@ class AnnoMateStatusBar(QWidget):
     _TOOL_HINTS = {
         "polygon": "click start point to close · Backspace to undo point · Esc to cancel",
         "sam_bbox": "draw bbox over object · Enter=accept · Esc=cancel",
+        "edit_points": "Add: click an edge to insert · Delete: click a vertex to remove",
     }
 
     _TOOL_DISPLAY = {
         "polygon": "Polygon",
         "sam_bbox": "SAM BBox",
+        "edit_points": "Edit Points",
     }
 
     def set_tool(self, name: str) -> None:

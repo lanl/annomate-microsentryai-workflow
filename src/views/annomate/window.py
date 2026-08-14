@@ -30,7 +30,13 @@ from views.annomate._splitter import StyledSplitter
 from views.annomate.sections._shared import _ClickableFrame, _COLOR_SELECTED_BG
 from views.icons import material_icon
 
-from views.annomate.image_label import ImageLabel, SAM_BBOX, CALIBRATE, MEASURE
+from views.annomate.image_label import (
+    ImageLabel,
+    SAM_BBOX,
+    CALIBRATE,
+    MEASURE,
+    EDIT_POINTS,
+)
 from views.annomate.left_panel import LeftPanel
 from views.annomate.right_panel import RightPanel
 from views.annomate.tool_palette import ToolPalette
@@ -664,6 +670,9 @@ class AnnoMateWindow(QWidget):
         self.canvas.samBboxDrawn.connect(self._on_sam_bbox_drawn)
         self.right_panel.sam_variant_changed.connect(self._on_sam_variant_changed)
 
+        # Edit Points tool
+        self.right_panel.point_mode_changed.connect(self.canvas.set_point_edit_mode)
+
         # Calibration tool
         self.canvas.calibrationPointsPlaced.connect(self._on_calibration_points_placed)
         self._sam_controller.result_ready.connect(self._on_sam_result_ready)
@@ -1033,6 +1042,13 @@ class AnnoMateWindow(QWidget):
             self._set_active_tool("measure")
             self.canvas.set_tool(MEASURE)
             self.status_bar.set_tool("measure")
+            return
+
+        if tool_name == "edit_points":
+            self._set_active_tool("edit_points")
+            self.canvas.set_tool(EDIT_POINTS)
+            self.canvas.set_point_edit_mode(self.right_panel.current_point_edit_mode())
+            self.status_bar.set_tool("edit_points")
             return
 
         self._set_active_tool(tool_name)
@@ -1777,6 +1793,7 @@ class AnnoMateWindow(QWidget):
         - ``D``: next image (disabled during center-crop calibration)
         - ``P``: toggle polygon tool
         - ``S``: toggle SAM segment tool
+        - ``N``: toggle Edit Points tool
         - ``C``: toggle calibration tool
         - ``M``: toggle measure tool
         - ``Delete``: delete the selected annotation
@@ -1795,6 +1812,9 @@ class AnnoMateWindow(QWidget):
         elif event.key() == Qt.Key_S:
             if self.dataset_model.get_annotation_mode() == "pixel":
                 self.tool_palette.toggle_sam()
+        elif event.key() == Qt.Key_N:
+            if self.dataset_model.get_annotation_mode() == "pixel":
+                self.tool_palette.toggle_edit_points()
         elif event.key() == Qt.Key_C:
             self.right_panel.grid.toggle_calibrate()
         elif event.key() == Qt.Key_M:

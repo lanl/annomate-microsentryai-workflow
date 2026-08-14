@@ -195,6 +195,7 @@ class RightPanel(QWidget):
     collapsed_changed = Signal(bool)
     thickness_changed = Signal(float)
     sam_variant_changed = Signal(str)
+    point_mode_changed = Signal(str)
     crop_overlay_toggled = Signal(bool)
     center_calibration_started = Signal()
     center_calibration_accepted = Signal()
@@ -241,6 +242,7 @@ class RightPanel(QWidget):
         self.active_tool = ActiveToolSection(calibration_model)
         self.active_tool.thickness_changed.connect(self.thickness_changed)
         self.active_tool.sam_variant_changed.connect(self.sam_variant_changed)
+        self.active_tool.point_mode_changed.connect(self.point_mode_changed)
         self._add_tab("active_tool", "draw", "Active Tool", self.active_tool)
 
         # ---- Dataset Setup tab -- one collapsible section per feature, so
@@ -456,6 +458,9 @@ class RightPanel(QWidget):
 
     def current_sam_variant(self) -> str:
         return self.active_tool.current_sam_variant()
+
+    def current_point_edit_mode(self) -> str:
+        return self.active_tool.current_point_edit_mode()
 
     def sam_variant_display_name(self) -> str:
         return self.active_tool.sam_variant_display_name()

@@ -14,6 +14,7 @@ add_tool_options() -- nothing else here needs to change as they're added.
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -25,6 +26,8 @@ from PySide6.QtWidgets import (
 )
 
 from views.annomate.sections._collapsible import _CollapsibleSection
+from views.annomate.sections._shared import TOGGLE_BUTTON_STYLESHEET
+from views.icons import material_icon
 
 # Maps human-readable combo label -> internal variant key used by SAMStrategy
 _SAM_VARIANT_MAP = {
@@ -41,10 +44,12 @@ class ActiveToolSection(QWidget):
     Signals:
         thickness_changed (float): Stroke width slider moved.
         sam_variant_changed (str): SAM model variant combo changed.
+        point_mode_changed (str): Edit Points click mode changed ("add" or "delete").
     """
 
     thickness_changed = Signal(float)
     sam_variant_changed = Signal(str)
+    point_mode_changed = Signal(str)
 
     def __init__(self, calibration_model=None, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -73,6 +78,7 @@ class ActiveToolSection(QWidget):
 
         self.add_tool_options("sam_bbox", self._build_sam_options())
         self.add_tool_options("measure", self._build_measure_options())
+        self.add_tool_options("edit_points", self._build_point_options())
 
     # ------------------------------------------------------------------ #
     # Common: stroke width
@@ -187,6 +193,55 @@ class ActiveToolSection(QWidget):
     def _on_clear_measurement_clicked(self) -> None:
         if self._calib_model is not None:
             self._calib_model.clear_measurement()
+
+    # ------------------------------------------------------------------ #
+    # Edit Points options page
+    # ------------------------------------------------------------------ #
+
+    def _build_point_options(self) -> QWidget:
+        """Add/Delete click-mode toggle for the Edit Points tool."""
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(4)
+
+        v.addWidget(QLabel("Click mode:"))
+
+        row = QHBoxLayout()
+        self.btn_point_add = QPushButton(
+            material_icon("add", size=16, color="black"), "Add Point"
+        )
+        self.btn_point_add.setCheckable(True)
+        self.btn_point_add.setChecked(True)
+        self.btn_point_add.setToolTip("Click an edge to insert a new vertex there")
+        self.btn_point_add.setStyleSheet(TOGGLE_BUTTON_STYLESHEET)
+
+        self.btn_point_delete = QPushButton(
+            material_icon("close", size=16, color="black"), "Delete Point"
+        )
+        self.btn_point_delete.setCheckable(True)
+        self.btn_point_delete.setToolTip("Click a vertex to remove it")
+        self.btn_point_delete.setStyleSheet(TOGGLE_BUTTON_STYLESHEET)
+
+        self._point_mode_group = QButtonGroup(page)
+        self._point_mode_group.setExclusive(True)
+        self._point_mode_group.addButton(self.btn_point_add)
+        self._point_mode_group.addButton(self.btn_point_delete)
+
+        row.addWidget(self.btn_point_add)
+        row.addWidget(self.btn_point_delete)
+        v.addLayout(row)
+
+        self.btn_point_add.toggled.connect(self._on_point_mode_toggled)
+        self.btn_point_delete.toggled.connect(self._on_point_mode_toggled)
+        return page
+
+    def _on_point_mode_toggled(self, _checked: bool) -> None:
+        self.point_mode_changed.emit(self.current_point_edit_mode())
+
+    def current_point_edit_mode(self) -> str:
+        """Return the active Edit Points click mode: "add" or "delete"."""
+        return "delete" if self.btn_point_delete.isChecked() else "add"
 
     def current_sam_variant(self) -> str:
         """Return the internal variant key for the currently selected SAM model."""

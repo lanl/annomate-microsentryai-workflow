@@ -3,6 +3,7 @@ ToolPalette — left tool column for the AnnoMate main window.
 
 Layout (top to bottom):
   hexagon        Polygon tool
+  point          Edit Points tool (add/remove vertices on a closed polygon)
   auto_fix_high  SAM Segment tool
   straighten     Measure Distance tool (disabled until a calibration scale exists)
 
@@ -70,6 +71,20 @@ class ToolPalette(QWidget):
         self._drawing_btns.append(poly_btn)
 
         # ------------------------------------------------------------------ #
+        # Edit Points tool
+        # ------------------------------------------------------------------ #
+        point_btn = QToolButton()
+        point_btn.setIcon(material_icon("point", size=_ICON_SIZE, color="black"))
+        point_btn.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
+        point_btn.setToolTip("Edit Points (N)")
+        point_btn.setFixedSize(_BTN_W, _BTN_H)
+        point_btn.setCheckable(True)
+        self._btn_tool[point_btn] = "edit_points"
+        self._btn_group.addButton(point_btn)
+        layout.addWidget(point_btn)
+        self._drawing_btns.append(point_btn)
+
+        # ------------------------------------------------------------------ #
         # SAM tool
         # ------------------------------------------------------------------ #
         sam_btn = QToolButton()
@@ -134,6 +149,10 @@ class ToolPalette(QWidget):
     def toggle_sam(self) -> None:
         """Toggle the SAM segment tool on/off."""
         self._toggle_tool("sam_bbox")
+
+    def toggle_edit_points(self) -> None:
+        """Toggle the Edit Points tool on/off."""
+        self._toggle_tool("edit_points")
 
     def toggle_measure(self) -> None:
         """Toggle the measure tool on/off (no-op without a calibration scale)."""

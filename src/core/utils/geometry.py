@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import numpy as np
 import cv2
 
@@ -66,6 +66,50 @@ def simplify_polygon(
     if approx is None or len(approx) < 3:
         return pts
     return [(float(p[0][0]), float(p[0][1])) for p in approx]
+
+
+def nearest_point_on_edge(
+    points: List[Tuple[float, float]],
+    query: Tuple[float, float],
+    threshold: Optional[float] = None,
+) -> Optional[Tuple[int, Tuple[float, float]]]:
+    """Find the closest point lying on a closed polygon's boundary to *query*.
+
+    Args:
+        points (List[Tuple[float, float]]): Ordered (x, y) vertices of a
+            closed polygon; edges wrap from the last point back to the first.
+        query (Tuple[float, float]): The (x, y) point to test against each edge.
+        threshold (Optional[float]): If given, ignore edges whose closest
+            point is farther than this distance from *query*.
+
+    Returns:
+        Optional[Tuple[int, Tuple[float, float]]]: ``(edge_start_idx, point)``
+            for the nearest edge, where *point* is the closest point on that
+            edge and a new vertex would be inserted at ``edge_start_idx + 1``.
+            ``None`` if *points* has fewer than 2 vertices or every edge is
+            farther than *threshold*.
+    """
+    n = len(points)
+    if n < 2:
+        return None
+    qx, qy = query
+    best: Optional[Tuple[int, Tuple[float, float]]] = None
+    best_dist = threshold if threshold is not None else float("inf")
+    for i in range(n):
+        ax, ay = points[i]
+        bx, by = points[(i + 1) % n]
+        dx, dy = bx - ax, by - ay
+        seg_len_sq = dx * dx + dy * dy
+        if seg_len_sq == 0:
+            t = 0.0
+        else:
+            t = max(0.0, min(1.0, ((qx - ax) * dx + (qy - ay) * dy) / seg_len_sq))
+        px, py = ax + t * dx, ay + t * dy
+        dist = ((qx - px) ** 2 + (qy - py) ** 2) ** 0.5
+        if dist < best_dist:
+            best_dist = dist
+            best = (i, (px, py))
+    return best
 
 
 def scale_polygon_about_center(
