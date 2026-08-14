@@ -111,7 +111,7 @@ class ProjectIO:
                 np.savez_compressed(
                     npz_path,
                     **{
-                        self._filename_to_npz_key(f): arr
+                        self._filename_to_npz_key(f): arr.astype(np.float16)
                         for f, arr in inference_state.score_maps.items()
                     },
                 )
@@ -544,7 +544,9 @@ class ProjectIO:
                 npz = np.load(npz_path)
                 for key in npz.files:
                     fname = os.path.normpath(self._npz_key_to_filename(key))
-                    inference_state.score_maps[fname] = npz[key]
+                    inference_state.score_maps[fname] = npz[key].astype(
+                        np.float32, copy=False
+                    )
                 inference_state.score_maps_dirty = False
             except Exception as exc:
                 logger.warning("Could not load score maps from NPZ: %s", exc)

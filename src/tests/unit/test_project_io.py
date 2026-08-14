@@ -465,7 +465,8 @@ class TestProjectRoundTrip:
         When save_score_maps=True is passed, a scoremaps.npz file should be created.
         After loading, the restored InferenceState should contain the original array
         for 'img001.jpg'. Success means the .npz file exists and the restored array
-        matches element-wise.
+        matches element-wise, within float16 storage precision (score maps are
+        downcast to float16 on save to keep the file small and fast to write).
         """
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
@@ -483,7 +484,9 @@ class TestProjectRoundTrip:
         pio.apply_project_to_states(data, DatasetState(), inf2)
 
         assert "img001.jpg" in inf2.score_maps
-        np.testing.assert_array_almost_equal(inf2.score_maps["img001.jpg"], arr)
+        np.testing.assert_array_almost_equal(
+            inf2.score_maps["img001.jpg"], arr, decimal=3
+        )
 
     def test_score_maps_absolute_path_key_normalized_on_load(self, pio, tmp_path):
         """Verify that absolute-path keys in scoremaps.npz round-trip via OS-native separators.
@@ -511,7 +514,9 @@ class TestProjectRoundTrip:
 
         expected_key = os.path.normpath(abs_key)
         assert expected_key in inf2.score_maps
-        np.testing.assert_array_almost_equal(inf2.score_maps[expected_key], arr)
+        np.testing.assert_array_almost_equal(
+            inf2.score_maps[expected_key], arr, decimal=3
+        )
 
     def test_skip_score_maps_flag(self, pio, tmp_path):
         """Verify that save_score_maps=False prevents writing the scoremaps.npz file.
