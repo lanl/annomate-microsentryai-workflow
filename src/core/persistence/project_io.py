@@ -192,7 +192,6 @@ class ProjectIO:
                     name: list(rgb) for name, rgb in dataset_state.class_colors.items()
                 },
             },
-            "annotations": annotations_out,
             "per_image": per_image,
             "inference": {
                 "model_path": self._as_relative_path(model_path, project_dir),
@@ -249,6 +248,10 @@ class ProjectIO:
 
         if anomaly_constraint_state is not None:
             proj["anomaly_constraints"] = anomaly_constraint_state.to_dict()
+
+        # Written last so the (often very large) polygon data doesn't force
+        # scrolling past it to see the rest of the file when reading it by hand.
+        proj["annotations"] = annotations_out
 
         annoproj_path = os.path.join(project_dir, f"{project_name}.annoproj")
         _t5 = time.perf_counter()
