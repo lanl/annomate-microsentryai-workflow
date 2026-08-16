@@ -211,6 +211,7 @@ class ClassesSection(QWidget):
             "}"
         )
         self._pixel_btn = QPushButton("Pixel Level")
+        self._pixel_btn.setObjectName("classesModeToggle")
         self._pixel_btn.setCheckable(True)
         self._pixel_btn.setChecked(True)
         self._pixel_btn.setToolTip(

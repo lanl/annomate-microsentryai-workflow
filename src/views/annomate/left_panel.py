@@ -181,6 +181,7 @@ class LeftPanel(QWidget):
         self.navigator = DataNavigatorSection(
             dataset_model, inference_model, calibration_model
         )
+        self.navigator.setObjectName("leftPanelNavigator")
         self.navigator.image_selected.connect(self.image_selected)
         self.navigator.prev_requested.connect(self.prev_requested)
         self.navigator.next_requested.connect(self.next_requested)
@@ -274,5 +275,7 @@ class LeftPanel(QWidget):
     def navigator_set_annotation_mode(self, mode: str) -> None:
         self.navigator.set_annotation_mode(mode)
 
-    def navigator_header(self) -> QWidget:
-        return self._title_lbl
+    def collapsed_rail(self) -> QWidget:
+        """The narrow icon rail shown in place of the navigator when collapsed."""
+        return self._collapsed_rail
+

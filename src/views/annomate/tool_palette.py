@@ -65,6 +65,7 @@ class ToolPalette(QWidget):
         poly_btn.setToolTip("Polygon (P)")
         poly_btn.setFixedSize(_BTN_W, _BTN_H)
         poly_btn.setCheckable(True)
+        poly_btn.setObjectName("toolPolygonButton")
         self._btn_tool[poly_btn] = "polygon"
         self._btn_group.addButton(poly_btn)
         layout.addWidget(poly_btn)
@@ -93,6 +94,7 @@ class ToolPalette(QWidget):
         sam_btn.setToolTip("SAM Segment (S)")
         sam_btn.setFixedSize(_BTN_W, _BTN_H)
         sam_btn.setCheckable(True)
+        sam_btn.setObjectName("toolSamButton")
         self._btn_tool[sam_btn] = "sam_bbox"
         self._btn_group.addButton(sam_btn)
         layout.addWidget(sam_btn)
@@ -107,6 +109,7 @@ class ToolPalette(QWidget):
         measure_btn.setToolTip("Measure Distance (M)")
         measure_btn.setFixedSize(_BTN_W, _BTN_H)
         measure_btn.setCheckable(True)
+        measure_btn.setObjectName("toolMeasureButton")
         self._btn_tool[measure_btn] = "measure"
         self._btn_group.addButton(measure_btn)
         layout.addWidget(measure_btn)

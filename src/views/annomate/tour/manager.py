@@ -67,6 +67,7 @@ class TourManager(QObject):
             self._overlay.back_requested.connect(self._on_back)
             self._overlay.skip_requested.connect(self.skip)
         self._index = 0
+        self._enter_step(self._steps[self._index])
         self._show_current()
         logger.info("Guided tour started (%d steps)", len(self._steps))
 
@@ -87,12 +88,16 @@ class TourManager(QObject):
         if self._index >= len(self._steps) - 1:
             self._complete()
         else:
+            self._exit_step(self._steps[self._index])
             self._index += 1
+            self._enter_step(self._steps[self._index])
             self._show_current()
 
     def _on_back(self) -> None:
         if self._index > 0:
+            self._exit_step(self._steps[self._index])
             self._index -= 1
+            self._enter_step(self._steps[self._index])
             self._show_current()
 
     def _show_current(self) -> None:
@@ -102,6 +107,8 @@ class TourManager(QObject):
         )
 
     def _complete(self) -> None:
+        if 0 <= self._index < len(self._steps):
+            self._exit_step(self._steps[self._index])
         self._settings.setValue(_TOUR_COMPLETED_KEY, True)
         if self._overlay is not None:
             self._overlay.hide()
@@ -109,3 +116,11 @@ class TourManager(QObject):
             self._overlay = None
         self._index = -1
         logger.info("Guided tour completed/skipped")
+
+    def _enter_step(self, step: TourStep) -> None:
+        if step.on_enter is not None:
+            step.on_enter(self._main_window)
+
+    def _exit_step(self, step: TourStep) -> None:
+        if step.on_exit is not None:
+            step.on_exit(self._main_window)

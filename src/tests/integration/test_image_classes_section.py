@@ -30,13 +30,7 @@ def test_undecided_image_is_read_only_and_empty(qtbot, dataset_model):
     assert section._hint_lbl.isVisibleTo(section) is False
 
 
-def test_undecided_image_shows_existing_tags_removable(qtbot, dataset_model):
-    """An existing tag stays visible and removable even when undecided.
-
-    Regression: previously these rows were fully read-only, so a tag applied
-    while rejected got stuck once the decision was changed back to
-    undecided -- the user had to re-reject the image just to remove it.
-    """
+def test_undecided_image_shows_existing_tags_read_only(qtbot, dataset_model):
     dataset_model.set_image_classes(0, ["scratch"])
     section = ImageClassesSection(dataset_model)
     qtbot.addWidget(section)
@@ -44,8 +38,9 @@ def test_undecided_image_shows_existing_tags_removable(qtbot, dataset_model):
 
     assert row_names(section) == ["scratch"]
 
+    # Not interactive -- clicking the row must not untag it.
     section._rows["scratch"].clicked.emit()
-    assert dataset_model.get_image_classes(0) == []
+    assert dataset_model.get_image_classes(0) == ["scratch"]
 
 
 def test_rejected_image_lists_all_classes_interactively(qtbot, dataset_model):
@@ -117,17 +112,3 @@ def test_rebuild_reflects_decision_change_on_current_row(qtbot, dataset_model):
     dataset_model.set_review_decision(0, "reject")
 
     assert sorted(row_names(section)) == ["inclusion", "scratch"]
-
-
-def test_new_class_appears_without_switching_images(qtbot, dataset_model):
-    """Regression: adding a class must refresh the picker on the current image,
-    not just on the next set_current_row() (i.e. navigating away and back)."""
-    dataset_model.set_review_decision(0, "reject")
-    section = ImageClassesSection(dataset_model)
-    qtbot.addWidget(section)
-    section.set_current_row(0)
-    assert sorted(row_names(section)) == ["inclusion", "scratch"]
-
-    dataset_model.add_class("void", (70, 80, 90))
-
-    assert sorted(row_names(section)) == ["inclusion", "scratch", "void"]

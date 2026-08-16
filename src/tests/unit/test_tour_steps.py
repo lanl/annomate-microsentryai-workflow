@@ -2,24 +2,38 @@ from views.annomate.tour.steps import build_default_steps
 
 
 class TestBuildDefaultSteps:
-    def test_returns_nine_steps_in_order(self):
-        """Verify build_default_steps() returns the documented 9-step tour in order.
+    def test_returns_seventeen_steps_in_order(self):
+        """Verify build_default_steps() returns the documented 17-step tour in order.
 
         Success means the step keys match the exact sequence described in the
         feature plan, from the welcome card through the outro card. The
         "annotations"/"inspector" steps were folded into "navigator" once
-        those sections moved inline into the dataset navigator's cards.
+        those sections moved inline into the dataset navigator's cards;
+        "project_start", "active_tool", "view_overlays", and
+        "image_adjustments" were added to cover UI surface introduced by the
+        dataset-navigator/activity-bar redesign; and "navigator_markers",
+        "center_crop", "grid", and "anomaly_constraints" were added as
+        dedicated deep-dive stops instead of folding that detail into their
+        parent steps' body text.
         """
         steps = build_default_steps()
         assert [s.key for s in steps] == [
             "welcome",
+            "project_start",
             "canvas",
             "tool_palette",
             "viewport_actions",
             "navigator",
+            "navigator_markers",
+            "active_tool",
             "classes",
-            "status_bar",
             "microsentry",
+            "view_overlays",
+            "center_crop",
+            "grid",
+            "anomaly_constraints",
+            "image_adjustments",
+            "status_bar",
             "outro",
         ]
 

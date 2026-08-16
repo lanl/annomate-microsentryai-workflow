@@ -30,8 +30,11 @@ from ._navigator_card import _NavigatorCard
 from ._navigator_delegate import _NavigatorRowDelegate
 from ._shared import (
     _ClickableFrame,
+    _COLOR_REVIEWED,
     _COLOR_SELECTED_BG,
-    _status_icon,
+    _dot,
+    _incomplete_badge,
+    _ring_undecided,
 )
 
 _CHIP_ACTIVE_STYLE = f"background-color: {_COLOR_SELECTED_BG}; border-radius: 4px;"
@@ -169,19 +172,19 @@ class DataNavigatorSection(QWidget):
         self._lbl_count_undecided = QLabel("0")
         self._lbl_count_undecided.setStyleSheet("color: black;")
         self._add_filter_chip(
-            filter_h, "undecided", _status_icon("undecided"), self._lbl_count_undecided,
+            filter_h, "undecided", _ring_undecided(), self._lbl_count_undecided,
             _TIP_UNDECIDED,
         )
         self._lbl_count_reviewed = QLabel("0")
         self._lbl_count_reviewed.setStyleSheet("color: black;")
         self._add_filter_chip(
-            filter_h, "reviewed", _status_icon("accept_clean"), self._lbl_count_reviewed,
+            filter_h, "reviewed", _dot(_COLOR_REVIEWED), self._lbl_count_reviewed,
             _TIP_REVIEWED,
         )
         self._lbl_count_incomplete = QLabel("0")
         self._lbl_count_incomplete.setStyleSheet("color: black;")
         self._add_filter_chip(
-            filter_h, "incomplete", _status_icon("reject_incomplete"), self._lbl_count_incomplete,
+            filter_h, "incomplete", _incomplete_badge(), self._lbl_count_incomplete,
             _TIP_INCOMPLETE,
         )
         filter_h.addStretch()

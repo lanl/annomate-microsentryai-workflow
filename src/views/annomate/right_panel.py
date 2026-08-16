@@ -7,9 +7,10 @@ page and expands the panel. Clicking the active tab again collapses the
 panel back down to just the rail, so the icons stay reachable without the
 panel taking up canvas space.
 
-Four tabs total: Active Tool, Dataset Setup, Microsentry, and View
-Overlays. View Overlays' three sections -- Center Crop, Grid, and Anomaly
-Constraints -- have all migrated in from the viewport floating bar.
+Five tabs total: Active Tool, Dataset Setup, Microsentry, View Overlays,
+and Image Adjustments. View Overlays' three sections -- Center Crop, Grid,
+and Anomaly Constraints -- have all migrated in from the viewport floating
+bar.
 
 The panel always starts collapsed at construction (no project is loaded
 yet at that point). Two explicit calls decide what happens once one is:
@@ -244,6 +245,7 @@ class RightPanel(QWidget):
         self.active_tool.sam_variant_changed.connect(self.sam_variant_changed)
         self.active_tool.point_mode_changed.connect(self.point_mode_changed)
         self._add_tab("active_tool", "draw", "Active Tool", self.active_tool)
+        self._rail.button("active_tool").setObjectName("activeToolHeader")
 
         # ---- Dataset Setup tab -- one collapsible section per feature, so
         # future dataset-setup features can join "Annotation Classes" here
@@ -256,6 +258,7 @@ class RightPanel(QWidget):
         classes_section.body_layout().addWidget(self.classes)
         classes_page = _stack_sections([classes_section])
         self._add_tab("classes", "data_table", "Dataset Setup", classes_page)
+        self._rail.button("classes").setObjectName("classesHeader")
 
         # ---- AI / Microsentry tab -- same idea: current AI capabilities
         # (Microsentry) and any future ones each get their own collapsible
@@ -296,24 +299,29 @@ class RightPanel(QWidget):
         self.center_crop.center_template_import_requested.connect(
             self.center_template_import_requested
         )
-        center_crop_section = _CollapsibleSection("Center Crop", expanded=False)
-        center_crop_section.body_layout().setContentsMargins(0, 4, 0, 0)
-        center_crop_section.body_layout().addWidget(self.center_crop)
+        self._center_crop_section = _CollapsibleSection("Center Crop", expanded=False)
+        self._center_crop_section.header_widget().setObjectName("centerCropHeader")
+        self._center_crop_section.body_layout().setContentsMargins(0, 4, 0, 0)
+        self._center_crop_section.body_layout().addWidget(self.center_crop)
 
         self.grid = GridSection(calibration_model)
         self.grid.calibrate_tool_toggled.connect(
             lambda checked: self.tool_selected.emit("calibrate" if checked else "")
         )
-        grid_section = _CollapsibleSection("Grid", expanded=False)
-        grid_section.body_layout().setContentsMargins(0, 4, 0, 0)
-        grid_section.body_layout().addWidget(self.grid)
+        self._grid_section = _CollapsibleSection("Grid", expanded=False)
+        self._grid_section.header_widget().setObjectName("gridHeader")
+        self._grid_section.body_layout().setContentsMargins(0, 4, 0, 0)
+        self._grid_section.body_layout().addWidget(self.grid)
 
         self.anomaly = AnomalyConstraintsSection(anomaly_constraint_model)
-        anomaly_section = _CollapsibleSection("Anomaly Constraints", expanded=False)
-        anomaly_section.body_layout().setContentsMargins(0, 4, 0, 0)
-        anomaly_section.body_layout().addWidget(self.anomaly)
+        self._anomaly_section = _CollapsibleSection("Anomaly Constraints", expanded=False)
+        self._anomaly_section.header_widget().setObjectName("anomalyConstraintsHeader")
+        self._anomaly_section.body_layout().setContentsMargins(0, 4, 0, 0)
+        self._anomaly_section.body_layout().addWidget(self.anomaly)
 
-        overlay_sections = [center_crop_section, grid_section, anomaly_section]
+        overlay_sections = [
+            self._center_crop_section, self._grid_section, self._anomaly_section
+        ]
         overlays_page = _stack_sections(overlay_sections)
         self._add_tab("overlays", "layers", "View Overlays", overlays_page)
 
@@ -422,6 +430,30 @@ class RightPanel(QWidget):
         """Force the Dataset Setup tab open -- called when starting a new project."""
         self._on_tab_clicked("classes")
 
+    def show_tab(self, key: str) -> None:
+        """Show *key*'s tab without persisting the change.
+
+        Used by the guided tour to temporarily surface a tab; restore_last_state()
+        puts the real, persisted tab/collapsed state back afterward.
+        """
+        self._show_tab(key)
+        self.set_collapsed(False)
+
+    def show_tab_for(self, widget: QWidget) -> bool:
+        """Open whichever tab currently contains *widget*, if any.
+
+        Non-persisting, like show_tab() -- a one-off reveal for the Help
+        "Show Me" spotlight, not a real navigation event. Returns False if
+        *widget* isn't inside any tab page (e.g. it's a rail button, or
+        lives outside this panel entirely).
+        """
+        for key, index in self._page_index.items():
+            page = self._stack.widget(index)
+            if page is not None and page.isAncestorOf(widget):
+                self.show_tab(key)
+                return True
+        return False
+
     def restore_last_state(self) -> None:
         """Restore the last tab/expanded state -- called when an existing
         project or image folder is opened (a brand-new project instead
@@ -495,11 +527,29 @@ class RightPanel(QWidget):
     # Section header accessors (for tour/onboarding targeting)
     # ------------------------------------------------------------------ #
 
+    def active_tool_header(self) -> QWidget:
+        return self._rail.button("active_tool")
+
     def classes_header(self) -> QWidget:
         return self._rail.button("classes")
 
     def microsentry_header(self) -> QWidget:
         return self._rail.button("microsentry")
+
+    def overlays_header(self) -> QWidget:
+        return self._rail.button("overlays")
+
+    def image_adjustments_header(self) -> QWidget:
+        return self._rail.button("hsv")
+
+    def center_crop_section(self) -> QWidget:
+        return self._center_crop_section
+
+    def grid_section(self) -> QWidget:
+        return self._grid_section
+
+    def anomaly_constraints_section(self) -> QWidget:
+        return self._anomaly_section
 
     # ------------------------------------------------------------------ #
     # Annotation mode

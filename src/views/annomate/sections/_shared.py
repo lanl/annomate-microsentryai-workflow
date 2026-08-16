@@ -52,44 +52,27 @@ class _ClickableFrame(QFrame):
         super().mousePressEvent(event)
 
 
-_STATUS_DOT_W = 10
-_INCOMPLETE_ICON_FONT_PX = 18
-_INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
-_REVIEWED_STATES = ("accept_clean", "reject_reviewed")
-
-
-def _apply_status_icon(label: QLabel, state: str) -> None:
-    """Style *label* in place to match the status dot/ring/badge for *state*.
-
-    Shared by the per-card status icon and the navigator header's summary
-    chips so both render the exact same dot/ring/"!" for a given state --
-    passing any representative state from a bucket (e.g. "accept_clean" for
-    "reviewed") renders that bucket's style.
-    """
-    label.setFixedSize(_STATUS_DOT_W, _STATUS_DOT_W)
-    label.setAlignment(Qt.AlignCenter)
-    if state in _INCOMPLETE_STATES:
-        label.setText("!")
-        label.setStyleSheet(
-            f"QLabel {{ color: {_COLOR_INCOMPLETE}; font-size: {_INCOMPLETE_ICON_FONT_PX}px; "
-            "font-weight: bold; background: transparent; border: none; }"
-        )
-    elif state in _REVIEWED_STATES:
-        label.setText("")
-        label.setStyleSheet(
-            f"QLabel {{ background-color: {_COLOR_REVIEWED}; border-radius: "
-            f"{_STATUS_DOT_W // 2}px; }}"
-        )
-    else:
-        label.setText("")
-        label.setStyleSheet(
-            f"QLabel {{ border: 1.5px solid {_COLOR_UNDECIDED}; border-radius: "
-            f"{_STATUS_DOT_W // 2}px; background: transparent; }}"
-        )
-
-
-def _status_icon(state: str) -> QLabel:
-    """A standalone QLabel pre-styled via _apply_status_icon -- for chip-style uses."""
+def _dot(color: str) -> QLabel:
     lbl = QLabel()
-    _apply_status_icon(lbl, state)
+    lbl.setFixedSize(10, 10)
+    lbl.setStyleSheet(f"QLabel {{ background-color: {color}; border-radius: 5px; }}")
+    return lbl
+
+
+def _ring_undecided() -> QLabel:
+    lbl = QLabel()
+    lbl.setFixedSize(10, 10)
+    lbl.setStyleSheet(
+        f"QLabel {{ border: 2px solid {_COLOR_UNDECIDED}; border-radius: 5px; }}"
+    )
+    return lbl
+
+
+def _incomplete_badge() -> QLabel:
+    lbl = QLabel("!")
+    lbl.setFixedSize(10, 10)
+    lbl.setAlignment(Qt.AlignCenter)
+    lbl.setStyleSheet(
+        f"QLabel {{ color: {_COLOR_INCOMPLETE}; font-size: 10px; font-weight: bold; }}"
+    )
     return lbl

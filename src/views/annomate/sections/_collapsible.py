@@ -87,6 +87,16 @@ class _CollapsibleSection(QWidget):
         """Return the toggle-button header, which stays visible when collapsed."""
         return self._toggle_btn
 
+    def set_expanded(self, expanded: bool) -> None:
+        """Programmatically expand/collapse (e.g. for tour targeting)."""
+        if expanded == self._expanded:
+            return
+        self._toggle_btn.setChecked(expanded)
+        self._on_toggle(expanded)
+
+    def is_expanded(self) -> bool:
+        return self._expanded
+
     def _on_toggle(self, checked: bool) -> None:
         self._expanded = checked
         self._body.setVisible(checked)

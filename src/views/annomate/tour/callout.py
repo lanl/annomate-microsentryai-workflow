@@ -1,6 +1,6 @@
 """_TourCallout — the small text card shown next to each highlighted feature."""
 
-from PySide6.QtGui import QFont, QFontMetrics
+from PySide6.QtGui import QFont, QTextLayout, QTextOption
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import QRect, Qt, Signal
+from PySide6.QtCore import QPointF, Signal
 
 
 class _TourCallout(QFrame):
@@ -100,15 +100,37 @@ class _TourCallout(QFrame):
         (worse under HiDPI scaling), which clips or overlaps the last line.
         QLabel.heightForWidth() itself is unreliable here too — it returns
         stale values once a fixed height has previously been applied to the
-        label. Measuring with a fresh QFontMetrics instead is a pure
+        label. Measuring with QTextLayout instead — the same engine QLabel
+        uses internally to paint wrapped text — avoids both: it's a pure
         text-measurement query with no dependency on the label's current
-        size, so it stays correct across repeated step changes.
+        size, and (unlike QFontMetrics.boundingRect, which Qt's own docs
+        note is only an approximation for word-wrapped text and was seen
+        here to undercount a wrapped line under the app's real font/style
+        stack, clipping the last line) it reproduces the actual line breaks
+        QLabel will paint. One extra line of headroom is still reserved on
+        top of that as a safety margin.
         """
         margins = self.layout().contentsMargins()
         content_width = self._WIDTH - margins.left() - margins.right()
         for label in (self._title_lbl, self._body_lbl):
-            metrics = QFontMetrics(label.font())
-            rect = metrics.boundingRect(
-                QRect(0, 0, content_width, 0), Qt.TextWordWrap, label.text()
-            )
-            label.setFixedHeight(rect.height() + self._HEIGHT_PAD)
+            height = self._wrapped_text_height(label.text(), label.font(), content_width)
+            line_height = label.fontMetrics().lineSpacing()
+            label.setFixedHeight(round(height) + line_height + self._HEIGHT_PAD)
+
+    @staticmethod
+    def _wrapped_text_height(text: str, font: QFont, width: int) -> float:
+        layout = QTextLayout(text, font)
+        option = QTextOption()
+        option.setWrapMode(QTextOption.WordWrap)
+        layout.setTextOption(option)
+        layout.beginLayout()
+        height = 0.0
+        while True:
+            line = layout.createLine()
+            if not line.isValid():
+                break
+            line.setLineWidth(width)
+            line.setPosition(QPointF(0, height))
+            height += line.height()
+        layout.endLayout()
+        return height

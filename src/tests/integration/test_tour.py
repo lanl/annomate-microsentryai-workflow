@@ -91,6 +91,75 @@ class TestTourManager:
             assert widget is not None
             assert main_window.isAncestorOf(widget)
 
+    def test_navigator_steps_force_left_panel_open_then_closed(self, main_window):
+        """Verify navigator/navigator_markers force the left panel to what each needs.
+
+        navigator targets the expanded view (cards, filter); navigator_markers
+        targets the opposite -- the collapsed icon rail -- since that's what
+        a user actually sees day-to-day once they've collapsed the panel to
+        save canvas space. Starting from an already-expanded panel (as a
+        user replaying the tour with a project open would have) makes both
+        transitions meaningful: navigator_markers forcing closed can't be
+        mistaken for navigator's own exit (which would otherwise leave it
+        open), and the final state proves the panel is restored to how it
+        actually was, not left wherever the last forced step put it.
+        """
+        main_window.left_panel.set_collapsed(False)
+        assert main_window.left_panel.is_collapsed() is False
+
+        manager = main_window._tour_manager
+        manager.start()
+        keys = [s.key for s in manager._steps]
+        for _ in range(keys.index("navigator")):
+            manager._on_next()
+        assert main_window.left_panel.is_collapsed() is False
+
+        manager._on_next()  # -> navigator_markers
+        assert main_window.left_panel.is_collapsed() is True
+
+        manager._on_next()  # -> active_tool
+        assert main_window.left_panel.is_collapsed() is False
+
+    def test_view_overlay_steps_force_open_tab_and_expand_each_section(self, main_window):
+        """Verify Center Crop/Grid/Anomaly Constraints open their tab and expand in turn.
+
+        These three sections all start collapsed inside the "View Overlays"
+        tab. Success means each step opens the tab, expands only its own
+        section (the previous one collapses back), and the whole tab ends
+        up exactly where restore_last_state() alone would leave it -- the
+        expected end state is captured by calling it directly rather than
+        assumed as a fixed default, since RightPanel persists tab/collapsed
+        state to the real, shared QSettings store instead of an injectable
+        one (unlike TourManager), so what it restores to depends on this
+        machine's actual saved state.
+        """
+        right_panel = main_window.right_panel
+        right_panel.restore_last_state()
+        expected_collapsed = right_panel.is_collapsed()
+        right_panel.set_collapsed(True)  # back to the never-opened state a fresh window starts in
+        assert right_panel.center_crop_section().is_expanded() is False
+
+        manager = main_window._tour_manager
+        manager.start()
+        keys = [s.key for s in manager._steps]
+        for _ in range(keys.index("center_crop")):
+            manager._on_next()
+        assert right_panel.is_collapsed() is False
+        assert right_panel.center_crop_section().is_expanded() is True
+
+        manager._on_next()  # -> grid
+        assert right_panel.is_collapsed() is False
+        assert right_panel.center_crop_section().is_expanded() is False
+        assert right_panel.grid_section().is_expanded() is True
+
+        manager._on_next()  # -> anomaly_constraints
+        assert right_panel.grid_section().is_expanded() is False
+        assert right_panel.anomaly_constraints_section().is_expanded() is True
+
+        manager._on_next()  # -> image_adjustments
+        assert right_panel.anomaly_constraints_section().is_expanded() is False
+        assert right_panel.is_collapsed() is expected_collapsed
+
     def test_escape_key_skips_tour(self, main_window, qtbot):
         """Verify pressing Escape while the tour is showing skips it.
 

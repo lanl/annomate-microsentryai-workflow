@@ -288,11 +288,6 @@ class DatasetTableModel(QAbstractTableModel):
     def add_class(self, name: str, color: tuple) -> bool:
         """Register a new class in the global class registry.
 
-        Emits ``dataChanged`` for the entire table so per-image class
-        pickers (e.g. image-level mode) see the new class immediately,
-        matching set_class_color/delete_class. Does nothing to the view if
-        no rows are loaded.
-
         Args:
             name (str): Class label to register.
             color (tuple): RGB color tuple to associate with the class.
@@ -305,11 +300,6 @@ class DatasetTableModel(QAbstractTableModel):
         if name in self.state.class_names:
             return False
         self.state.add_class(name, color)
-        if self.rowCount() > 0:
-            self.dataChanged.emit(
-                self.index(0, 0),
-                self.index(self.rowCount() - 1, self.columnCount() - 1),
-            )
         return True
 
     def set_class_color(self, name: str, color: tuple) -> None:

@@ -9,7 +9,7 @@ import os
 
 import numpy as np
 from PySide6.QtCore import Qt, QEvent, QPoint, QPointF, QTimer, Signal
-from PySide6.QtGui import QColor, QFontMetrics
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget,
     QFrame,
@@ -21,13 +21,11 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QHBoxLayout,
-    QScrollArea,
-    QStyle,
+    QComboBox,
     QApplication,
 )
 
 from views.annomate._splitter import StyledSplitter
-from views.annomate.sections._shared import _ClickableFrame, _COLOR_SELECTED_BG
 from views.icons import material_icon
 
 from views.annomate.image_label import (
@@ -50,49 +48,6 @@ from models.anomaly_constraint_model import AnomalyConstraintModel
 logger = logging.getLogger(__name__)
 
 
-class _ClassPickerRow(_ClickableFrame):
-    """One selectable class in a `_ClassPickerPopup`'s list.
-
-    Color-codes via its border (matching the class's annotation color)
-    instead of a separate swatch, so the row stays compact. The selected
-    row additionally gets a filled background — the border communicates
-    *which class*, the fill communicates *which one is currently armed*.
-    """
-
-    activated = Signal(str)
-
-    _RGB = "rgb({}, {}, {})"
-
-    def __init__(self, name: str, rgb: tuple, parent: QWidget = None) -> None:
-        super().__init__(parent)
-        self._name = name
-        self._border_rgb = self._RGB.format(*rgb)
-        self.setObjectName("classPickerRow")
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setCursor(Qt.PointingHandCursor)
-        self.clicked.connect(lambda: self.activated.emit(self._name))
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.addWidget(QLabel(name))
-
-        self.set_selected(False)
-
-    def mousePressEvent(self, event) -> None:
-        # Accept so an unhandled press doesn't bubble past this row to the
-        # canvas underneath, which treats stray clicks as "cancel polygon".
-        super().mousePressEvent(event)
-        if event.button() == Qt.LeftButton:
-            event.accept()
-
-    def set_selected(self, selected: bool) -> None:
-        bg = _COLOR_SELECTED_BG if selected else "transparent"
-        self.setStyleSheet(
-            f"QFrame#classPickerRow {{ background-color: {bg}; "
-            f"border: 2px solid {self._border_rgb}; border-radius: 4px; }}"
-        )
-
-
 class _ClassPickerPopup(QFrame):
     """Floating class selector for a pending polygon (AI-detected or manually drawn).
 
@@ -106,37 +61,29 @@ class _ClassPickerPopup(QFrame):
 
     _BTN_SIZE = 28
     _ICON_SIZE = 16
-    _LIST_HEIGHT = 190  # ~6 rows at current row sizing before scrolling kicks in
-    _ROW_CHROME_W = 20  # row content margins (12) + border (4) + buffer (4)
 
     def __init__(
         self, canvas: QWidget, parent: QWidget = None, show_reject: bool = False
     ) -> None:
         super().__init__(parent or canvas)
         self._canvas = canvas
-        self._rows: dict = {}
-        self._selected_class = ""
-        self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setObjectName("classPickerPopup")
-        self.setStyleSheet(
-            "QFrame#classPickerPopup { background: palette(window); "
-            "border: 1px solid palette(mid); border-radius: 8px; }"
-        )
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setAutoFillBackground(True)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
-        layout.setSpacing(6)
-
-        btn_col = QVBoxLayout()
-        btn_col.setSpacing(4)
-        btn_col.addStretch()
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
 
         btn_accept = QToolButton()
         btn_accept.setIcon(material_icon("check", size=self._ICON_SIZE, color="black"))
         btn_accept.setToolTip("Accept polygon into selected class")
         btn_accept.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
         btn_accept.clicked.connect(self.accepted)
-        btn_col.addWidget(btn_accept)
+        layout.addWidget(btn_accept)
+
+        self._combo = QComboBox()
+        self._combo.setToolTip("Class to assign polygon to")
+        layout.addWidget(self._combo)
 
         if show_reject:
             btn_reject = QToolButton()
@@ -144,66 +91,21 @@ class _ClassPickerPopup(QFrame):
             btn_reject.setToolTip("Discard this polygon")
             btn_reject.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
             btn_reject.clicked.connect(self.rejected)
-            btn_col.addWidget(btn_reject)
-
-        btn_col.addStretch()
-        layout.addLayout(btn_col)
-
-        self._list_container = QWidget()
-        self._list_layout = QVBoxLayout(self._list_container)
-        self._list_layout.setContentsMargins(0, 0, 0, 0)
-        self._list_layout.setSpacing(2)
-        self._list_layout.addStretch()
-
-        self._scroll = QScrollArea()
-        self._scroll.setWidgetResizable(True)
-        self._scroll.setWidget(self._list_container)
-        self._scroll.setFrameShape(QFrame.NoFrame)
-        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._scroll.setFixedHeight(self._LIST_HEIGHT)
-        layout.addWidget(self._scroll)
+            layout.addWidget(btn_reject)
 
         self.adjustSize()
         self.setVisible(False)
 
-    def mousePressEvent(self, event) -> None:
-        # Swallow presses on the popup's own background/scrollbar so they
-        # can't bubble to the canvas underneath and cancel the pending
-        # polygon (row/button clicks already accept themselves).
-        event.accept()
-
-    def set_classes(self, names: list, colors: list, active: str = "") -> None:
-        while self._list_layout.count():
-            item = self._list_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-
-        self._rows = {}
-        self._selected_class = active if active in names else (names[0] if names else "")
-        for name, rgb in zip(names, colors):
-            row = _ClassPickerRow(name, rgb)
-            row.activated.connect(self._on_row_activated)
-            row.set_selected(name == self._selected_class)
-            self._list_layout.addWidget(row)
-            self._rows[name] = row
-        self._list_layout.addStretch()
-
-        text_w = max((QFontMetrics(self.font()).horizontalAdvance(n) for n in names), default=0)
-        scrollbar_w = self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
-        self._scroll.setFixedWidth(text_w + self._ROW_CHROME_W + scrollbar_w)
-        self.adjustSize()
-
-    def _on_row_activated(self, name: str) -> None:
-        if name == self._selected_class:
-            return
-        if self._selected_class in self._rows:
-            self._rows[self._selected_class].set_selected(False)
-        self._rows[name].set_selected(True)
-        self._selected_class = name
+    def set_classes(self, names: list, active: str = "") -> None:
+        self._combo.blockSignals(True)
+        self._combo.clear()
+        self._combo.addItems(names)
+        if active in names:
+            self._combo.setCurrentIndex(names.index(active))
+        self._combo.blockSignals(False)
 
     def current_class(self) -> str:
-        return self._selected_class
+        return self._combo.currentText()
 
     def show_at_polygon(self, bbox) -> None:
         """Position just outside the right edge of *bbox* (a QRect in widget coords)."""
@@ -265,6 +167,7 @@ class _ReviewBar(QFrame):
         layout.addWidget(self._drag_handle)
 
         self._btn_accept = QToolButton()
+        self._btn_accept.setObjectName("reviewAcceptButton")
         self._btn_accept.setIcon(material_icon("check", size=16, color="black"))
         self._btn_accept.setText("Accept")
         self._btn_accept.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
@@ -893,6 +796,10 @@ class AnnoMateWindow(QWidget):
         if force or self._tour_manager.should_run():
             self._tour_manager.start()
 
+    def start_screen(self) -> QWidget:
+        """The "Start a project" empty-state panel, for tour targeting."""
+        return self._start_screen
+
     def _set_start_screen_visible(self, visible: bool) -> None:
         """Show the project start panel only while no dataset is loaded."""
         self._start_screen.setVisible(visible)
@@ -1330,8 +1237,7 @@ class AnnoMateWindow(QWidget):
             return
         self._pending_manual_pts = pts
         self.canvas.set_pending_polygon(pts)
-        class_colors = [self.dataset_model.get_class_color(name) for name in class_names]
-        self._manual_popup.set_classes(class_names, class_colors)
+        self._manual_popup.set_classes(class_names)
         bbox = self.canvas.get_pending_polygon_view_rect()
         self._manual_popup.show_at_polygon(bbox)
 
@@ -1775,8 +1681,7 @@ class AnnoMateWindow(QWidget):
                 "Add an annotation class before accepting AI segmentation polygons.",
             )
             return
-        class_colors = [self.dataset_model.get_class_color(name) for name in class_names]
-        self._ai_popup.set_classes(class_names, class_colors)
+        self._ai_popup.set_classes(class_names)
         bbox = self.canvas.get_ai_polygon_view_rect(idx)
         self._ai_popup.show_at_polygon(bbox)
 

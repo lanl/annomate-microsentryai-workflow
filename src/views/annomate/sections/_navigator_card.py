@@ -19,9 +19,11 @@ from models.navigator_model import (
 from views.icons import material_icon
 
 from ._shared import (
-    _apply_status_icon,
     _ClickableFrame,
+    _COLOR_INCOMPLETE,
+    _COLOR_REVIEWED,
     _COLOR_SELECTED_BG,
+    _COLOR_UNDECIDED,
 )
 
 _CHEVRON_SIZE = 16
@@ -35,6 +37,10 @@ _NOTE_ICON = "comment"
 
 _ANNOT_BADGE_PIXEL = ("pentagon", "Has annotations")
 _ANNOT_BADGE_IMAGE_LEVEL = ("label", "Has class tags")
+
+_STATUS_DOT_W = 10
+_INCOMPLETE_STATES = ("reject_incomplete", "accept_conflict", "undecided_work")
+_REVIEWED_STATES = ("accept_clean", "reject_reviewed")
 
 _PILL_FONT_PX = 10
 _PILL_PADDING_X = 4
@@ -178,6 +184,30 @@ def _apply_annot_badge(label: QLabel, mode: str) -> None:
         )
     )
     label.setToolTip(tooltip)
+
+
+def _apply_status_icon(label: QLabel, state: str) -> None:
+    """Style *label* in place to match the status dot/ring/badge for *state*."""
+    label.setFixedSize(_STATUS_DOT_W, _STATUS_DOT_W)
+    label.setAlignment(Qt.AlignCenter)
+    if state in _INCOMPLETE_STATES:
+        label.setText("!")
+        label.setStyleSheet(
+            f"QLabel {{ color: {_COLOR_INCOMPLETE}; font-size: {_STATUS_DOT_W}px; "
+            "font-weight: bold; background: transparent; border: none; }"
+        )
+    elif state in _REVIEWED_STATES:
+        label.setText("")
+        label.setStyleSheet(
+            f"QLabel {{ background-color: {_COLOR_REVIEWED}; border-radius: "
+            f"{_STATUS_DOT_W // 2}px; }}"
+        )
+    else:
+        label.setText("")
+        label.setStyleSheet(
+            f"QLabel {{ border: 1.5px solid {_COLOR_UNDECIDED}; border-radius: "
+            f"{_STATUS_DOT_W // 2}px; background: transparent; }}"
+        )
 
 
 class _NavigatorCard(QWidget):

@@ -1,0 +1,87 @@
+{
+  "version": "2.0",
+  "created_at": "2026-08-13T01:45:38.223159+00:00",
+  "modified_at": "2026-08-13T01:46:22.043171+00:00",
+  "session_seconds": 43.82325774990022,
+  "project_name": "AnnoMate_Demo",
+  "annotation_mode": "pixel",
+  "dataset": {
+    "image_dir": "data",
+    "class_names": [
+      "gouge",
+      "inclusion",
+      "nick"
+    ],
+    "class_colors": {
+      "gouge": [
+        232,
+        102,
+        116
+      ],
+      "inclusion": [
+        239,
+        151,
+        87
+      ],
+      "nick": [
+        228,
+        204,
+        88
+      ]
+    }
+  },
+  "annotations": {},
+  "per_image": {},
+  "inference": {
+    "model_path": "",
+    "score_maps_file": ""
+  },
+  "calibration": {
+    "scale": 1.0,
+    "unit": "px",
+    "px_count": 1.0,
+    "world_val": 1.0,
+    "user_calibrated": false,
+    "calib_p1": null,
+    "calib_p2": null,
+    "real_distance": 1.0,
+    "grid_visible": false,
+    "grid_color": [
+      58,
+      90,
+      122
+    ],
+    "grid_opacity": 0.5,
+    "grid_spacing_world": 100.0,
+    "grid_spacing_auto": true
+  },
+  "center_template": {
+    "enabled": false,
+    "template_file": "",
+    "anchor_x": 0,
+    "anchor_y": 0,
+    "crop_shape": "circle",
+    "crop_width": 1210,
+    "crop_height": 1210,
+    "center_x": null,
+    "center_y": null
+  },
+  "anomaly_constraints": {
+    "enabled": false,
+    "area_check_enabled": true,
+    "area_threshold": 0.0,
+    "area_color": [
+      255,
+      165,
+      0
+    ],
+    "distance_check_enabled": true,
+    "distance_threshold": 0.0,
+    "distance_method": "centroid",
+    "distance_color": [
+      220,
+      50,
+      50
+    ]
+  }
+}

@@ -96,7 +96,7 @@ class AnnoMateStatusBar(QWidget):
         self._lbl_dims.setText(f"{w} × {h} px")
 
     _TOOL_HINTS = {
-        "polygon": "click start point to close · Backspace to undo point · Esc to cancel",
+        "polygon": "double-click to close · Backspace to undo point · Esc to cancel",
         "sam_bbox": "draw bbox over object · Enter=accept · Esc=cancel",
         "edit_points": "Add: click an edge to insert · Delete: click a vertex to remove",
     }
