@@ -91,3 +91,71 @@ class InferenceModel:
     def clear(self) -> None:
         """Clear all stored score maps and cached anomaly scores."""
         self.state.clear()
+
+    # ------------------------------------------------------------------ #
+    # Multi-model registry
+    # ------------------------------------------------------------------ #
+
+    def register_model(self, key: str, model_path: str, score_maps_file: str) -> None:
+        """Add or update a model in the known-models registry.
+
+        Args:
+            key (str): Model key, derived from the ``.pt`` filename stem.
+            model_path (str): Absolute path to the model checkpoint file.
+            score_maps_file (str): Project-relative path to this model's
+                cached heatmap NPZ.
+        """
+        self.state.register_model(key, model_path, score_maps_file)
+
+    def switch_active_model(self, key: str) -> None:
+        """Make *key* the active model (in-memory only — no disk I/O).
+
+        Args:
+            key (str): Model key to activate. Must already be registered via
+                :meth:`register_model`.
+        """
+        self.state.switch_active_model(key)
+
+    def get_active_model_key(self) -> str:
+        """Return the currently active model's key, or empty string if none."""
+        return self.state.active_model_key
+
+    def get_known_models(self) -> dict:
+        """Return the full model registry: ``{key: {"model_path", "score_maps_file"}}``."""
+        return dict(self.state.known_models)
+
+    def get_score_maps_file(self, key: str) -> str:
+        """Return the project-relative NPZ path registered for *key*, or empty string."""
+        entry = self.state.known_models.get(key)
+        return entry.get("score_maps_file", "") if entry else ""
+
+    def is_score_maps_dirty(self) -> bool:
+        """Check whether the active model's heatmaps have unsaved changes."""
+        return self.state.score_maps_dirty
+
+    def clear_active_heatmaps(self) -> None:
+        """Discard the active model's cached heatmap arrays and reset dirty.
+
+        Loading a model's weights (Load New Model) is a deliberate
+        request for fresh inference results, even if this key was already
+        active with cached heatmaps from a previous session — those may be
+        stale relative to whatever checkpoint was just loaded. Call this
+        after switching so every image gets reprocessed instead of being
+        skipped as "already done".
+        """
+        self.state.score_maps.clear()
+        self.state.score_maps_dirty = False
+
+    def load_score_maps_into_active(self, score_maps: dict) -> None:
+        """Populate the active model's ``score_maps`` from a pre-loaded dict.
+
+        Used after :meth:`switch_active_model` to hand off heatmap arrays
+        read from disk (I/O itself is the caller's responsibility — this
+        model has no Qt or disk dependencies).
+
+        Args:
+            score_maps (dict): ``{filename: np.ndarray}`` to install as the
+                active model's heatmaps.
+        """
+        self.state.score_maps.update(score_maps)
+        self.state.score_maps_dirty = False

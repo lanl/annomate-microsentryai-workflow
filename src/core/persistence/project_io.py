@@ -24,9 +24,10 @@ from core.utils.image_scan import to_native_path
 
 logger = logging.getLogger("AnnoMate.ProjectIO")
 
-_SCHEMA_VERSION = "2.0"
+_SCHEMA_VERSION = "2.1"
 _COCO_FILENAME = "annotations.coco.json"
-_SCOREMAPS_FILENAME = "scoremaps.npz"
+_SCOREMAPS_FILENAME = "scoremaps.npz"  # legacy (pre-2.1) flat single-model file
+_SCOREMAPS_DIR = "scoremaps"
 
 
 class ProjectIO:
@@ -53,7 +54,6 @@ class ProjectIO:
         inference_state,
         created_at: Optional[str] = None,
         save_score_maps: bool = True,
-        model_path: str = "",
         calibration_state=None,
         center_template_state=None,
         anomaly_constraint_state=None,
@@ -69,10 +69,12 @@ class ProjectIO:
             project_dir: Directory that will contain all project files.
             project_name: Human-readable project name (used as filename stem).
             dataset_state: DatasetState instance.
-            inference_state: InferenceState instance.
+            inference_state: InferenceState instance. Its known_models/model_scores
+                registry is the source of truth for the "inference" section — a
+                model must already be registered via inference_state.register_model()
+                for its path/scores to be persisted.
             created_at: ISO timestamp from the original save; if None, uses now.
-            save_score_maps: When True, write inference score maps to NPZ.
-            model_path: Absolute path to the inference model file (informational).
+            save_score_maps: When True, write the active model's score maps to NPZ.
             session_seconds: Cumulative seconds spent in this project across all sessions.
         """
         _t0 = time.perf_counter()
@@ -100,27 +102,30 @@ class ProjectIO:
         _t2 = time.perf_counter()
         logger.info("save_project [build annotations]: %.3fs", _t2 - _t1)
 
-        score_maps_file = ""
+        active_key = inference_state.active_model_key
         if (
             save_score_maps
+            and active_key
             and inference_state.score_maps
             and inference_state.score_maps_dirty
         ):
-            npz_path = os.path.join(project_dir, _SCOREMAPS_FILENAME)
+            score_maps_file = self._scoremaps_filename_for_key(project_name, active_key)
+            npz_path = os.path.join(project_dir, score_maps_file)
+            os.makedirs(str(Path(npz_path).parent), exist_ok=True)
             try:
                 np.savez_compressed(
                     npz_path,
                     **{
-                        self._filename_to_npz_key(f): arr
+                        self._filename_to_npz_key(f): arr.astype(np.float16)
                         for f, arr in inference_state.score_maps.items()
                     },
                 )
-                score_maps_file = _SCOREMAPS_FILENAME
                 inference_state.score_maps_dirty = False
+                inference_state.known_models.setdefault(active_key, {})[
+                    "score_maps_file"
+                ] = score_maps_file
             except Exception as exc:
                 logger.warning("Could not save score maps: %s", exc)
-        elif inference_state.score_maps:
-            score_maps_file = _SCOREMAPS_FILENAME
         _t3 = time.perf_counter()
         logger.info(
             "save_project [score_maps npz]:   %.3fs (dirty=%s)",
@@ -128,31 +133,27 @@ class ProjectIO:
             inference_state.score_maps_dirty,
         )
 
-        scores_by_fname = {
-            self._as_relative_path(k, dataset_state.image_dir): v
-            for k, v in inference_state.scores.items()
+        # Every known model's scores, keyed by project-relative filename, for
+        # merging into each image's per_image entry below.
+        model_scores_by_fname = {
+            key: {
+                self._as_relative_path(k, dataset_state.image_dir): v
+                for k, v in scores.items()
+            }
+            for key, scores in inference_state.model_scores.items()
         }
-        labels_by_fname = {
-            self._as_relative_path(k, dataset_state.image_dir): v
-            for k, v in inference_state.labels.items()
-        }
+
         per_image = {}
-        all_fnames = (
-            set(dataset_state.image_files) | set(scores_by_fname) | set(labels_by_fname)
-        )
+        all_fnames = set(dataset_state.image_files)
+        for scores in model_scores_by_fname.values():
+            all_fnames |= set(scores)
         for fname in all_fnames:
             entry = {}
-            score = scores_by_fname.get(fname)
-            label = labels_by_fname.get(fname)
             decision = dataset_state.review_decisions.get(fname, "")
             decision_at = dataset_state.decision_timestamps.get(fname, "")
             decision_session_seconds = dataset_state.decision_session_seconds.get(fname)
             inspector = dataset_state.inspectors.get(fname, "")
             note = dataset_state.notes.get(fname, "")
-            if score is not None:
-                entry["score"] = score
-            if label is not None:
-                entry["label"] = label
             if decision:
                 entry["decision"] = decision
             if decision_at:
@@ -171,10 +172,28 @@ class ProjectIO:
             img_classes = dataset_state.image_classes.get(fname, [])
             if img_classes:
                 entry["image_classes"] = img_classes
+            inf_scores = {
+                key: scores[fname]
+                for key, scores in model_scores_by_fname.items()
+                if fname in scores
+            }
+            if inf_scores:
+                entry["inference"] = inf_scores
             if entry:
                 per_image[fname] = entry
         _t4 = time.perf_counter()
         logger.info("save_project [build per_image]:  %.3fs", _t4 - _t3)
+
+        models_out = [
+            {
+                "key": key,
+                "model_path": self._as_relative_path(
+                    entry.get("model_path", ""), project_dir
+                ),
+                "score_maps_file": entry.get("score_maps_file", ""),
+            }
+            for key, entry in inference_state.known_models.items()
+        ]
 
         proj = {
             "version": _SCHEMA_VERSION,
@@ -192,11 +211,10 @@ class ProjectIO:
                     name: list(rgb) for name, rgb in dataset_state.class_colors.items()
                 },
             },
-            "annotations": annotations_out,
             "per_image": per_image,
             "inference": {
-                "model_path": self._as_relative_path(model_path, project_dir),
-                "score_maps_file": score_maps_file,
+                "active_model_key": active_key,
+                "models": models_out,
             },
         }
 
@@ -249,6 +267,10 @@ class ProjectIO:
 
         if anomaly_constraint_state is not None:
             proj["anomaly_constraints"] = anomaly_constraint_state.to_dict()
+
+        # Written last so the (often very large) polygon data doesn't force
+        # scrolling past it to see the rest of the file when reading it by hand.
+        proj["annotations"] = annotations_out
 
         annoproj_path = os.path.join(project_dir, f"{project_name}.annoproj")
         _t5 = time.perf_counter()
@@ -393,11 +415,35 @@ class ProjectIO:
         ds_data = data.get("dataset", {})
         if "image_dir" in ds_data:
             ds_data["image_dir"] = self._resolve_path(ds_data["image_dir"], proj_dir)
+
         inf_data = data.get("inference", {})
-        if "model_path" in inf_data:
-            inf_data["model_path"] = self._resolve_path(
-                inf_data["model_path"], proj_dir
+        active_key = ""
+        score_maps_rel = ""
+        if "models" in inf_data:
+            # v2.1+: registry of models, each with its own path/npz.
+            active_key = inf_data.get("active_model_key", "")
+            for m in inf_data.get("models", []):
+                if "model_path" in m:
+                    m["model_path"] = self._resolve_path(m["model_path"], proj_dir)
+                if m.get("key") == active_key:
+                    score_maps_rel = m.get("score_maps_file", "")
+            data["_resolved_active_model_path"] = next(
+                (
+                    m["model_path"]
+                    for m in inf_data.get("models", [])
+                    if m.get("key") == active_key
+                ),
+                "",
             )
+        else:
+            # Legacy (pre-2.1): single model_path/score_maps_file.
+            if "model_path" in inf_data:
+                inf_data["model_path"] = self._resolve_path(
+                    inf_data["model_path"], proj_dir
+                )
+            score_maps_rel = inf_data.get("score_maps_file", "")
+            data["_resolved_active_model_path"] = inf_data.get("model_path", "")
+
         tmpl_data = data.get("center_template", {})
         if "template_file" in tmpl_data:
             tmpl_data["_resolved_template_path"] = self._resolve_path(
@@ -406,10 +452,8 @@ class ProjectIO:
 
         data["resolved_coco_path"] = self._resolve_coco_path(annoproj_path, data)
 
-        npz_file = data.get("inference", {}).get("score_maps_file", "")
-        if npz_file:
-            proj_dir = str(Path(annoproj_path).parent)
-            abs_npz = os.path.join(proj_dir, npz_file)
+        if score_maps_rel:
+            abs_npz = os.path.join(proj_dir, score_maps_rel)
             data["_resolved_npz_path"] = abs_npz if os.path.exists(abs_npz) else ""
         else:
             data["_resolved_npz_path"] = ""
@@ -492,15 +536,54 @@ class ProjectIO:
 
         image_dir = project_data.get("dataset", {}).get("image_dir", "")
 
+        # Model registry: v2.1+ carries a list of known models; pre-2.1 files
+        # carry a single model_path/score_maps_file, treated as one entry.
+        inf_data = project_data.get("inference", {})
+        if "models" in inf_data:
+            active_key = inf_data.get("active_model_key", "")
+            for m in inf_data.get("models", []):
+                key = m.get("key", "")
+                if not key:
+                    continue
+                inference_state.known_models[key] = {
+                    "model_path": m.get("model_path", ""),
+                    "score_maps_file": m.get("score_maps_file", ""),
+                }
+                inference_state.model_scores.setdefault(key, {})
+        else:
+            legacy_path = inf_data.get("model_path", "")
+            if legacy_path:
+                active_key = Path(legacy_path).stem
+            elif inf_data.get("score_cache"):
+                # Pre-model-tracking format: scores exist but no model_path was
+                # ever recorded. Fall back to a placeholder key so the scores
+                # aren't silently dropped.
+                active_key = "legacy"
+            else:
+                active_key = ""
+            if active_key:
+                inference_state.known_models[active_key] = {
+                    "model_path": legacy_path,
+                    "score_maps_file": inf_data.get("score_maps_file", ""),
+                }
+                inference_state.model_scores.setdefault(active_key, {})
+
         if "per_image" in project_data:
             for fname, info in project_data["per_image"].items():
                 abs_path = to_native_path(image_dir, fname) if image_dir else fname
-                score = info.get("score")
-                label = info.get("label")
-                if score is not None:
-                    inference_state.scores[abs_path] = score
-                if label is not None:
-                    inference_state.labels[abs_path] = label
+                inf_scores = info.get("inference")
+                if inf_scores:
+                    # v2.1+: scores nested per model.
+                    for key, score in inf_scores.items():
+                        inference_state.model_scores.setdefault(key, {})[
+                            abs_path
+                        ] = score
+                elif info.get("score") is not None and active_key:
+                    # Legacy (pre-2.1): single inline score, belongs to the one
+                    # model this project knew about.
+                    inference_state.model_scores.setdefault(active_key, {})[
+                        abs_path
+                    ] = info["score"]
                 decision = info.get("decision")
                 if decision:
                     # "omitted" was the old blocking-popup state; treat as reject
@@ -527,27 +610,22 @@ class ProjectIO:
                 dataset_state.notes[fname] = info.get("note", "")
             for fname, decision in project_data.get("review_decisions", {}).items():
                 dataset_state.review_decisions[fname] = decision
-            inf_data = project_data.get("inference", {})
-            for k, v in inf_data.get("score_cache", {}).items():
-                abs_k = k if os.path.isabs(k) else to_native_path(image_dir, k)
-                inference_state.scores[abs_k] = v
-            for k, v in inf_data.get("label_cache", {}).items():
-                abs_k = k if os.path.isabs(k) else to_native_path(image_dir, k)
-                inference_state.labels[abs_k] = v
+            if active_key:
+                for k, v in inf_data.get("score_cache", {}).items():
+                    abs_k = k if os.path.isabs(k) else to_native_path(image_dir, k)
+                    inference_state.model_scores.setdefault(active_key, {})[abs_k] = v
 
-        inference_state.inference_cache = dict(inference_state.scores)
+        # Activate whichever model this project knew about — aliases scores/
+        # labels/inference_cache to its entry in model_scores and clears
+        # score_maps, ready for the NPZ load below.
+        if active_key:
+            inference_state.switch_active_model(active_key)
 
-        # Score maps from NPZ (optional)
+        # Score maps from NPZ (optional) — the active model's heatmaps only.
         npz_path = project_data.get("_resolved_npz_path", "")
-        if npz_path and os.path.exists(npz_path):
-            try:
-                npz = np.load(npz_path)
-                for key in npz.files:
-                    fname = os.path.normpath(self._npz_key_to_filename(key))
-                    inference_state.score_maps[fname] = npz[key]
-                inference_state.score_maps_dirty = False
-            except Exception as exc:
-                logger.warning("Could not load score maps from NPZ: %s", exc)
+        if npz_path:
+            inference_state.score_maps.update(self.load_model_scoremaps(npz_path))
+            inference_state.score_maps_dirty = False
 
         # Calibration (optional — absent in old project files)
         if calibration_state is not None:
@@ -823,6 +901,42 @@ class ProjectIO:
         rel_file = proj_data.get("annotations_file", _COCO_FILENAME)
         proj_dir = str(Path(annoproj_path).parent)
         return os.path.join(proj_dir, rel_file)
+
+    def load_model_scoremaps(self, npz_path: str) -> dict:
+        """Read a single model's score-map NPZ into a ``{filename: array}`` dict.
+
+        Reusable both for the active model at project-open time and for
+        loading a different model's cache when switching the active model
+        mid-session. Returns an empty dict if the file is missing or unreadable.
+
+        Args:
+            npz_path: Absolute path to the NPZ file.
+
+        Returns:
+            dict[str, np.ndarray]: Heatmap arrays keyed by absolute image path,
+                upcast back to float32.
+        """
+        if not npz_path or not os.path.exists(npz_path):
+            return {}
+        try:
+            npz = np.load(npz_path)
+            return {
+                os.path.normpath(self._npz_key_to_filename(key)): npz[key].astype(
+                    np.float32, copy=False
+                )
+                for key in npz.files
+            }
+        except Exception as exc:
+            logger.warning("Could not load score maps from NPZ: %s", exc)
+            return {}
+
+    def _scoremaps_filename_for_key(self, project_name: str, model_key: str) -> str:
+        """Project-relative NPZ path for a model's cached score maps.
+
+        Prefixed with the project name so two differently-named projects
+        saved into the same folder don't collide on the same model key.
+        """
+        return f"{_SCOREMAPS_DIR}/{project_name}-{model_key}-scoremaps.npz"
 
     def _filename_to_npz_key(self, fname: str) -> str:
         """Sanitize a filename to a valid NPZ array key."""

@@ -40,7 +40,8 @@ class ProjectController(QObject):
         dataset_model: DatasetTableModel.
         inference_model: InferenceModel.
         io_controller: IOController (used for image-dir scans).
-        inference_controller: InferenceController (for model_path tracking).
+        inference_controller: InferenceController (used for switching the
+            active cached model).
 
     Signals:
         dirty_changed (bool): Emitted when the dirty flag changes state.
@@ -85,9 +86,6 @@ class ProjectController(QObject):
         self._created_at: Optional[str] = None
         self._is_dirty: bool = False
         self._loading: bool = False
-        # Preserved from the last loaded project so that saving without loading
-        # a model doesn't erase a model path that was previously persisted.
-        self._last_project_model_path: str = ""
         self._accumulated_seconds: float = 0.0
         self._session_start: Optional[float] = None
 
@@ -175,7 +173,6 @@ class ProjectController(QObject):
         self._project_dir = None
         self._project_name = ""
         self._created_at = None
-        self._last_project_model_path = ""
         self._accumulated_seconds = 0.0
         self._session_start = None
         self._autosave_manager.stop()
@@ -288,9 +285,6 @@ class ProjectController(QObject):
             self._autosave_manager.set_project_dir(self._project_dir)
         self._project_name = project_data.get("project_name", Path(annoproj_path).stem)
         self._created_at = project_data.get("created_at")
-        self._last_project_model_path = project_data.get("inference", {}).get(
-            "model_path", ""
-        )
         self._accumulated_seconds = project_data.get("session_seconds", 0.0)
         self._session_start = time.monotonic()
         self.clear_dirty()
@@ -324,20 +318,34 @@ class ProjectController(QObject):
             self.project_opened.emit(self._project_name)
         return path
 
-    def _resolve_model_path(self) -> str:
-        """Return the best available model path for persistence.
+    def switch_active_model(self, key: str) -> None:
+        """Switch which cached model's results are active.
 
-        Prefers the currently-loaded model path from the inference controller.
-        Falls back to the path that was saved in the last opened project so
-        that saving without loading a model doesn't erase a previously-persisted
-        path.
+        Performs the in-memory swap, then loads the newly-active model's
+        cached heatmaps from disk if this project has a saved cache for it.
+        Does not check for or prompt about unsaved changes on the outgoing
+        model — callers (the view) must check
+        ``inference_model.is_score_maps_dirty()`` and handle that before
+        calling this, since showing a dialog isn't this layer's job.
+
+        Args:
+            key (str): Model key to activate. Must already be registered via
+                ``inference_model.register_model()``.
         """
-        live = (
-            self._inference_controller.get_model_path()
-            if self._inference_controller
-            else ""
-        )
-        return live or self._last_project_model_path
+        if self._inference_controller is not None:
+            self._inference_controller.switch_model(key)
+        else:
+            self._inference_model.switch_active_model(key)
+
+        if not self._project_dir:
+            return
+        score_maps_file = self._inference_model.get_score_maps_file(key)
+        if not score_maps_file:
+            return
+        npz_path = os.path.join(self._project_dir, score_maps_file)
+        score_maps = self._project_io.load_model_scoremaps(npz_path)
+        if score_maps:
+            self._inference_model.load_score_maps_into_active(score_maps)
 
     def _write_project(self, project_dir: str, project_name: str) -> str:
         orphaned = self._orphaned_filenames()
@@ -366,7 +374,6 @@ class ProjectController(QObject):
             inference_state=self._inference_model.state,
             created_at=self._created_at,
             save_score_maps=True,
-            model_path=self._resolve_model_path(),
             calibration_state=calib_state,
             center_template_state=center_template_state,
             anomaly_constraint_state=anomaly_constraint_state,
@@ -408,7 +415,6 @@ class ProjectController(QObject):
                 inference_state=self._inference_model.state,
                 created_at=self._created_at,
                 save_score_maps=False,
-                model_path=self._resolve_model_path(),
                 calibration_state=calib_state,
                 center_template_state=center_template_state,
                 anomaly_constraint_state=anomaly_constraint_state,

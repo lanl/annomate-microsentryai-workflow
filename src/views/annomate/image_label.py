@@ -42,6 +42,16 @@ CALIBRATE = "calibrate"
 MEASURE = "measure"
 EDIT_POINTS = "edit_points"
 
+# Heatmap colormap choices, keyed by the string set in MicrosentrySection.get_settings().
+HEATMAP_COLORMAPS = {
+    "inferno": cv2.COLORMAP_INFERNO,
+    "magma": cv2.COLORMAP_MAGMA,
+    "viridis": cv2.COLORMAP_VIRIDIS,
+    "turbo": cv2.COLORMAP_TURBO,
+    "jet": cv2.COLORMAP_JET,
+    "hot": cv2.COLORMAP_HOT,
+}
+
 
 class ImageLabel(QLabel):
     """Custom QLabel for image display with zoom, pan, and polygon annotation.
@@ -238,33 +248,56 @@ class ImageLabel(QLabel):
         self.update()
 
     def set_heatmap_layer(
-        self, score_map: np.ndarray, alpha: float, heat_min_pct: int = 0
+        self,
+        score_map: np.ndarray,
+        alpha: float,
+        heat_min_pct: int = 0,
+        colormap: str = "inferno",
+        heat_ceiling_pct: int = 100,
+        heat_gamma: float = 1.0,
     ) -> None:
         """Overlay a heatmap on the canvas without resetting zoom or pan.
 
         Resizes *score_map* to match the stored display pixmap, applies the
-        COLORMAP_JET colormap, and stores the result as a semi-transparent
-        layer drawn at *alpha* opacity during paintEvent.
+        selected colormap, and stores the result as a semi-transparent layer
+        drawn at *alpha* opacity during paintEvent.
 
         Args:
-            score_map: 2-D float array of anomaly scores (any resolution).
+            score_map: 2-D float array of anomaly scores, already calibrated
+                to [0, 1] by the model's PostProcessor (0.5 = decision
+                boundary). Any resolution.
             alpha: Opacity 0.0–1.0.
-            heat_min_pct: Suppress scores below this percentile (0 = show all).
+            heat_min_pct: Fixed floor on the calibrated [0, 1] scale, as a
+                percentage (0 = show all scores, 100 = show nothing). Applied
+                identically across every image so heatmap colors stay
+                comparable image to image, instead of each image being
+                stretched to its own min/max.
+            colormap: Key into :data:`HEATMAP_COLORMAPS` (e.g. ``"inferno"``,
+                ``"turbo"``). Falls back to Inferno for an unrecognized key.
+            heat_ceiling_pct: Fixed ceiling on the calibrated [0, 1] scale, as
+                a percentage (100 = only a literal 1.0 hits full color). Values
+                below 100 push moderately-anomalous scores toward full color
+                sooner, matching how industrial anomaly-detection tools cap
+                their display range below the observed max so defects stand
+                out without needing to hit the absolute ceiling.
+            heat_gamma: Power-law exponent applied after the floor/ceiling
+                stretch (equivalent to matplotlib's ``PowerNorm``). Values
+                below 1.0 pull mid-to-high scores toward full intensity,
+                giving anomalous regions more visual contrast against the
+                background; 1.0 leaves the stretch linear.
         """
         if self._display_qpix is None or score_map is None:
             return
         self._heatmap_alpha = max(0.0, min(1.0, alpha))
         s = score_map.astype(np.float32)
-        if heat_min_pct > 0:
-            thr = np.percentile(s, heat_min_pct)
-            s = np.clip(s, thr, None)
-        s_min, s_max = float(s.min()), float(s.max())
-        if s_max <= s_min:
-            self._heatmap_pix = None
-            self.update()
-            return
-        s_norm = ((s - s_min) / (s_max - s_min) * 255.0).astype(np.uint8)
-        colored_bgr = cv2.applyColorMap(s_norm, cv2.COLORMAP_TURBO)
+        floor = min(heat_min_pct / 100.0, 0.99)
+        ceiling = max(heat_ceiling_pct / 100.0, floor + 0.01)
+        gamma = max(heat_gamma, 0.01)
+        t = np.clip((s - floor) / (ceiling - floor), 0.0, 1.0)
+        t = np.power(t, gamma)
+        s_norm = (t * 255.0).astype(np.uint8)
+        cv2_colormap = HEATMAP_COLORMAPS.get(colormap, cv2.COLORMAP_INFERNO)
+        colored_bgr = cv2.applyColorMap(s_norm, cv2_colormap)
         colored_rgb = cv2.cvtColor(colored_bgr, cv2.COLOR_BGR2RGB)
         pix_w, pix_h = self._display_qpix.width(), self._display_qpix.height()
         resized = cv2.resize(

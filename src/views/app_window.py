@@ -211,14 +211,6 @@ class AppWindow(QMainWindow):
         if warnings and not relocated:
             QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
 
-        model_path = project_data.get("inference", {}).get("model_path", "")
-        self.annomate_view.set_saved_model_path(model_path)
-        if model_path and not self.inference_controller.has_model():
-            self.statusBar().showMessage(
-                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the MicroSentryAI panel.",
-                8000,
-            )
-
         self._remember_recent_project(path)
         # After relocation the new folder was already remembered; don't
         # overwrite it with the stale path from the project file.
@@ -545,7 +537,7 @@ class AppWindow(QMainWindow):
         name = self.project_controller.project_name
         if name:
             dirty = "*" if self.project_controller.is_dirty else ""
-            self.setWindowTitle(f"{name}{dirty} — {_APP_TITLE}")
+            self.setWindowTitle(f"{name}{dirty} - {_APP_TITLE}")
         else:
             self.setWindowTitle(_APP_TITLE)
 

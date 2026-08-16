@@ -608,6 +608,16 @@ class DataNavigatorSection(QWidget):
         if row == self._selected_row:
             self._update_counter(row)
 
+    def refresh_inference(self) -> None:
+        """Refresh the Score column for every row (e.g. after switching models).
+
+        Unlike set_row_inference, this doesn't assume any particular row's
+        score actually changed — it just tells the view every score cell
+        needs re-reading, and re-invalidates score-based sort order.
+        """
+        self._table_model.refresh_inference()
+        self._list.viewport().update()
+
     def set_microsentry_mode(self, enabled: bool) -> None:
         """Show or hide the Score field across the navigator cards."""
         self._microsentry_mode = enabled

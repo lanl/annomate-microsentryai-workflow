@@ -187,6 +187,21 @@ class InferenceController(QObject):
         """
         return self._strategy is not None
 
+    def switch_model(self, key: str) -> None:
+        """Switch which cached model's results are active (in-memory only).
+
+        Stops any running inference worker first. Does not touch disk —
+        loading the newly active model's cached heatmaps from its NPZ, if
+        any, and persisting the outgoing model's dirty heatmaps are the
+        caller's responsibility (see ProjectController.switch_active_model).
+
+        Args:
+            key (str): Model key to activate. Must already be registered via
+                ``inference_model.register_model()``.
+        """
+        self._stop_worker()
+        self.inference_model.switch_active_model(key)
+
     # ------------------------------------------------------------------ #
     # Image loading
     # ------------------------------------------------------------------ #

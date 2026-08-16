@@ -259,6 +259,9 @@ class LeftPanel(QWidget):
     def navigator_set_inference(self, row: int, score: float) -> None:
         self.navigator.set_row_inference(row, score)
 
+    def navigator_refresh_inference(self) -> None:
+        self.navigator.refresh_inference()
+
     def navigator_set_microsentry_mode(self, enabled: bool) -> None:
         self.navigator.set_microsentry_mode(enabled)
 
