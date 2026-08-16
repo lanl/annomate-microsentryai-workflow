@@ -158,7 +158,7 @@ class ActiveToolSection(QWidget):
         self.sam_variant_combo = QComboBox()
         self.sam_variant_combo.addItems(list(_SAM_VARIANT_MAP.keys()))
         self.sam_variant_combo.setToolTip(
-            "SAM 2 model size — tiny is fastest, large is most accurate.\n"
+            "SAM 2 model size: tiny is fastest, large is most accurate.\n"
             "Weights are downloaded to sam_weights/ on first use."
         )
         variant_row.addWidget(self.sam_variant_combo, stretch=1)

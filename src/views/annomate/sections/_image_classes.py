@@ -37,6 +37,11 @@ class _ImageClassRow(_ClickableFrame):
         if interactive:
             self.setCursor(Qt.PointingHandCursor)
             self.clicked.connect(lambda: self.toggled.emit(self._name))
+            self.setToolTip(
+                "Click to remove this tag from the image"
+                if tagged
+                else "Click to tag this image with this class"
+            )
 
         h = QHBoxLayout(self)
         h.setContentsMargins(4, 3, 4, 3)

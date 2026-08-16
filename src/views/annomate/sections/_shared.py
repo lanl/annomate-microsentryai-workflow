@@ -1,5 +1,5 @@
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QLabel, QPushButton
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout
 
 _COLOR_REVIEWED = "#4caf50"
 _COLOR_UNDECIDED = "#888888"
@@ -33,12 +33,45 @@ TOGGLE_BUTTON_STYLESHEET = (
 )
 
 
-def _toggle_button(text: str) -> QPushButton:
+def _toggle_button(text: str, tooltip: str | None = None) -> QPushButton:
     """A checkable QPushButton styled as an on/off toggle (orange when checked)."""
     btn = QPushButton(text)
     btn.setCheckable(True)
     btn.setStyleSheet(TOGGLE_BUTTON_STYLESHEET)
+    if tooltip:
+        btn.setToolTip(tooltip)
     return btn
+
+
+def _add_slider_row(
+    layout: QVBoxLayout,
+    label: str,
+    minimum: int,
+    maximum: int,
+    default: int,
+    on_change,
+    suffix: str = "",
+    value_width: int = 30,
+    tooltip: str | None = None,
+) -> tuple[QSlider, QLabel]:
+    """Append a "label - slider - value" row to *layout*; returns (slider, value_label)."""
+    row = QHBoxLayout()
+    row.setSpacing(8)
+    name_lbl = QLabel(label)
+    name_lbl.setFixedWidth(70)
+    row.addWidget(name_lbl)
+    slider = QSlider(Qt.Horizontal)
+    slider.setRange(minimum, maximum)
+    slider.setValue(default)
+    slider.valueChanged.connect(on_change)
+    if tooltip:
+        slider.setToolTip(tooltip)
+    row.addWidget(slider)
+    value_lbl = QLabel(f"{default}{suffix}")
+    value_lbl.setFixedWidth(value_width)
+    row.addWidget(value_lbl)
+    layout.addLayout(row)
+    return slider, value_lbl
 
 
 class _ClickableFrame(QFrame):

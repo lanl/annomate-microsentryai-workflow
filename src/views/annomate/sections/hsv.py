@@ -11,17 +11,10 @@ image itself, so this section never needs to push anything on an image
 change. It never touches image data, annotations, or the heatmap overlay.
 """
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QTimer, Signal
+from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
-from ._shared import _toggle_button
+from ._shared import _add_slider_row, _toggle_button
 
 _DEBOUNCE_MS = 50
 
@@ -50,18 +43,44 @@ class HSVSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self._enable_chk = _toggle_button("Enable HSV")
+        self._enable_chk = _toggle_button(
+            "Enable HSV",
+            tooltip="Turn on the hue/saturation/value adjustment for the canvas view",
+        )
         self._enable_chk.toggled.connect(self._on_enable_toggled)
         layout.addWidget(self._enable_chk)
 
-        self._hue_slider, self._hue_lbl = self._add_slider(
-            layout, "Hue", -179, 179, 0, ""
+        self._hue_slider, self._hue_lbl = _add_slider_row(
+            layout,
+            "Hue",
+            -179,
+            179,
+            0,
+            self._on_slider_changed,
+            value_width=40,
+            tooltip="Rotate the hue of displayed pixels",
         )
-        self._sat_slider, self._sat_lbl = self._add_slider(
-            layout, "Saturation", 0, 200, 100, "%"
+        self._sat_slider, self._sat_lbl = _add_slider_row(
+            layout,
+            "Saturation",
+            0,
+            200,
+            100,
+            self._on_slider_changed,
+            suffix="%",
+            value_width=40,
+            tooltip="Scale the color saturation of displayed pixels",
         )
-        self._val_slider, self._val_lbl = self._add_slider(
-            layout, "Value", 0, 200, 100, "%"
+        self._val_slider, self._val_lbl = _add_slider_row(
+            layout,
+            "Value",
+            0,
+            200,
+            100,
+            self._on_slider_changed,
+            suffix="%",
+            value_width=40,
+            tooltip="Scale the brightness (value) of displayed pixels",
         )
 
         self._btn_reset = QPushButton("Reset")
@@ -76,25 +95,6 @@ class HSVSection(QWidget):
         already_loaded = hasattr(canvas, "is_image_loaded") and canvas.is_image_loaded()
         self.set_has_image(already_loaded)
         self._refresh_controls()
-
-    def _add_slider(
-        self, layout: QVBoxLayout, label: str, minimum: int, maximum: int, default: int, suffix: str
-    ):
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        name_lbl = QLabel(label)
-        name_lbl.setFixedWidth(70)
-        row.addWidget(name_lbl)
-        slider = QSlider(Qt.Horizontal)
-        slider.setRange(minimum, maximum)
-        slider.setValue(default)
-        slider.valueChanged.connect(self._on_slider_changed)
-        row.addWidget(slider)
-        value_lbl = QLabel(f"{default}{suffix}")
-        value_lbl.setFixedWidth(40)
-        row.addWidget(value_lbl)
-        layout.addLayout(row)
-        return slider, value_lbl
 
     # ------------------------------------------------------------------ #
     # External state

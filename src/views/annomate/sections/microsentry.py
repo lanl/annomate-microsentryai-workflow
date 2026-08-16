@@ -53,8 +53,14 @@ HEATMAP_COLORMAPS = [
 
 
 def _slider_row(
-    label_text: str, value_label: QLabel, slider: QSlider, trailing=None
+    label_text: str,
+    value_label: QLabel,
+    slider: QSlider,
+    trailing=None,
+    tooltip: str | None = None,
 ) -> QWidget:
+    if tooltip:
+        slider.setToolTip(tooltip)
     w = QWidget()
     v = QVBoxLayout(w)
     v.setContentsMargins(0, 0, 0, 0)
@@ -158,6 +164,9 @@ class MicrosentrySection(QWidget):
         cached_model_lbl = QLabel("Saved Results")
         cached_model_lbl.setStyleSheet("font-size: 11px;")
         self._cached_model = QComboBox()
+        self._cached_model.setToolTip(
+            "Switch which cached model's scores and heatmap are displayed"
+        )
         # Mouse-only: QComboBox's default keyboard focus enables type-ahead
         # (e.g. pressing "a" jumps to an item starting with "a"), which was
         # swallowing the app's A/D image-navigation shortcuts whenever this
@@ -181,8 +190,9 @@ class MicrosentrySection(QWidget):
         lw.addSpacing(4)
 
         # Heatmap toggle, transparency slider underneath
-        self._btn_heatmap = _toggle_button("Enable Heatmap")
-        self._btn_heatmap.setToolTip("Overlay anomaly heatmap on the canvas image")
+        self._btn_heatmap = _toggle_button(
+            "Enable Heatmap", tooltip="Overlay anomaly heatmap on the canvas image"
+        )
         self._btn_heatmap.toggled.connect(self._debounce.start)
         lw.addWidget(self._btn_heatmap)
 
@@ -211,12 +221,14 @@ class MicrosentrySection(QWidget):
                 self._alpha_val,
                 self._alpha,
                 [self._alpha_dec, self._alpha_inc],
+                tooltip="Opacity of the heatmap overlay on the canvas image",
             )
         )
 
         # Segmentation toggle, threshold slider underneath
-        self._btn_seg = _toggle_button("Enable Segmentation")
-        self._btn_seg.setToolTip("Show AI segmentation polygons on the canvas")
+        self._btn_seg = _toggle_button(
+            "Enable Segmentation", tooltip="Show AI segmentation polygons on the canvas"
+        )
         self._btn_seg.toggled.connect(self._on_seg_toggled)
         lw.addWidget(self._btn_seg)
 
@@ -248,6 +260,7 @@ class MicrosentrySection(QWidget):
                 self._thresh_val,
                 self._thresh,
                 [self._thresh_dec, self._thresh_inc],
+                tooltip="Anomaly score percentage above which pixels are included in segmentation polygons",
             )
         )
 
@@ -292,7 +305,12 @@ class MicrosentrySection(QWidget):
             lambda v: (self._epsilon_val.setText(str(v)), self._debounce.start())
         )
         aw.addWidget(
-            _slider_row("Simplify Tolerance", self._epsilon_val, self._epsilon)
+            _slider_row(
+                "Simplify Tolerance",
+                self._epsilon_val,
+                self._epsilon,
+                tooltip="How closely segmentation polygons follow the raw AI mask; higher values use fewer points for a looser fit",
+            )
         )
 
         self._heat_min_val = QLabel("48%")
@@ -304,7 +322,14 @@ class MicrosentrySection(QWidget):
         self._heat_min.valueChanged.connect(
             lambda v: (self._heat_min_val.setText(f"{v}%"), self._debounce.start())
         )
-        aw.addWidget(_slider_row("Heatmap Minimum", self._heat_min_val, self._heat_min))
+        aw.addWidget(
+            _slider_row(
+                "Heatmap Minimum",
+                self._heat_min_val,
+                self._heat_min,
+                tooltip="Anomaly score percentage below which the heatmap is fully transparent",
+            )
+        )
 
         self._heat_ceiling_val = QLabel("62%")
         self._heat_ceiling_val.setStyleSheet("font-size: 11px;")
@@ -316,7 +341,12 @@ class MicrosentrySection(QWidget):
             lambda v: (self._heat_ceiling_val.setText(f"{v}%"), self._debounce.start())
         )
         aw.addWidget(
-            _slider_row("Heatmap Ceiling", self._heat_ceiling_val, self._heat_ceiling)
+            _slider_row(
+                "Heatmap Ceiling",
+                self._heat_ceiling_val,
+                self._heat_ceiling,
+                tooltip="Anomaly score percentage at which the heatmap reaches full color intensity",
+            )
         )
 
         self._heat_gamma_val = QLabel("0.60")
@@ -331,13 +361,21 @@ class MicrosentrySection(QWidget):
                 self._debounce.start(),
             )
         )
-        aw.addWidget(_slider_row("Heatmap Gamma", self._heat_gamma_val, self._heat_gamma))
+        aw.addWidget(
+            _slider_row(
+                "Heatmap Gamma",
+                self._heat_gamma_val,
+                self._heat_gamma,
+                tooltip="Adjusts heatmap contrast between the minimum and ceiling scores",
+            )
+        )
 
         colormap_row = QHBoxLayout()
         colormap_row.setContentsMargins(0, 0, 0, 0)
         colormap_lbl = QLabel("Heatmap Colormap")
         colormap_lbl.setStyleSheet("font-size: 11px;")
         self._colormap = QComboBox()
+        self._colormap.setToolTip("Color scheme used to render the anomaly heatmap")
         for display_label, key in HEATMAP_COLORMAPS:
             self._colormap.addItem(display_label, key)
         self._colormap.currentIndexChanged.connect(self._debounce.start)

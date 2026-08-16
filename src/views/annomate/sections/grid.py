@@ -102,6 +102,7 @@ class GridSection(QWidget):
         ratio_row.addWidget(self._ratio_unit_combo)
         self._btn_apply_ratio = QPushButton("Apply")
         self._btn_apply_ratio.setFixedWidth(50)
+        self._btn_apply_ratio.setToolTip("Apply this pixel-to-real-world ratio as the calibration")
         self._btn_apply_ratio.clicked.connect(self._on_apply_ratio_clicked)
         ratio_row.addWidget(self._btn_apply_ratio)
         layout.addLayout(ratio_row)
@@ -135,7 +136,9 @@ class GridSection(QWidget):
 
         layout.addWidget(_hline())
 
-        self._grid_chk = _toggle_button("Enable Grid")
+        self._grid_chk = _toggle_button(
+            "Enable Grid", tooltip="Overlay a calibrated reference grid on the canvas"
+        )
         self._grid_chk.toggled.connect(self._on_grid_toggled)
         layout.addWidget(self._grid_chk)
 
@@ -157,7 +160,9 @@ class GridSection(QWidget):
         spacing_mode_row.addWidget(QLabel("Spacing"))
         spacing_mode_row.addStretch()
         self._radio_auto = QRadioButton("Auto")
+        self._radio_auto.setToolTip("Space grid lines automatically based on zoom level")
         self._radio_fixed = QRadioButton("Fixed")
+        self._radio_fixed.setToolTip("Space grid lines at a fixed real-world distance")
         self._radio_auto.setChecked(True)
         spacing_group = QButtonGroup(self)
         spacing_group.addButton(self._radio_auto)

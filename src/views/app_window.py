@@ -110,10 +110,12 @@ class AppWindow(QMainWindow):
     # ================================================================== #
 
     def _build_menu(self) -> None:
-        def add(menu, label, shortcut, slot):
+        def add(menu, label, shortcut, slot, status_tip=None):
             act = QAction(label, self)
             if shortcut:
                 act.setShortcut(QKeySequence(shortcut))
+            if status_tip:
+                act.setStatusTip(status_tip)
             act.triggered.connect(slot)
             menu.addAction(act)
 
@@ -124,7 +126,13 @@ class AppWindow(QMainWindow):
         add(file_menu, "Save Project As…", "Ctrl+Shift+S", self._save_project_as)
         file_menu.addSeparator()
         add(file_menu, "Open Image Folder…", "", self._open_image_folder)
-        add(file_menu, "Relocate Images…", "", self._relocate_images)
+        add(
+            file_menu,
+            "Relocate Images…",
+            "",
+            self._relocate_images,
+            status_tip="Point the project at images that moved to a new folder, keeping existing annotations",
+        )
         file_menu.addSeparator()
         add(file_menu, "Exit", "Ctrl+Q", self.close)
 
@@ -150,15 +158,23 @@ class AppWindow(QMainWindow):
             "Export Pixel-Level Train Structure…",
             "",
             self._export_pixel_train_structure,
+            status_tip="Export an MVTec-style training folder with per-pixel ground-truth masks from polygon annotations",
         )
         add(
             data_menu,
             "Export Image-Level Train Structure…",
             "",
             self._export_image_level_train_structure,
+            status_tip="Export a classification-style training folder (good/defect) from image-level tags, without pixel masks",
         )
         data_menu.addSeparator()
-        add(data_menu, "Export Project Template…", "", self._export_project_template)
+        add(
+            data_menu,
+            "Export Project Template…",
+            "",
+            self._export_project_template,
+            status_tip="Export project settings (classes, calibration, constraints) as a reusable template, without images or annotations",
+        )
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""

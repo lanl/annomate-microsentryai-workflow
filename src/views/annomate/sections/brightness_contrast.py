@@ -11,17 +11,10 @@ ImageLabel re-applies them to every newly loaded image itself. Never
 touches image data, annotations, or the heatmap overlay.
 """
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtCore import QTimer, Signal
+from PySide6.QtWidgets import QPushButton, QVBoxLayout, QWidget
 
-from ._shared import _toggle_button
+from ._shared import _add_slider_row, _toggle_button
 
 _DEBOUNCE_MS = 50
 
@@ -50,12 +43,31 @@ class BrightnessContrastSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
 
-        self._enable_chk = _toggle_button("Enable Brightness/Contrast")
+        self._enable_chk = _toggle_button(
+            "Enable Brightness/Contrast",
+            tooltip="Turn on the min/max contrast stretch for the canvas view",
+        )
         self._enable_chk.toggled.connect(self._on_enable_toggled)
         layout.addWidget(self._enable_chk)
 
-        self._min_slider, self._min_lbl = self._add_slider(layout, "Min", 0, 254, 0)
-        self._max_slider, self._max_lbl = self._add_slider(layout, "Max", 1, 255, 255)
+        self._min_slider, self._min_lbl = _add_slider_row(
+            layout,
+            "Min",
+            0,
+            254,
+            0,
+            self._on_slider_changed,
+            tooltip="Pixel values at or below this level display as black",
+        )
+        self._max_slider, self._max_lbl = _add_slider_row(
+            layout,
+            "Max",
+            1,
+            255,
+            255,
+            self._on_slider_changed,
+            tooltip="Pixel values at or above this level display as white",
+        )
 
         self._btn_reset = QPushButton("Reset")
         self._btn_reset.setToolTip("Reset min/max back to 0/255")
@@ -69,23 +81,6 @@ class BrightnessContrastSection(QWidget):
         already_loaded = hasattr(canvas, "is_image_loaded") and canvas.is_image_loaded()
         self.set_has_image(already_loaded)
         self._refresh_controls()
-
-    def _add_slider(self, layout: QVBoxLayout, label: str, minimum: int, maximum: int, default: int):
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        name_lbl = QLabel(label)
-        name_lbl.setFixedWidth(70)
-        row.addWidget(name_lbl)
-        slider = QSlider(Qt.Horizontal)
-        slider.setRange(minimum, maximum)
-        slider.setValue(default)
-        slider.valueChanged.connect(self._on_slider_changed)
-        row.addWidget(slider)
-        value_lbl = QLabel(f"{default}")
-        value_lbl.setFixedWidth(30)
-        row.addWidget(value_lbl)
-        layout.addLayout(row)
-        return slider, value_lbl
 
     # ------------------------------------------------------------------ #
     # External state

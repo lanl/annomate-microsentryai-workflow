@@ -39,7 +39,10 @@ class AnomalyConstraintsSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        self._anomaly_enable_chk = _toggle_button("Enable Anomaly Constraints")
+        self._anomaly_enable_chk = _toggle_button(
+            "Enable Anomaly Constraints",
+            tooltip="Turn on area and proximity threshold checks for this image",
+        )
         layout.addWidget(self._anomaly_enable_chk)
 
         # ── Area threshold section ──────────────────────────────────────
@@ -52,7 +55,10 @@ class AnomalyConstraintsSection(QWidget):
         area_header.setStyleSheet("font-weight: bold;")
         layout.addWidget(area_header)
 
-        self._anomaly_area_chk = _toggle_button("Enable Area Check")
+        self._anomaly_area_chk = _toggle_button(
+            "Enable Area Check",
+            tooltip="Flag annotations whose area exceeds Max Area",
+        )
         layout.addWidget(self._anomaly_area_chk)
 
         area_row = QHBoxLayout()
@@ -97,14 +103,23 @@ class AnomalyConstraintsSection(QWidget):
         dist_header.setStyleSheet("font-weight: bold;")
         layout.addWidget(dist_header)
 
-        self._anomaly_dist_chk = _toggle_button("Enable Distance Check")
+        self._anomaly_dist_chk = _toggle_button(
+            "Enable Distance Check",
+            tooltip="Flag annotation pairs closer than Min Dist",
+        )
         layout.addWidget(self._anomaly_dist_chk)
 
         method_row = QHBoxLayout()
         method_row.setSpacing(4)
         method_row.addWidget(QLabel("Method:"))
         self._anomaly_centroid_radio = QRadioButton("Centroid")
+        self._anomaly_centroid_radio.setToolTip(
+            "Measure distance between annotation centroids"
+        )
         self._anomaly_edge_radio = QRadioButton("Edge")
+        self._anomaly_edge_radio.setToolTip(
+            "Measure distance between annotation edges (closest points)"
+        )
         self._anomaly_centroid_radio.setChecked(True)
         self._anomaly_method_group = QButtonGroup(self)
         self._anomaly_method_group.addButton(self._anomaly_centroid_radio, 0)

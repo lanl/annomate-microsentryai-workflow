@@ -65,7 +65,10 @@ class CenterCropSection(QWidget):
         layout.setSpacing(8)
 
         # Enable
-        self._crop_chk = _toggle_button("Enable Center Crop")
+        self._crop_chk = _toggle_button(
+            "Enable Center Crop",
+            tooltip="Crop the canvas view to the region around the template match",
+        )
         self._crop_chk.toggled.connect(self._on_crop_toggled)
         layout.addWidget(self._crop_chk)
 
@@ -151,8 +154,9 @@ class CenterCropSection(QWidget):
         self._update_crop_color_swatch(None)
 
         # Center dot
-        self._crop_center_dot_chk = _toggle_button("Enable Center Dot")
-        self._crop_center_dot_chk.setToolTip("Show center dot")
+        self._crop_center_dot_chk = _toggle_button(
+            "Enable Center Dot", tooltip="Show center dot"
+        )
         self._crop_center_dot_chk.toggled.connect(self._on_crop_center_dot_toggled)
         layout.addWidget(self._crop_center_dot_chk)
 
@@ -341,7 +345,7 @@ class CenterCropSection(QWidget):
             self._crop_color_btn.setStyleSheet(
                 f"background-color: rgb({r},{g},{b}); border: 1px solid #888;"
             )
-            self._crop_color_btn.setToolTip(f"Border color: rgb({r},{g},{b}) — click to change")
+            self._crop_color_btn.setToolTip(f"Border color: rgb({r},{g},{b}), click to change")
 
     def _on_reset_crop_clicked(self) -> None:
         if self._refreshing:
