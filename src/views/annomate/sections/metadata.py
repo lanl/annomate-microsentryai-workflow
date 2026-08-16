@@ -190,6 +190,7 @@ class MetadataSection(QWidget):
         self._note_edit.textChanged.connect(self._store_note)
         self._set_note_expanded(False)
         layout.addWidget(self._note_edit)
+        self._set_note_expanded(False)
 
     def _note_height_for_lines(self, lines: int) -> int:
         """Return an editor height that exposes approximately *lines* text rows."""
@@ -218,8 +219,12 @@ class MetadataSection(QWidget):
 
         The inspector field only saves on editingFinished (Enter or focus
         loss); callers that reparent or hide this widget before that fires
-        must call this first or the edit is silently lost.
+        must call this first or the edit is silently lost. Calls the store
+        logic directly rather than relying solely on clearFocus() to trigger
+        editingFinished, since focus-loss delivery is unreliable on
+        headless/offscreen Qt platforms (e.g. Linux CI).
         """
+        self._store_inspector()
         self._inspector_edit.clearFocus()
 
     def _load_fields(self) -> None:
