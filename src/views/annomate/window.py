@@ -580,7 +580,6 @@ class AnnoMateWindow(QWidget):
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
         self._tour_manager = TourManager(self, parent=self)
-        self._tour_started: bool = False
         self._session_timer = QTimer(self)
         self._session_timer.setInterval(60_000)
         self._session_timer.timeout.connect(self._update_session_display)
@@ -879,10 +878,6 @@ class AnnoMateWindow(QWidget):
         self._review_bar.reposition(self.canvas.size())
         self._reposition_start_screen()
         self._tour_manager.reposition()
-        if not self._tour_started:
-            self._tour_started = True
-            if self._tour_manager.should_run():
-                self._tour_manager.start()
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.canvas and event.type() == QEvent.Resize:
@@ -893,7 +888,7 @@ class AnnoMateWindow(QWidget):
         return super().eventFilter(obj, event)
 
     def start_tour(self, force: bool = False) -> None:
-        """Public entry point for replaying the guided tour (e.g. from the Help menu)."""
+        """Public entry point for replaying the guided tour programmatically."""
         if force or self._tour_manager.should_run():
             self._tour_manager.start()
 

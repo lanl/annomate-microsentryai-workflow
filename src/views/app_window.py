@@ -160,14 +160,6 @@ class AppWindow(QMainWindow):
         data_menu.addSeparator()
         add(data_menu, "Export Project Template…", "", self._export_project_template)
 
-        help_menu = self.menuBar().addMenu("&Help")
-        add(
-            help_menu,
-            "Show Welcome Tour",
-            "",
-            lambda: self.annomate_view.start_tour(force=True),
-        )
-
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
         self.annomate_view.set_project_start_state(

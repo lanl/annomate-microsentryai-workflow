@@ -20,7 +20,7 @@ def isolated_settings():
     settings.clear()
 
 
-def _build_window(qtbot, monkeypatch, settings, tour_started: bool = True):
+def _build_window(qtbot, monkeypatch, settings):
     # These tests only exercise tour UI wiring. Without this, AnnoMateWindow's
     # startup autoload would spin up a real background QThread whenever this
     # machine has SAM weights cached on disk — one that can outlive the window
@@ -35,7 +35,6 @@ def _build_window(qtbot, monkeypatch, settings, tour_started: bool = True):
     io_controller = IOController(dataset_model)
     win = AnnoMateWindow(dataset_model, io_controller)
     win._tour_manager = TourManager(win, settings=settings, parent=win)
-    win._tour_started = tour_started
     qtbot.addWidget(win)
     win.resize(1200, 800)
     return win
@@ -45,10 +44,10 @@ def _build_window(qtbot, monkeypatch, settings, tour_started: bool = True):
 def main_window(qtbot, monkeypatch, isolated_settings):
     """A real AnnoMateWindow with an isolated tour settings store.
 
-    `_tour_started` is pre-set so showing the window does not auto-launch the
-    tour — tests drive TourManager explicitly for deterministic behavior.
+    The tour no longer auto-launches on show — tests drive TourManager
+    explicitly for deterministic behavior.
     """
-    win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=True)
+    win = _build_window(qtbot, monkeypatch, isolated_settings)
     win.show()
     qtbot.waitExposed(win)
     return win
@@ -145,7 +144,7 @@ class TestTourManager:
         assert manager._index == 0
 
     def test_start_tour_force_replays_after_completion(self, main_window):
-        """Verify Help > Show Welcome Tour can replay the tour even once already seen.
+        """Verify start_tour(force=True) can replay the tour even once already seen.
 
         Success means start_tour(force=True) reactivates the tour regardless
         of should_run()'s value.
@@ -170,41 +169,3 @@ class TestTourManager:
         manager.reposition()
 
         assert manager._overlay.geometry() == main_window.rect()
-
-
-class TestTourAutoStartWiring:
-    def test_first_show_auto_starts_tour_when_fresh(
-        self, qtbot, monkeypatch, isolated_settings
-    ):
-        """Verify the tour auto-launches on the very first showEvent when unseen.
-
-        This exercises the real AnnoMateWindow.showEvent wiring rather than
-        TourManager's API in isolation. Success means the tour is active
-        immediately after the window is first shown, given fresh settings.
-        """
-        win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=False)
-
-        win.show()
-        qtbot.waitExposed(win)
-
-        assert win._tour_manager.is_active() is True
-
-    def test_tour_does_not_reappear_after_being_completed(
-        self, qtbot, monkeypatch, isolated_settings
-    ):
-        """Verify completing the tour once prevents it from auto-starting on a later launch.
-
-        Simulates a second app launch by constructing a fresh AnnoMateWindow
-        against the same (now-completed) settings store. Success means the
-        new window's first show() does not activate the tour.
-        """
-        first_win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=False)
-        first_win.show()
-        qtbot.waitExposed(first_win)
-        first_win._tour_manager.skip()
-
-        second_win = _build_window(qtbot, monkeypatch, isolated_settings, tour_started=False)
-        second_win.show()
-        qtbot.waitExposed(second_win)
-
-        assert second_win._tour_manager.is_active() is False
