@@ -94,11 +94,13 @@ class _ClassPickerRow(_ClickableFrame):
 
 
 class _ClassPickerPopup(QFrame):
-    """Floating class selector for a pending polygon (AI-detected or manually drawn).
+    """Floating class selector for a pending polygon (AI-suggested or manually drawn).
 
-    When *show_reject* is set, an additional discard button is shown alongside
-    accept — used for manually-drawn polygons, which have no other way to be
-    dropped besides Escape/click-elsewhere.
+    Shared by both the manual/SAM-ghost draw flow and the MicroSentry
+    AI-suggested-polygon flow, so both behave identically: the polygon stays
+    pending and the popup stays open until the user picks Accept or the
+    discard (X) button — a stray canvas click or switching selection must not
+    dismiss it.
     """
 
     accepted = Signal()
@@ -106,12 +108,10 @@ class _ClassPickerPopup(QFrame):
 
     _BTN_SIZE = 28
     _ICON_SIZE = 16
-    _LIST_HEIGHT = 190  # ~6 rows at current row sizing before scrolling kicks in
+    _MAX_VISIBLE_ROWS = 6  # taller class lists scroll instead of growing further
     _ROW_CHROME_W = 20  # row content margins (12) + border (4) + buffer (4)
 
-    def __init__(
-        self, canvas: QWidget, parent: QWidget = None, show_reject: bool = False
-    ) -> None:
+    def __init__(self, canvas: QWidget, parent: QWidget = None) -> None:
         super().__init__(parent or canvas)
         self._canvas = canvas
         self._rows: dict = {}
@@ -138,13 +138,12 @@ class _ClassPickerPopup(QFrame):
         btn_accept.clicked.connect(self.accepted)
         btn_col.addWidget(btn_accept)
 
-        if show_reject:
-            btn_reject = QToolButton()
-            btn_reject.setIcon(material_icon("close", size=self._ICON_SIZE, color="black"))
-            btn_reject.setToolTip("Discard this polygon")
-            btn_reject.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
-            btn_reject.clicked.connect(self.rejected)
-            btn_col.addWidget(btn_reject)
+        btn_reject = QToolButton()
+        btn_reject.setIcon(material_icon("close", size=self._ICON_SIZE, color="black"))
+        btn_reject.setToolTip("Discard this polygon")
+        btn_reject.setFixedSize(self._BTN_SIZE, self._BTN_SIZE)
+        btn_reject.clicked.connect(self.rejected)
+        btn_col.addWidget(btn_reject)
 
         btn_col.addStretch()
         layout.addLayout(btn_col)
@@ -160,7 +159,6 @@ class _ClassPickerPopup(QFrame):
         self._scroll.setWidget(self._list_container)
         self._scroll.setFrameShape(QFrame.NoFrame)
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self._scroll.setFixedHeight(self._LIST_HEIGHT)
         layout.addWidget(self._scroll)
 
         self.adjustSize()
@@ -192,6 +190,12 @@ class _ClassPickerPopup(QFrame):
         text_w = max((QFontMetrics(self.font()).horizontalAdvance(n) for n in names), default=0)
         scrollbar_w = self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
         self._scroll.setFixedWidth(text_w + self._ROW_CHROME_W + scrollbar_w)
+
+        row_h = next(iter(self._rows.values())).sizeHint().height() if self._rows else 0
+        visible_rows = min(len(names), self._MAX_VISIBLE_ROWS)
+        list_h = visible_rows * row_h + max(0, visible_rows - 1) * self._list_layout.spacing()
+        self._scroll.setFixedHeight(list_h)
+
         self.adjustSize()
 
     def _on_row_activated(self, name: str) -> None:
@@ -593,7 +597,7 @@ class AnnoMateWindow(QWidget):
         self.canvas.toolCanceled.connect(self._on_tool_canceled)
         self.canvas.polygonSelected.connect(self._on_canvas_polygon_selected)
         self.canvas.ai_polygon_clicked.connect(self._on_ai_polygon_clicked)
-        self.canvas.polygonDiscarded.connect(self._on_discard_manual_polygon)
+        self.canvas.polygonDiscarded.connect(self._on_popup_rejected)
 
         # Canvas → status bar (live feedback)
         self.canvas.zoom_changed.connect(self.status_bar.set_zoom)
@@ -803,12 +807,12 @@ class AnnoMateWindow(QWidget):
         self._review_bar.decision_changed.connect(self._on_review_decision)
         self._review_bar.raise_()
 
-        self._ai_popup = _ClassPickerPopup(self.canvas, self.canvas)
-        self._ai_popup.accepted.connect(self._on_accept_single_ai)
-
-        self._manual_popup = _ClassPickerPopup(self.canvas, self.canvas, show_reject=True)
-        self._manual_popup.accepted.connect(self._on_accept_manual_polygon)
-        self._manual_popup.rejected.connect(self._on_discard_manual_polygon)
+        # Shared by manual/SAM-ghost polygons and MicroSentry AI-suggested
+        # polygons — only one can be pending at a time (see _popup_mode).
+        self._popup = _ClassPickerPopup(self.canvas, self.canvas)
+        self._popup.accepted.connect(self._on_popup_accepted)
+        self._popup.rejected.connect(self._on_popup_rejected)
+        self._popup_mode = None  # "manual" or "ai" or None
 
         self.canvas.installEventFilter(self)
 
@@ -936,8 +940,8 @@ class AnnoMateWindow(QWidget):
             self._selected_ai_idx = -1
             self._pending_manual_pts = []
             self._review_bar.setVisible(False)
-            self._ai_popup.setVisible(False)
-            self._manual_popup.setVisible(False)
+            self._popup.setVisible(False)
+            self._popup_mode = None
             self.viewport_actions.set_image_loaded(False)
             self.right_panel.center_crop.set_has_image(False)
             self.right_panel.grid.set_has_image(False)
@@ -981,9 +985,9 @@ class AnnoMateWindow(QWidget):
         self.right_panel.center_crop.set_has_image(True)
         self.right_panel.grid.set_has_image(True)
         self.viewport_actions.reposition(self.canvas.size())
-        self._ai_popup.setVisible(False)
+        self._popup.setVisible(False)
+        self._popup_mode = None
         self._selected_ai_idx = -1
-        self._manual_popup.setVisible(False)
         self._pending_manual_pts = []
         self.canvas.set_image(
             bgr
@@ -1331,14 +1335,32 @@ class AnnoMateWindow(QWidget):
         self._pending_manual_pts = pts
         self.canvas.set_pending_polygon(pts)
         class_colors = [self.dataset_model.get_class_color(name) for name in class_names]
-        self._manual_popup.set_classes(class_names, class_colors)
+        self._popup_mode = "manual"
+        self._popup.set_classes(class_names, class_colors)
         bbox = self.canvas.get_pending_polygon_view_rect()
-        self._manual_popup.show_at_polygon(bbox)
+        self._popup.show_at_polygon(bbox)
 
-    def _on_accept_manual_polygon(self) -> None:
+    def _on_popup_accepted(self) -> None:
+        if self._popup_mode == "manual":
+            self._accept_manual_polygon()
+        elif self._popup_mode == "ai":
+            self._accept_ai_polygon()
+        self._popup_mode = None
+
+    def _on_popup_rejected(self) -> None:
+        if self._popup_mode == "ai":
+            self._selected_ai_idx = -1
+            self.canvas.deselect_ai_polygon()
+        else:
+            self._pending_manual_pts = []
+            self.canvas.set_pending_polygon([])
+        self._popup.setVisible(False)
+        self._popup_mode = None
+
+    def _accept_manual_polygon(self) -> None:
         if not self._pending_manual_pts or self._current_row < 0:
             return
-        target = self._manual_popup.current_class()
+        target = self._popup.current_class()
         if target:
             self.dataset_model.add_annotation(
                 self._current_row,
@@ -1348,13 +1370,8 @@ class AnnoMateWindow(QWidget):
             )
         self._pending_manual_pts = []
         self.canvas.set_pending_polygon([])
-        self._manual_popup.setVisible(False)
+        self._popup.setVisible(False)
         self._refresh_canvas_render()
-
-    def _on_discard_manual_polygon(self) -> None:
-        self._pending_manual_pts = []
-        self.canvas.set_pending_polygon([])
-        self._manual_popup.setVisible(False)
 
     def _on_polygon_edited(self, idx: int, pts: list) -> None:
         if self._current_row < 0 or self.canvas.is_dragging():
@@ -1714,7 +1731,9 @@ class AnnoMateWindow(QWidget):
         else:
             self._current_ai_contours = []
 
-        self._ai_popup.setVisible(False)
+        if self._popup_mode == "ai":
+            self._popup.setVisible(False)
+            self._popup_mode = None
         self._selected_ai_idx = -1
         self.canvas.selected_polygon_idx = -1
         self._update_canvas_overlays(anno_overlays)
@@ -1764,11 +1783,13 @@ class AnnoMateWindow(QWidget):
     def _on_ai_polygon_clicked(self, idx: int, view_pos: QPointF) -> None:
         self._selected_ai_idx = idx
         if idx == -1:
-            self._ai_popup.setVisible(False)
+            self._popup.setVisible(False)
+            self._popup_mode = None
             return
         class_names = self.dataset_model.get_class_names()
         if not class_names:
-            self._ai_popup.setVisible(False)
+            self._popup.setVisible(False)
+            self._popup_mode = None
             QMessageBox.warning(
                 self,
                 "No Classes Defined",
@@ -1776,17 +1797,18 @@ class AnnoMateWindow(QWidget):
             )
             return
         class_colors = [self.dataset_model.get_class_color(name) for name in class_names]
-        self._ai_popup.set_classes(class_names, class_colors)
+        self._popup_mode = "ai"
+        self._popup.set_classes(class_names, class_colors)
         bbox = self.canvas.get_ai_polygon_view_rect(idx)
-        self._ai_popup.show_at_polygon(bbox)
+        self._popup.show_at_polygon(bbox)
 
-    def _on_accept_single_ai(self) -> None:
+    def _accept_ai_polygon(self) -> None:
         idx = self._selected_ai_idx
         if idx < 0 or idx >= len(self._current_ai_contours):
             return
         pts = self._current_ai_contours[idx]
         if len(pts) >= 3:
-            target = self._ai_popup.current_class()
+            target = self._popup.current_class()
             if not target:
                 class_names = self.dataset_model.get_class_names()
                 target = class_names[0] if class_names else ""
@@ -1798,7 +1820,7 @@ class AnnoMateWindow(QWidget):
                     self._accepting_ai = False
         del self._current_ai_contours[idx]
         self._selected_ai_idx = -1
-        self._ai_popup.setVisible(False)
+        self._popup.setVisible(False)
         self._push_overlays_after_edit()
 
     def _push_overlays_after_edit(self) -> None:
@@ -1841,7 +1863,8 @@ class AnnoMateWindow(QWidget):
             self._accepting_ai = False
         self._current_ai_contours = []
         self._selected_ai_idx = -1
-        self._ai_popup.setVisible(False)
+        self._popup.setVisible(False)
+        self._popup_mode = None
         self._push_overlays_after_edit()
 
     def _row_for_path(self, path: str) -> int:

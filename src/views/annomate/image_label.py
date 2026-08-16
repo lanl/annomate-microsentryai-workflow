@@ -738,6 +738,11 @@ class ImageLabel(QLabel):
         self._selected_ai_idx = -1
         self.update()
 
+    def deselect_ai_polygon(self) -> None:
+        """Clear the AI-polygon selection highlight without discarding overlays."""
+        self._selected_ai_idx = -1
+        self.update()
+
     def get_ai_polygon_view_rect(self, idx: int) -> QRect:
         """Return the bounding rect of AI polygon *idx* in widget (view) coordinates."""
         if idx < 0 or idx >= len(self._ai_overlays):
@@ -1037,6 +1042,11 @@ class ImageLabel(QLabel):
                 self.update()
                 self.polygonDiscarded.emit()
                 return
+            if self._selected_ai_idx != -1:
+                self._selected_ai_idx = -1
+                self.update()
+                self.ai_polygon_clicked.emit(-1, QPointF())
+                return
             self.clear_current_polygon()
             self.set_tool(None)
             self.toolCanceled.emit()
@@ -1072,6 +1082,10 @@ class ImageLabel(QLabel):
             if self._pending_polygon is not None:
                 # Awaiting classification via the popup — only its X button
                 # or Escape may drop it; a stray canvas click must not.
+                return
+
+            if self._selected_ai_idx != -1:
+                # Same rule for a selected AI polygon awaiting classification.
                 return
 
             if self.current_tool in (SAM_BBOX, POLYGON):
