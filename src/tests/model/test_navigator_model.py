@@ -7,6 +7,8 @@ from core.states.inference_state import InferenceState
 from models.dataset_model import DatasetTableModel
 from models.inference_model import InferenceModel
 from models.navigator_model import (
+    HAS_INSPECTOR_ROLE,
+    HAS_NOTE_ROLE,
     NavigatorColumns,
     NavigatorSortProxyModel,
     NavigatorTableModel,
@@ -38,7 +40,7 @@ def proxy_source_rows(proxy):
 
 class TestNavigatorTableModel:
     def test_columns_and_source_row_role(self, dataset_model, inference_model):
-        """Verify that NavigatorTableModel has 6 columns and exposes correct source row via SOURCE_ROW_ROLE.
+        """Verify that NavigatorTableModel has 5 columns and exposes correct source row via SOURCE_ROW_ROLE.
 
         Checks the column count, the IMG_ID header text, the display value for row 1
         (which is the file 'a.jpg', so ID should be 'a'), and that SOURCE_ROW_ROLE
@@ -46,10 +48,31 @@ class TestNavigatorTableModel:
         """
         model = NavigatorTableModel(dataset_model, inference_model)
 
-        assert model.columnCount() == 6
+        assert model.columnCount() == 5
         assert model.headerData(NavigatorColumns.IMG_ID, Qt.Horizontal) == "Img ID"
         assert model.data(model.index(1, NavigatorColumns.IMG_ID)) == "a"
         assert model.data(model.index(1, NavigatorColumns.IMG_ID), SOURCE_ROW_ROLE) == 1
+
+    def test_img_id_keeps_folder_prefix_but_strips_extension_when_nested(
+        self, inference_model, tmp_path
+    ):
+        """Nested images show their folder path but not their extension in Img ID.
+
+        Two images sharing a basename in different subfolders ("nest1/dup.jpg",
+        "nest3/dup.jpg") must show distinct Img IDs ("nest1/dup", "nest3/dup"),
+        while a flat image keeps today's plain-stem look.
+        """
+        model = DatasetTableModel(DatasetState())
+        model.load_folder(
+            str(tmp_path), ["root.jpg", "nest1/dup.jpg", "nest3/dup.jpg"]
+        )
+        nav = NavigatorTableModel(model, inference_model)
+
+        ids = {
+            nav.data(nav.index(row, NavigatorColumns.IMG_ID))
+            for row in range(nav.rowCount())
+        }
+        assert ids == {"root", "nest1/dup", "nest3/dup"}
 
     def test_annotation_and_decision_values(self, dataset_model, inference_model):
         """Verify that annotation count, review status, and review decision columns display correctly.
@@ -67,14 +90,140 @@ class TestNavigatorTableModel:
         assert model.data(model.index(0, NavigatorColumns.ANNOTS)) == "1"
         assert model.data(model.index(0, NavigatorColumns.DECISION)) == "Reject"
 
+    def test_class_entries_are_unique_alphabetical_and_colored(
+        self, dataset_model, inference_model
+    ):
+        """Verify class_entries dedupes classes, sorts them, and pairs each with its color.
+
+        Adds two 'scratch' annotations and one 'inclusion' annotation to row 0.
+        Success means only the two unique class names come back, alphabetically
+        ordered, each paired with dataset_model's registered color for that class.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_class("inclusion", (40, 50, 60))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+        dataset_model.add_annotation(0, "inclusion", _POLY)
+
+        assert model.class_entries(0) == [
+            ("inclusion", (40, 50, 60)),
+            ("scratch", (10, 20, 30)),
+        ]
+
+    def test_class_entries_empty_when_no_annotations(self, dataset_model, inference_model):
+        model = NavigatorTableModel(dataset_model, inference_model)
+        assert model.class_entries(0) == []
+
+    def test_class_entries_use_image_tags_in_image_level_mode(
+        self, dataset_model, inference_model
+    ):
+        """In image-level mode, pills come from image class tags, not polygons.
+
+        A pixel annotation on row 0 is ignored for class_entries once the
+        dataset is in image-level mode -- only the image's own class tags
+        (set via set_image_classes) should come back.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_class("inclusion", (40, 50, 60))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["inclusion"])
+
+        assert model.class_entries(0) == [("inclusion", (40, 50, 60))]
+
+    def test_class_entries_ignores_pixel_annotations_added_after_mode_switch(
+        self, dataset_model, inference_model
+    ):
+        """A polygon added after switching to image-level mode isn't auto-tagged.
+
+        set_annotation_mode("image_level") merges *existing* pixel classes
+        into image tags as a one-time migration -- it doesn't keep syncing
+        afterward. So a pixel annotation added once already in image-level
+        mode should stay invisible to class_entries() until explicitly
+        tagged via set_image_classes.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.add_annotation(0, "scratch", _POLY)
+
+        assert model.class_entries(0) == []
+
+    def test_annots_column_counts_image_tags_in_image_level_mode(
+        self, dataset_model, inference_model
+    ):
+        """The Annots badge count follows the current mode's kind of work."""
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+        dataset_model.set_annotation_mode("image_level")
+        dataset_model.set_image_classes(0, ["scratch"])
+
+        index = model.index(0, NavigatorColumns.ANNOTS)
+        assert model.data(index) == "1"
+        assert model.data(index, SORT_ROLE) == 1
+
+    def test_annots_column_counts_polygon_instances_in_pixel_mode(
+        self, dataset_model, inference_model
+    ):
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+
+        index = model.index(0, NavigatorColumns.ANNOTS)
+        assert model.data(index) == "2"
+        assert model.data(index, SORT_ROLE) == 2
+
+    def test_get_annotation_mode_passthrough(self, dataset_model, inference_model):
+        model = NavigatorTableModel(dataset_model, inference_model)
+        assert model.get_annotation_mode() == "pixel"
+        dataset_model.set_annotation_mode("image_level")
+        assert model.get_annotation_mode() == "image_level"
+
+    def test_get_filter_facet_counts_counts_images_not_annotation_instances(
+        self, dataset_model, inference_model
+    ):
+        """Verify facet counts are per-image (a class used twice in one image counts once).
+
+        Row 0: accepted with two "scratch" annotations -- accept_conflict,
+        bucketed under "incomplete" (accepted but still has work to resolve).
+        Row 1: rejected with one "inclusion" annotation -- reject_reviewed,
+        bucketed under "reviewed". Row 2: untouched -- undecided. Success
+        means decision/status counts match, and "scratch"'s image count is 1
+        (not 2) despite two annotations on the same image.
+        """
+        model = NavigatorTableModel(dataset_model, inference_model)
+        dataset_model.add_class("scratch", (10, 20, 30))
+        dataset_model.add_class("inclusion", (40, 50, 60))
+        dataset_model.add_annotation(0, "scratch", _POLY)
+        dataset_model.add_annotation(0, "scratch", [(0, 0), (2, 0), (2, 2)])
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.add_annotation(1, "inclusion", _POLY)
+        dataset_model.set_review_decision(1, "reject")
+
+        counts = model.get_filter_facet_counts()
+
+        assert counts["decision"] == {"accept": 1, "reject": 1}
+        assert counts["status"]["incomplete"] == 1  # row 0: accept_conflict
+        assert counts["status"]["reviewed"] == 1  # row 1: reject_reviewed
+        assert counts["status"]["undecided"] == 1  # row 2
+        assert counts["class_options"] == [
+            ("inclusion", (40, 50, 60), 1),
+            ("scratch", (10, 20, 30), 1),
+        ]
+
     def test_inference_values_and_missing_score(
         self, dataset_model, inference_model, tmp_path
     ):
-        """Verify that inference score and class columns show values when available and empty when not.
+        """Verify that the inference score column shows a value when available and empty when not.
 
-        Stores a score map for 'a.jpg' (row 1). Success means SCORE shows '0.72',
-        CLASS shows 'ANOMALY' for that row, and for row 0 (no score) SCORE is an empty
-        string and SORT_ROLE is None.
+        Stores a score map for 'a.jpg' (row 1). Success means SCORE shows '0.72'
+        for that row, and for row 0 (no score) SCORE is an empty string and
+        SORT_ROLE is None.
         """
         inference_model.set_score_map(
             str(tmp_path / "a.jpg"), 0.72, np.zeros((2, 2), dtype=np.float32)
@@ -82,9 +231,25 @@ class TestNavigatorTableModel:
         model = NavigatorTableModel(dataset_model, inference_model)
 
         assert model.data(model.index(1, NavigatorColumns.SCORE)) == "0.72"
-        assert model.data(model.index(1, NavigatorColumns.CLASS)) == "ANOMALY"
         assert model.data(model.index(0, NavigatorColumns.SCORE)) == ""
         assert model.data(model.index(0, NavigatorColumns.SCORE), SORT_ROLE) is None
+
+    def test_has_inspector_and_has_note_roles(self, dataset_model, inference_model):
+        """Verify HAS_INSPECTOR_ROLE/HAS_NOTE_ROLE reflect whether a row has non-empty values.
+
+        Row 0 gets an inspector name only, row 1 gets a note only, row 2 gets
+        neither. Success means each row's roles reflect exactly what was set.
+        """
+        dataset_model.set_inspector(0, "mike")
+        dataset_model.set_note(1, "check this")
+        model = NavigatorTableModel(dataset_model, inference_model)
+
+        assert model.data(model.index(0, 0), HAS_INSPECTOR_ROLE) is True
+        assert model.data(model.index(0, 0), HAS_NOTE_ROLE) is False
+        assert model.data(model.index(1, 0), HAS_INSPECTOR_ROLE) is False
+        assert model.data(model.index(1, 0), HAS_NOTE_ROLE) is True
+        assert model.data(model.index(2, 0), HAS_INSPECTOR_ROLE) is False
+        assert model.data(model.index(2, 0), HAS_NOTE_ROLE) is False
 
 
 class TestNavigatorSortProxyModel:
@@ -301,24 +466,23 @@ class TestProxyFilter:
             proxy.mapToSource(proxy.index(r, 0)).row() for r in range(proxy.rowCount())
         ]
 
-    def test_all_shows_every_row(self, proxy, dataset_model):
-        proxy.set_filter_mode("all")
+    def test_no_filters_shows_every_row(self, proxy, dataset_model):
         assert proxy.rowCount() == 3
 
     def test_accept_filter(self, proxy, dataset_model):
         dataset_model.set_review_decision(0, "accept")
-        proxy.set_filter_mode("accept")
+        proxy.set_decision_filter_active("accept", True)
         assert self._visible_source_rows(proxy) == [0]
 
     def test_reject_filter(self, proxy, dataset_model):
         dataset_model.set_review_decision(1, "reject")
-        proxy.set_filter_mode("reject")
+        proxy.set_decision_filter_active("reject", True)
         assert self._visible_source_rows(proxy) == [1]
 
     def test_undecided_filter(self, proxy, dataset_model):
         dataset_model.set_review_decision(0, "accept")
         dataset_model.set_review_decision(1, "reject")
-        proxy.set_filter_mode("undecided")
+        proxy.set_status_filter_active("undecided", True)
         assert self._visible_source_rows(proxy) == [2]
 
     def test_incomplete_filter_catches_reject_without_annotation(
@@ -327,19 +491,19 @@ class TestProxyFilter:
         dataset_model.set_review_decision(0, "reject")  # incomplete — no work
         dataset_model.add_annotation(1, "crack", _POLY)
         dataset_model.set_review_decision(1, "reject")  # reviewed
-        proxy.set_filter_mode("incomplete")
+        proxy.set_status_filter_active("incomplete", True)
         assert self._visible_source_rows(proxy) == [0]
 
     def test_incomplete_filter_catches_accept_conflict(self, proxy, dataset_model):
         dataset_model.add_annotation(0, "crack", _POLY)
         dataset_model.set_review_decision(0, "accept")  # accept_conflict
-        proxy.set_filter_mode("incomplete")
+        proxy.set_status_filter_active("incomplete", True)
         assert 0 in self._visible_source_rows(proxy)
 
     def test_incomplete_filter_catches_undecided_with_work(self, proxy, dataset_model):
         dataset_model.add_annotation(0, "crack", _POLY)
         # no decision set — undecided_work
-        proxy.set_filter_mode("incomplete")
+        proxy.set_status_filter_active("incomplete", True)
         assert 0 in self._visible_source_rows(proxy)
 
     def test_conflicting_filter_shows_only_accept_conflict(self, proxy, dataset_model):
@@ -347,10 +511,144 @@ class TestProxyFilter:
         dataset_model.set_review_decision(0, "accept")  # accept_conflict
         dataset_model.set_review_decision(1, "reject")  # reject_incomplete
         dataset_model.add_annotation(2, "crack", _POLY)  # undecided_work
-        proxy.set_filter_mode("conflicting")
+        proxy.set_status_filter_active("conflicting", True)
         assert self._visible_source_rows(proxy) == [0]
 
     def test_conflicting_filter_excludes_reject_incomplete(self, proxy, dataset_model):
         dataset_model.set_review_decision(0, "reject")
-        proxy.set_filter_mode("conflicting")
+        proxy.set_status_filter_active("conflicting", True)
         assert self._visible_source_rows(proxy) == []
+
+    def test_reviewed_filter_shows_accept_clean_and_reject_reviewed(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "accept")  # accept_clean -- reviewed
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")  # reject_reviewed -- reviewed
+        # row 2 stays undecided -- not reviewed
+        proxy.set_status_filter_active("reviewed", True)
+        assert self._visible_source_rows(proxy) == [0, 1]
+
+    def test_decision_and_status_facets_and_together(self, proxy, dataset_model):
+        """Decision:Reject + Status:Incomplete should narrow to exactly reject_incomplete."""
+        dataset_model.set_review_decision(0, "reject")  # reject_incomplete
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")  # reject_reviewed
+        dataset_model.add_annotation(2, "crack", _POLY)
+        dataset_model.set_review_decision(2, "accept")  # accept_conflict
+
+        proxy.set_decision_filter_active("reject", True)
+        proxy.set_status_filter_active("incomplete", True)
+
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_multiple_decision_selections_are_ored(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.set_review_decision(1, "reject")
+        # row 2 stays undecided
+
+        proxy.set_decision_filter_active("accept", True)
+        proxy.set_decision_filter_active("reject", True)
+
+        assert self._visible_source_rows(proxy) == [0, 1]
+
+    def test_multiple_status_selections_are_ored(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")  # accept_clean -- reviewed
+        # row 1, row 2 stay undecided
+
+        proxy.set_status_filter_active("undecided", True)
+        proxy.set_status_filter_active("reviewed", True)
+
+        assert self._visible_source_rows(proxy) == [0, 1, 2]
+
+    def test_conflicting_and_incomplete_both_checked_equivalent_to_incomplete_alone(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "reject")  # reject_incomplete
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "accept")  # accept_conflict
+
+        proxy.set_status_filter_active("incomplete", True)
+        incomplete_only = self._visible_source_rows(proxy)
+
+        proxy.set_status_filter_active("conflicting", True)
+        both = self._visible_source_rows(proxy)
+
+        assert incomplete_only == both == [0, 1]
+
+    def test_empty_decision_facet_imposes_no_restriction_when_status_set(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(0, "accept")  # accept_clean -- reviewed
+        proxy.set_status_filter_active("reviewed", True)
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_empty_status_facet_imposes_no_restriction_when_decision_set(
+        self, proxy, dataset_model
+    ):
+        dataset_model.set_review_decision(1, "reject")
+        proxy.set_decision_filter_active("reject", True)
+        assert self._visible_source_rows(proxy) == [1]
+
+    def test_clear_filters_resets_to_all_rows(self, proxy, dataset_model):
+        dataset_model.set_review_decision(0, "accept")
+        proxy.set_decision_filter_active("accept", True)
+        proxy.set_status_filter_active("reviewed", True)
+
+        proxy.clear_filters()
+
+        assert proxy.rowCount() == 3
+        assert proxy.decision_filter() == frozenset()
+        assert proxy.status_filter() == frozenset()
+
+    def test_active_filter_count_reflects_both_facets(self, proxy):
+        assert proxy.active_filter_count() == 0
+        proxy.set_decision_filter_active("accept", True)
+        assert proxy.active_filter_count() == 1
+        proxy.set_status_filter_active("reviewed", True)
+        proxy.set_status_filter_active("incomplete", True)
+        assert proxy.active_filter_count() == 3
+
+    def test_class_filter_shows_only_images_with_that_class(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_class("scratch", (0, 255, 0))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.add_annotation(1, "scratch", _POLY)
+
+        proxy.set_class_filter_active("crack", True)
+
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_multiple_class_selections_are_ored(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_class("scratch", (0, 255, 0))
+        dataset_model.add_class("inclusion", (0, 0, 255))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.add_annotation(1, "scratch", _POLY)
+        dataset_model.add_annotation(2, "inclusion", _POLY)
+
+        proxy.set_class_filter_active("crack", True)
+        proxy.set_class_filter_active("scratch", True)
+
+        assert self._visible_source_rows(proxy) == [0, 1]
+
+    def test_class_filter_ands_with_decision_filter(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        dataset_model.set_review_decision(0, "accept")
+        dataset_model.add_annotation(1, "crack", _POLY)
+        dataset_model.set_review_decision(1, "reject")
+
+        proxy.set_class_filter_active("crack", True)
+        proxy.set_decision_filter_active("accept", True)
+
+        assert self._visible_source_rows(proxy) == [0]
+
+    def test_class_filter_excludes_images_without_annotations(self, proxy, dataset_model):
+        dataset_model.add_class("crack", (255, 0, 0))
+        dataset_model.add_annotation(0, "crack", _POLY)
+        # rows 1, 2 have no annotations at all
+
+        proxy.set_class_filter_active("crack", True)
+
+        assert self._visible_source_rows(proxy) == [0]

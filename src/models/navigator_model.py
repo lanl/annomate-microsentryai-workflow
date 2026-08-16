@@ -1,4 +1,4 @@
-from pathlib import Path
+import os
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
 from PySide6.QtGui import QColor, QBrush, QFont
@@ -10,7 +10,6 @@ class NavigatorColumns:
     ANNOTS = 2
     DECISION = 3
     SCORE = 4
-    CLASS = 5
 
 
 SOURCE_ROW_ROLE = Qt.UserRole + 1
@@ -21,20 +20,41 @@ FILTER_COMPLETE_ROLE = (
     Qt.UserRole + 6
 )  # bool: reject + sufficient work for current mode
 IMAGE_STATE_ROLE = Qt.UserRole + 7  # str: one of the six _image_state() keys
+HAS_INSPECTOR_ROLE = Qt.UserRole + 8  # bool: row has a non-empty inspector name
+HAS_NOTE_ROLE = Qt.UserRole + 9  # bool: row has a non-empty note
 
 
-_HEADERS = ["", "Img ID", "Annots", "Decision", "Score", "Class"]
+DECISION_FILTER_OPTIONS = (("accept", "Accept"), ("reject", "Reject"))
+STATUS_FILTER_OPTIONS = (
+    ("undecided", "Undecided"),
+    ("reviewed", "Reviewed"),
+    ("incomplete", "Incomplete"),
+    ("conflicting", "Conflicting"),
+)
+# Maps the six _image_state() keys down to the three status-filter buckets --
+# matches NavigatorTableModel.get_filter_facet_counts()'s partition exactly,
+# so the chip/checkbox counts always agree with what checking them filters to.
+# "conflicting" isn't in this map -- it's checked separately against the raw
+# "accept_conflict" state, since it's an intentional subset of "incomplete"
+# (both true for accept_conflict rows), not a fourth disjoint bucket.
+_STATUS_BUCKET = {
+    "undecided": "undecided",
+    "undecided_work": "incomplete",
+    "accept_clean": "reviewed",
+    "reject_reviewed": "reviewed",
+    "reject_incomplete": "incomplete",
+    "accept_conflict": "incomplete",
+}
+
+_HEADERS = ["", "Img ID", "Annots", "Decision", "Score"]
 _TOOLTIPS = {
     NavigatorColumns.STATUS: "Review status",
     NavigatorColumns.IMG_ID: "Image identifier",
     NavigatorColumns.ANNOTS: "Annotation count",
     NavigatorColumns.DECISION: "Review decision",
     NavigatorColumns.SCORE: "MicroSentry anomaly score",
-    NavigatorColumns.CLASS: "MicroSentry class",
 }
 _DECISION_LABELS = {"accept": "Accept", "reject": "Reject"}
-_DECISION_SORT = {None: 0, "": 0, "accept": 1, "reject": 2}
-_CLASS_SORT = {"": 0, "ANOMALY": 1, "NORMAL": 2}
 
 
 class NavigatorTableModel(QAbstractTableModel):
@@ -91,6 +111,10 @@ class NavigatorTableModel(QAbstractTableModel):
             return self._is_complete(row)
         if role == IMAGE_STATE_ROLE:
             return self._image_state(row)
+        if role == HAS_INSPECTOR_ROLE:
+            return bool(self._dataset_model.get_inspector(row))
+        if role == HAS_NOTE_ROLE:
+            return bool(self._dataset_model.get_note(row))
         if role == STATUS_COLOR_ROLE and col == NavigatorColumns.STATUS:
             return "#4caf50" if self._dataset_model.is_reviewed(row) else "#ff9800"
         if role == Qt.ToolTipRole:
@@ -117,15 +141,10 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.IMG_ID:
             return self._image_stem(row).casefold()
         if col == NavigatorColumns.ANNOTS:
-            return self._dataset_model.get_annotation_count(row)
-        if col == NavigatorColumns.DECISION:
-            return _DECISION_SORT.get(self._dataset_model.get_review_decision(row), 0)
+            return self._work_count(row)
         if col == NavigatorColumns.SCORE:
             score = self._score(row)
             return None if score is None else float(score)
-        if col == NavigatorColumns.CLASS:
-            label = self._label(row) or ""
-            return _CLASS_SORT.get(label, label.casefold())
         return ""
 
     def tie_break_value(self, row: int) -> str:
@@ -136,7 +155,7 @@ class NavigatorTableModel(QAbstractTableModel):
             return
         self.dataChanged.emit(
             self.index(row, NavigatorColumns.SCORE),
-            self.index(row, NavigatorColumns.CLASS),
+            self.index(row, NavigatorColumns.SCORE),
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
 
@@ -145,7 +164,7 @@ class NavigatorTableModel(QAbstractTableModel):
             return
         self.dataChanged.emit(
             self.index(0, NavigatorColumns.SCORE),
-            self.index(self.rowCount() - 1, NavigatorColumns.CLASS),
+            self.index(self.rowCount() - 1, NavigatorColumns.SCORE),
             [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, Qt.ForegroundRole, Qt.FontRole],
         )
 
@@ -161,18 +180,75 @@ class NavigatorTableModel(QAbstractTableModel):
     def get_image_state_label(self, row: int) -> str:
         return self._STATE_LABELS.get(self._image_state(row), "")
 
-    def get_state_counts(self) -> dict:
-        """Return counts of reviewed, incomplete, and undecided images."""
-        reviewed = incomplete = undecided = 0
+    def get_annotation_mode(self) -> str:
+        """Return the current annotation workflow mode (``"pixel"`` or ``"image_level"``)."""
+        return self._dataset_model.get_annotation_mode()
+
+    def class_entries(self, row: int) -> list:
+        """Unique classes on *row* for the current mode, alphabetical, each with its color.
+
+        Pixel mode: classes from polygon annotations. Image-level mode: the
+        image's assigned class tags -- these are two different sources of
+        truth, so which one backs the card's pill tray must follow the mode.
+        """
+        if not (0 <= row < self.rowCount()):
+            return []
+        if self._dataset_model.get_annotation_mode() == "image_level":
+            names = sorted(set(self._dataset_model.get_image_classes(row)))
+        else:
+            names = sorted(
+                {a["category_name"] for a in self._dataset_model.get_annotations(row)}
+            )
+        return [(name, self._dataset_model.get_class_color(name)) for name in names]
+
+    def _work_count(self, row: int) -> int:
+        """Mode-aware "how much work exists on this image" count.
+
+        Pixel mode: number of polygon annotation instances. Image-level mode:
+        number of class tags assigned (tags don't repeat, so this is also
+        the unique class count).
+        """
+        if self._dataset_model.get_annotation_mode() == "image_level":
+            return len(self._dataset_model.get_image_classes(row))
+        return self._dataset_model.get_annotation_count(row)
+
+    def get_filter_facet_counts(self) -> dict:
+        """Image counts for populating the Filter menu's checkbox labels.
+
+        Returns {"decision": {"accept": n, "reject": n},
+                 "status": {"undecided": n, "reviewed": n, "incomplete": n, "conflicting": n},
+                 "class_options": [(name, rgb, image_count), ...]} (class_options
+        alphabetical). Counts are images, not annotation instances -- an image
+        with 3 "crack" annotations counts once toward "crack"'s total.
+        """
+        decision_counts = {"accept": 0, "reject": 0}
+        status_counts = {"undecided": 0, "reviewed": 0, "incomplete": 0, "conflicting": 0}
+        class_counts: dict = {}
+        class_colors: dict = {}
         for row in range(self.rowCount()):
+            decision = self._dataset_model.get_review_decision(row)
+            if decision in decision_counts:
+                decision_counts[decision] += 1
+
             state = self._image_state(row)
-            if state in ("accept_clean", "reject_reviewed"):
-                reviewed += 1
-            elif state in ("reject_incomplete", "accept_conflict", "undecided_work"):
-                incomplete += 1
-            else:
-                undecided += 1
-        return {"reviewed": reviewed, "incomplete": incomplete, "undecided": undecided}
+            bucket = _STATUS_BUCKET.get(state)
+            if bucket in status_counts:
+                status_counts[bucket] += 1
+            if state == "accept_conflict":
+                status_counts["conflicting"] += 1
+
+            for name, rgb in self.class_entries(row):
+                class_counts[name] = class_counts.get(name, 0) + 1
+                class_colors[name] = rgb
+
+        class_options = [
+            (name, class_colors[name], class_counts[name]) for name in sorted(class_counts)
+        ]
+        return {
+            "decision": decision_counts,
+            "status": status_counts,
+            "class_options": class_options,
+        }
 
     def _image_state(self, row: int) -> str:
         """Return a string key describing the review completeness of this image.
@@ -226,7 +302,14 @@ class NavigatorTableModel(QAbstractTableModel):
         self.dataChanged.emit(
             self.index(top, 0),
             self.index(bottom, self.columnCount() - 1),
-            [Qt.DisplayRole, Qt.ToolTipRole, SORT_ROLE, STATUS_COLOR_ROLE],
+            [
+                Qt.DisplayRole,
+                Qt.ToolTipRole,
+                SORT_ROLE,
+                STATUS_COLOR_ROLE,
+                HAS_INSPECTOR_ROLE,
+                HAS_NOTE_ROLE,
+            ],
         )
 
     def _display(self, row: int, col: int) -> str:
@@ -235,7 +318,7 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.IMG_ID:
             return self._image_stem(row)
         if col == NavigatorColumns.ANNOTS:
-            count = self._dataset_model.get_annotation_count(row)
+            count = self._work_count(row)
             return str(count) if count > 0 else ""
         if col == NavigatorColumns.DECISION:
             return _DECISION_LABELS.get(
@@ -244,8 +327,6 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.SCORE:
             score = self._score(row)
             return "" if score is None else f"{score:.2f}"
-        if col == NavigatorColumns.CLASS:
-            return self._label(row) or ""
         return ""
 
     def _tooltip(self, row: int, col: int) -> str:
@@ -303,11 +384,7 @@ class NavigatorTableModel(QAbstractTableModel):
     def _alignment(self, col: int) -> Qt.AlignmentFlag:
         if col in (NavigatorColumns.ANNOTS, NavigatorColumns.SCORE):
             return Qt.AlignRight | Qt.AlignVCenter
-        if col in (
-            NavigatorColumns.STATUS,
-            NavigatorColumns.DECISION,
-            NavigatorColumns.CLASS,
-        ):
+        if col in (NavigatorColumns.STATUS, NavigatorColumns.DECISION):
             return Qt.AlignCenter
         return Qt.AlignLeft | Qt.AlignVCenter
 
@@ -315,10 +392,6 @@ class NavigatorTableModel(QAbstractTableModel):
         if col == NavigatorColumns.DECISION and self._dataset_model.get_review_decision(
             row
         ):
-            font = QFont()
-            font.setBold(True)
-            return font
-        if col == NavigatorColumns.CLASS and self._label(row):
             font = QFont()
             font.setBold(True)
             return font
@@ -331,16 +404,11 @@ class NavigatorTableModel(QAbstractTableModel):
                 return QBrush(QColor("#4caf50"))
             if decision == "reject":
                 return QBrush(QColor("#f44336"))
-        if col == NavigatorColumns.CLASS:
-            label = self._label(row)
-            if label == "ANOMALY":
-                return QBrush(QColor("#f44336"))
-            if label == "NORMAL":
-                return QBrush(QColor("#4caf50"))
         return None
 
     def _image_stem(self, row: int) -> str:
-        return Path(self._dataset_model.get_image_filename(row)).stem
+        name = self._dataset_model.get_image_filename(row)
+        return os.path.splitext(name)[0]
 
     def _image_path(self, row: int) -> str:
         return self._dataset_model.get_image_path(row)
@@ -350,11 +418,6 @@ class NavigatorTableModel(QAbstractTableModel):
             return None
         return self._inference_model.get_score(self._image_path(row))
 
-    def _label(self, row: int) -> str | None:
-        if self._inference_model is None:
-            return None
-        return self._inference_model.get_label(self._image_path(row))
-
 
 class NavigatorSortProxyModel(QSortFilterProxyModel):
     """Type-aware proxy for navigator column sorting and row filtering."""
@@ -363,31 +426,95 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
         super().__init__(parent)
         self.setDynamicSortFilter(True)
         self.setSortCaseSensitivity(Qt.CaseInsensitive)
-        self._filter_mode: str = "all"
+        self._decision_filter: set = set()
+        self._status_filter: set = set()
+        self._class_filter: set = set()
+        self._pinned_source_row: int = -1
 
-    def set_filter_mode(self, mode: str) -> None:
-        self._filter_mode = mode
+    def set_pinned_source_row(self, source_row: int) -> None:
+        """Exempt *source_row* from filtering so editing the open image can't
+        make its own row vanish out from under it. Pass -1 to clear.
+        """
+        if source_row == self._pinned_source_row:
+            return
+        self._pinned_source_row = source_row
         self.invalidateFilter()
 
+    def set_decision_filter_active(self, decision: str, active: bool) -> None:
+        """decision is "accept" or "reject". Empty set imposes no restriction."""
+        if active:
+            self._decision_filter.add(decision)
+        else:
+            self._decision_filter.discard(decision)
+        self.invalidateFilter()
+
+    def set_status_filter_active(self, status: str, active: bool) -> None:
+        """status is one of STATUS_FILTER_OPTIONS' keys. Empty set imposes no restriction."""
+        if active:
+            self._status_filter.add(status)
+        else:
+            self._status_filter.discard(status)
+        self.invalidateFilter()
+
+    def set_class_filter_active(self, class_name: str, active: bool) -> None:
+        """Empty set imposes no restriction; a non-empty set matches images with ANY of them."""
+        if active:
+            self._class_filter.add(class_name)
+        else:
+            self._class_filter.discard(class_name)
+        self.invalidateFilter()
+
+    def clear_filters(self) -> None:
+        self._decision_filter.clear()
+        self._status_filter.clear()
+        self._class_filter.clear()
+        self.invalidateFilter()
+
+    def decision_filter(self) -> frozenset:
+        return frozenset(self._decision_filter)
+
+    def status_filter(self) -> frozenset:
+        return frozenset(self._status_filter)
+
+    def class_filter(self) -> frozenset:
+        return frozenset(self._class_filter)
+
+    def active_filter_count(self) -> int:
+        return (
+            len(self._decision_filter)
+            + len(self._status_filter)
+            + len(self._class_filter)
+        )
+
     def filterAcceptsRow(self, source_row: int, parent: QModelIndex) -> bool:
-        if self._filter_mode == "all":
+        if source_row == self._pinned_source_row:
+            return True
+        if not self._decision_filter and not self._status_filter and not self._class_filter:
             return True
         model = self.sourceModel()
         if model is None:
             return True
         idx = model.index(source_row, 0)
-        if self._filter_mode in ("accept", "reject", "undecided"):
+
+        if self._decision_filter:
             decision = model.data(idx, FILTER_DECISION_ROLE)
-            if self._filter_mode == "accept":
-                return decision == "accept"
-            if self._filter_mode == "reject":
-                return decision == "reject"
-            return not decision  # undecided
-        state = model.data(idx, IMAGE_STATE_ROLE)
-        if self._filter_mode == "incomplete":
-            return state in ("reject_incomplete", "accept_conflict", "undecided_work")
-        if self._filter_mode == "conflicting":
-            return state == "accept_conflict"
+            if decision not in self._decision_filter:
+                return False
+
+        if self._status_filter:
+            state = model.data(idx, IMAGE_STATE_ROLE)
+            bucket_match = _STATUS_BUCKET.get(state) in self._status_filter
+            conflict_match = (
+                "conflicting" in self._status_filter and state == "accept_conflict"
+            )
+            if not (bucket_match or conflict_match):
+                return False
+
+        if self._class_filter:
+            row_classes = {name for name, _rgb in model.class_entries(source_row)}
+            if not (row_classes & self._class_filter):
+                return False
+
         return True
 
     def lessThan(self, left: QModelIndex, right: QModelIndex) -> bool:

@@ -40,6 +40,7 @@ class DatasetState:
         self.notes = {}  # { "img.jpg": "Needs review" }
         self.review_decisions = {}  # { "img.jpg": "accept" | "reject" }
         self.decision_timestamps = {}  # { "img.jpg": ISO-8601 UTC string }
+        self.decision_session_seconds = {}  # { "img.jpg": float } — cumulative project session-seconds at decision time
         self.image_sizes = {}  # { "img.jpg": (width, height) } — cached to avoid PIL reads on save
 
         # Class registry — initialized from defaults, NOT cleared on folder load
@@ -58,6 +59,7 @@ class DatasetState:
         self.notes.clear()
         self.review_decisions.clear()
         self.decision_timestamps.clear()
+        self.decision_session_seconds.clear()
         self.image_sizes.clear()
 
     def reset_classes(self) -> None:
@@ -287,21 +289,32 @@ class DatasetState:
         """
         self.notes[image_name] = value
 
-    def set_review_decision(self, image_name: str, decision) -> None:
+    def set_review_decision(
+        self, image_name: str, decision, session_seconds: float = None
+    ) -> None:
         """Set the image-level review decision.
 
         Args:
             image_name (str): Target image filename.
             decision (str | None): ``"accept"``, ``"reject"``, or ``None`` to clear.
+            session_seconds (float | None): Cumulative project session-seconds at
+                the moment of decision, for tracking progress relative to time
+                actually spent working rather than wall-clock date. Omitted if
+                not supplied (e.g. no project session is active).
         """
         if decision is None:
             self.review_decisions.pop(image_name, None)
             self.decision_timestamps.pop(image_name, None)
+            self.decision_session_seconds.pop(image_name, None)
         else:
             self.review_decisions[image_name] = decision
             self.decision_timestamps[image_name] = datetime.now(
                 timezone.utc
             ).isoformat()
+            if session_seconds is not None:
+                self.decision_session_seconds[image_name] = session_seconds
+            else:
+                self.decision_session_seconds.pop(image_name, None)
 
     def get_review_decision(self, image_name: str):
         """Return the image-level review decision, or None if not set."""

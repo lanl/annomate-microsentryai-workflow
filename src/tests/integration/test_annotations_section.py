@@ -1,11 +1,13 @@
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QTableView
+from PySide6.QtWidgets import QLabel
 
+from core.states.calibration_state import CalibrationState
 from core.states.dataset_state import DatasetState
-from models.annotations_model import ANNOTATION_INDEX_ROLE, AnnotationColumns
+from models.annotations_model import AnnotationColumns
+from models.calibration_model import CalibrationModel
 from models.dataset_model import DatasetTableModel
-from views.annomate.sections.annotations import AnnotationsSection
+from views.annomate.sections.annotations import _ICON_BTN_W, AnnotationsSection
 
 
 @pytest.fixture
@@ -27,151 +29,235 @@ def annotations_section(qtbot):
     return widget, model
 
 
-def _proxy_index_for_annotation(widget, annotation_idx: int, column: int):
-    for row in range(widget._proxy.rowCount()):
-        index = widget._proxy.index(row, column)
-        if index.data(ANNOTATION_INDEX_ROLE) == annotation_idx:
-            return index
-    raise AssertionError(f"Annotation not found in proxy: {annotation_idx}")
+def row_order_annotation_indices(widget):
+    """Annotation indices in current on-screen (top-to-bottom) row order."""
+    return [
+        widget._rows_layout.itemAt(i).widget()._idx
+        for i in range(widget._rows_layout.count())
+    ]
 
 
-def _click_index(qtbot, widget, proxy_index) -> None:
-    rect = widget._table.visualRect(proxy_index)
-    qtbot.mouseClick(widget._table.viewport(), Qt.LeftButton, pos=rect.center())
+def test_annotations_section_uses_plain_widget_rows_sorted_by_class(
+    annotations_section,
+):
+    """Verify AnnotationsSection builds one plain-widget row per annotation, sorted by class.
 
-
-def test_annotations_section_uses_sortable_table_view(annotations_section):
-    """Verify that AnnotationsSection uses a sortable QTableView with correct column configuration.
-
-    Checks that the table view exists, sorting is enabled, the color column has no
-    header text, the vertices column is labeled 'Points', area defaults to 'Area (px)',
-    and the initial sort indicator is on the CLASS column. Success means all structural
-    assertions pass.
+    No QTableView/QAbstractItemView involved -- rows are alphabetically ordered
+    by class name (crack, scratch, void) with no user-facing sort control.
+    Success means the row order matches alphabetical class order and each row
+    exposes the expected sub-widgets.
     """
     widget, _model = annotations_section
 
-    assert widget.findChild(QTableView) is widget._table
-    assert widget._table.isSortingEnabled()
-    assert widget._table_model.headerData(AnnotationColumns.COLOR, Qt.Horizontal) == ""
-    assert (
-        widget._table_model.headerData(AnnotationColumns.VERTICES, Qt.Horizontal)
-        == "Points"
-    )
-    assert (
-        widget._table_model.headerData(AnnotationColumns.AREA, Qt.Horizontal)
-        == "Area (px)"
-    )
-    assert (
-        widget._table.horizontalHeader().sortIndicatorSection()
-        == AnnotationColumns.CLASS
-    )
+    assert len(widget._rows) == 3
+    ordered = row_order_annotation_indices(widget)
+    classes_in_order = [
+        widget._rows[idx]._combo.currentText() for idx in ordered
+    ]
+    assert classes_in_order == ["crack", "scratch", "void"]
 
 
-def test_clicking_sorted_annotation_emits_source_index(annotations_section, qtbot):
-    """Verify that clicking a sorted row emits annotation_selected with the correct source annotation index.
+def test_clicking_row_emits_source_annotation_index(annotations_section, qtbot):
+    """Verify that clicking a row emits annotation_selected with its source annotation index.
 
-    Sorts annotations alphabetically (crack, scratch, void) so the visual order changes.
-    Clicks the row showing annotation index 2 (void). Success means the annotation_selected
-    signal emits the source annotation index 2, not the proxy row number.
+    Annotation index 2 ('void') sorts last alphabetically. Clicking its row
+    must emit source annotation index 2, not its on-screen position.
     """
     widget, _model = annotations_section
-    widget._proxy.sort(AnnotationColumns.CLASS, Qt.AscendingOrder)
-    index = _proxy_index_for_annotation(widget, 2, AnnotationColumns.VERTICES)
+    row = widget._rows[2]
 
     with qtbot.waitSignal(widget.annotation_selected, timeout=1000) as signal:
-        _click_index(qtbot, widget, index)
+        qtbot.mouseClick(row, Qt.LeftButton)
 
     assert signal.args == [2]
     assert widget._selected_idx == 2
+    assert row.styleSheet() != ""  # selected row gets a highlight style
 
 
-def test_deleting_annotation_after_sort_targets_source_index(
-    annotations_section, qtbot
-):
-    """Verify that clicking delete on a sorted row deletes the correct source annotation.
+def test_deleting_annotation_targets_source_index(annotations_section, qtbot):
+    """Verify that clicking a row's delete button removes the correct source annotation.
 
-    Sorts alphabetically and clicks delete for the row showing annotation 0 (scratch).
-    Success means the scratch annotation is removed from the model while crack and void
-    remain, confirming the source index (not proxy row) was used for deletion.
+    Annotation 0 ('scratch') sorts in the middle. Clicking its delete button
+    must remove scratch specifically, leaving crack and void.
     """
     widget, model = annotations_section
-    widget._proxy.sort(AnnotationColumns.CLASS, Qt.AscendingOrder)
-    index = _proxy_index_for_annotation(widget, 0, AnnotationColumns.DELETE)
+    row = widget._rows[0]
 
-    _click_index(qtbot, widget, index)
+    qtbot.mouseClick(row._delete_btn, Qt.LeftButton)
 
     annos = model.get_annotations(0)
     assert len(annos) == 2
     assert [anno["category_name"] for anno in annos] == ["crack", "void"]
 
 
-def test_visibility_button_after_sort_targets_source_index(annotations_section, qtbot):
-    """Verify that clicking the visibility button on a sorted row toggles the correct source annotation.
+def test_visibility_button_targets_source_index(annotations_section, qtbot):
+    """Verify that clicking a row's eye button toggles the correct source annotation.
 
-    Sorts alphabetically and clicks visibility for annotation 0 (scratch). Only the
-    scratch annotation should become hidden; crack and void remain visible. Clicking
-    again should re-show scratch. Success means only the targeted annotation's
-    visibility changes.
+    Only annotation 0 ('scratch') should toggle; crack and void stay visible.
+    Clicking again restores visibility.
     """
     widget, model = annotations_section
-    widget._proxy.sort(AnnotationColumns.CLASS, Qt.AscendingOrder)
-    index = _proxy_index_for_annotation(widget, 0, AnnotationColumns.VISIBILITY)
+    row = widget._rows[0]
 
-    _click_index(qtbot, widget, index)
+    qtbot.mouseClick(row._eye_btn, Qt.LeftButton)
 
     assert model.get_annotations(0)[0]["visible"] is False
     assert model.get_annotations(0)[1].get("visible", True) is True
     assert model.get_annotations(0)[2].get("visible", True) is True
 
-    index = _proxy_index_for_annotation(widget, 0, AnnotationColumns.VISIBILITY)
-    _click_index(qtbot, widget, index)
+    row = widget._rows[0]  # rows were rebuilt after the model reset
+    qtbot.mouseClick(row._eye_btn, Qt.LeftButton)
 
     assert model.get_annotations(0)[0]["visible"] is True
 
 
-def test_annotations_table_expands_to_show_all_rows(annotations_section, qtbot):
-    """Verify that the annotations table dynamically grows in height to show all rows without a scrollbar.
-
-    Confirms the table has no vertical scrollbar and all rows are visible without
-    scrolling. After adding a new annotation, the table should grow taller to
-    accommodate the new row. Success means the table height increases and the last
-    row remains visible after the addition.
-    """
+def test_rows_rebuild_when_annotation_added(annotations_section, qtbot):
+    """Verify a new annotation gets its own row without disturbing the others."""
     widget, model = annotations_section
 
-    assert widget._table.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-    last_index = widget._proxy.index(
-        widget._proxy.rowCount() - 1, AnnotationColumns.CLASS
-    )
-    assert (
-        widget._table.visualRect(last_index).bottom()
-        < widget._table.viewport().height()
-    )
-
-    old_height = widget._table.height()
-    model.add_annotation(0, "Crack", [(0, 0), (1, 0), (1, 1)])
+    model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
     qtbot.wait(50)
 
-    last_index = widget._proxy.index(
-        widget._proxy.rowCount() - 1, AnnotationColumns.CLASS
-    )
-    assert widget._table.height() > old_height
-    assert (
-        widget._table.visualRect(last_index).bottom()
-        < widget._table.viewport().height()
-    )
+    assert len(widget._rows) == 4
+    assert 3 in widget._rows
 
 
-def test_editing_class_column_updates_source_annotation(annotations_section):
-    """Verify that editing the class column in the view updates the underlying dataset annotation.
-
-    Uses setData on the table model's class column to change the first annotation's
-    category to 'void'. Success means the dataset model reflects 'void' as the new
-    category_name for that annotation.
-    """
+def test_changing_class_via_combo_updates_source_annotation(annotations_section, qtbot):
+    """Verify changing a row's class combo box updates the underlying annotation."""
     widget, model = annotations_section
-    source_index = widget._table_model.index(0, AnnotationColumns.CLASS)
+    row = widget._rows[0]  # scratch
 
-    assert widget._table_model.setData(source_index, "void", Qt.EditRole)
+    pos = row._combo.findText("void")
+    row._combo.setCurrentIndex(pos)
+    row.class_changed.emit(0, "void")
 
     assert model.get_annotations(0)[0]["category_name"] == "void"
+
+
+def test_header_labels_class_points_area_only(annotations_section):
+    """Verify the compact labels Class/Pts/Area and blank action headers.
+
+    The header must be visible once there are annotations, and its text
+    should match the model's own header labels (so the "Area" unit stays in
+    sync with calibration) rather than being hand-duplicated in the view.
+    """
+    widget, _model = annotations_section
+
+    assert widget._header_row.isVisible() is True
+    header_labels = widget._header_row.findChildren(QLabel)
+    header_texts = [lbl.text() for lbl in header_labels]
+
+    assert (
+        widget._table_model.headerData(AnnotationColumns.CLASS, Qt.Horizontal)
+        in header_texts
+    )
+    assert widget._vertices_header_lbl.text() == "Pts"
+    assert widget._vertices_header_lbl.toolTip() == "Node count"
+    assert widget._area_header_lbl.text() == "Area"
+    assert widget._area_header_lbl.toolTip() == "Area (px)"
+    # Swatch/eye/delete columns stay blank -- three empty-text spacer labels.
+    assert header_texts.count("") == 3
+
+
+def test_header_hidden_when_no_annotations(qtbot):
+    """Verify the column header row is hidden (not just the rows) when there's nothing to label."""
+    model = DatasetTableModel(DatasetState())
+    model.add_class("crack", (255, 0, 0))
+    model.load_folder("/fake", ["img.jpg"])
+
+    widget = AnnotationsSection(model)
+    qtbot.addWidget(widget)
+    widget.set_current_row(0)
+    widget.show()
+    qtbot.wait(20)
+
+    assert widget._header_row.isVisible() is False
+
+
+def test_row_widths_match_header_so_combo_boxes_align(annotations_section):
+    """Verify every row's Nodes/Area/eye/delete widths match the header's, so columns line up.
+
+    This is what keeps the class combo box the same width on every row --
+    once the other cells are pinned to fixed widths, the only stretchy
+    element (the combo, stretch=1) fills identical leftover space everywhere,
+    regardless of how long that row's class name, node count, or area text is.
+    """
+    widget, _model = annotations_section
+
+    combo_widths = {row._combo.width() for row in widget._rows.values()}
+    assert len(combo_widths) == 1  # every combo box ends up the same width
+
+    for row in widget._rows.values():
+        assert row.layout().itemAt(2).widget().width() == widget._vertices_col_w
+        assert row.layout().itemAt(3).widget().width() == widget._area_col_w
+        assert row._eye_btn.width() == _ICON_BTN_W
+        assert row._delete_btn.width() == _ICON_BTN_W
+
+
+def test_column_widths_derive_from_header_text_not_a_fixed_number(annotations_section):
+    """Verify Nodes/Area column widths are computed from their own header label.
+
+    Renaming a header (e.g. "Nodes" -> "N") should shrink its column
+    automatically, freeing more space for the class combo box, instead of
+    requiring a hand-tuned pixel constant that can clip when edited.
+    """
+    from views.annomate.sections.annotations import _header_label_width
+
+    widget, _model = annotations_section
+
+    assert widget._vertices_col_w == _header_label_width(
+        widget._vertices_header_lbl.text()
+    )
+    assert widget._area_col_w == _header_label_width(widget._area_header_lbl.text())
+
+
+def test_numeric_columns_expand_to_fit_largest_displayed_value(
+    annotations_section, qtbot
+):
+    """A large area widens the shared Area header and every Area cell."""
+    from views.annomate.sections.annotations import _cell_text_width
+
+    widget, model = annotations_section
+    model.add_annotation(
+        0, "crack", [(0, 0), (123000, 0), (123000, 1), (0, 1)]
+    )
+    qtbot.wait(20)
+
+    assert widget._area_col_w >= _cell_text_width("123000")
+    for row in widget._rows.values():
+        assert row.layout().itemAt(3).widget().width() == widget._area_col_w
+
+
+def test_area_unit_stays_in_tooltip_after_calibration_change(qtbot):
+    """The compact Area header retains unit context when calibration changes."""
+    model = DatasetTableModel(DatasetState())
+    model.add_class("crack", (255, 0, 0))
+    model.load_folder("/fake", ["img.jpg"])
+    model.add_annotation(0, "crack", [(0, 0), (1, 0), (1, 1)])
+    calibration_model = CalibrationModel(CalibrationState())
+    widget = AnnotationsSection(model, calibration_model)
+    qtbot.addWidget(widget)
+    widget.set_current_row(0)
+
+    calibration_model.set_calib_points((0.0, 0.0), (100.0, 0.0))
+    calibration_model.apply_calibration(5.0, "mm")
+    qtbot.wait(20)
+
+    assert widget._area_header_lbl.text() == "Area"
+    assert widget._area_header_lbl.toolTip() == "Area (mm)"
+
+
+def test_no_annotations_label_shown_when_empty(qtbot):
+    """Verify the empty-state label shows when the current image has no annotations."""
+    model = DatasetTableModel(DatasetState())
+    model.add_class("crack", (255, 0, 0))
+    model.load_folder("/fake", ["img.jpg"])
+
+    widget = AnnotationsSection(model)
+    qtbot.addWidget(widget)
+    widget.set_current_row(0)
+    widget.show()
+    qtbot.wait(20)
+
+    assert widget._empty_lbl.isVisible() is True
+    assert len(widget._rows) == 0

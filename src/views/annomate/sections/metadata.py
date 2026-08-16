@@ -11,8 +11,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QToolButton,
     QTextEdit,
 )
+
+from views.icons import material_icon
 
 
 class _SetAllInspectorDialog(QDialog):
@@ -134,25 +137,27 @@ class MetadataSection(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        layout.addWidget(QLabel("Inspector"))
+        inspector_header_lbl = QLabel("Inspector")
+        inspector_header_lbl.setStyleSheet("color: black;")
+        layout.addWidget(inspector_header_lbl)
 
         inspector_row = QHBoxLayout()
         inspector_row.setSpacing(4)
         self._inspector_edit = QLineEdit()
         self._inspector_edit.setPlaceholderText("Inspector name…")
         self._inspector_edit.editingFinished.connect(self._store_inspector)
-        inspector_row.addWidget(self._inspector_edit)
+        inspector_row.addWidget(self._inspector_edit, stretch=1)
 
-        self._set_inspector_btn = QPushButton("Set Inspector")
-        self._set_inspector_btn.setFixedWidth(95)
+        self._set_inspector_btn = QPushButton(material_icon("person", color="black"), "Set")
+        self._set_inspector_btn.setFixedWidth(58)
         self._set_inspector_btn.setToolTip(
             "Set as session inspector - auto-fills new images as you navigate"
         )
         self._set_inspector_btn.clicked.connect(self._on_set_inspector)
         inspector_row.addWidget(self._set_inspector_btn)
 
-        self._set_all_btn = QPushButton("Set All")
-        self._set_all_btn.setFixedWidth(60)
+        self._set_all_btn = QPushButton(material_icon("groups", color="black"), "Set All")
+        self._set_all_btn.setFixedWidth(78)
         self._set_all_btn.setToolTip(
             "Bulk-assign an inspector name to a filtered set of images"
         )
@@ -161,20 +166,66 @@ class MetadataSection(QWidget):
         layout.addLayout(inspector_row)
 
         self._session_lbl = QLabel("Session Inspector: —")
-        self._session_lbl.setStyleSheet("color: grey; font-size: 11px;")
+        self._session_lbl.setStyleSheet("color: black; font-size: 11px;")
         layout.addWidget(self._session_lbl)
 
-        layout.addWidget(QLabel("Image note"))
+        note_header = QHBoxLayout()
+        note_header.setSpacing(4)
+        note_header_lbl = QLabel("Image note")
+        note_header_lbl.setStyleSheet("color: black;")
+        note_header.addWidget(note_header_lbl)
+        note_header.addStretch()
+
+        self._expand_note_btn = QToolButton()
+        self._expand_note_btn.setAutoRaise(True)
+        self._expand_note_btn.setCheckable(True)
+        self._expand_note_btn.setIcon(material_icon("expand_more", color="black"))
+        self._expand_note_btn.setToolTip("Expand inspector notes")
+        self._expand_note_btn.toggled.connect(self._set_note_expanded)
+        note_header.addWidget(self._expand_note_btn)
+        layout.addLayout(note_header)
 
         self._note_edit = QTextEdit()
         self._note_edit.setPlaceholderText("Add a note…")
-        self._note_edit.setMaximumHeight(80)
         self._note_edit.textChanged.connect(self._store_note)
+        self._set_note_expanded(False)
         layout.addWidget(self._note_edit)
+        self._set_note_expanded(False)
+
+    def _note_height_for_lines(self, lines: int) -> int:
+        """Return an editor height that exposes approximately *lines* text rows."""
+        line_height = self._note_edit.fontMetrics().lineSpacing()
+        document_margins = round(self._note_edit.document().documentMargin() * 2)
+        frame = self._note_edit.frameWidth() * 2
+        return line_height * lines + document_margins + frame
+
+    def _set_note_expanded(self, expanded: bool) -> None:
+        """Toggle inspector notes between a compact two-line and expanded view."""
+        lines = 7 if expanded else 2
+        self._note_edit.setFixedHeight(self._note_height_for_lines(lines))
+        self._expand_note_btn.setIcon(
+            material_icon("expand_less" if expanded else "expand_more", color="black")
+        )
+        self._expand_note_btn.setToolTip(
+            "Collapse inspector notes" if expanded else "Expand inspector notes"
+        )
 
     def set_current_row(self, row: int) -> None:
         self._current_row = row
         self._load_fields()
+
+    def commit_pending_edits(self) -> None:
+        """Force-save an in-progress inspector edit that hasn't lost focus yet.
+
+        The inspector field only saves on editingFinished (Enter or focus
+        loss); callers that reparent or hide this widget before that fires
+        must call this first or the edit is silently lost. Calls the store
+        logic directly rather than relying solely on clearFocus() to trigger
+        editingFinished, since focus-loss delivery is unreliable on
+        headless/offscreen Qt platforms (e.g. Linux CI).
+        """
+        self._store_inspector()
+        self._inspector_edit.clearFocus()
 
     def _load_fields(self) -> None:
         self._inspector_edit.blockSignals(True)

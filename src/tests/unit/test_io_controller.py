@@ -52,6 +52,41 @@ class TestLoadFolder:
         controller.load_folder(str(tmp_path))
         assert model.rowCount() == 0
 
+    def test_recurses_into_nested_subfolders(self, setup, tmp_path):
+        """Images nested arbitrarily deep are discovered as dataset-relative paths.
+
+        Builds root.png, nest1/nest1.png, nest1/nest2/nest2.png and confirms all
+        three are loaded with their relative path (POSIX-separated) as identity.
+        """
+        model, controller, _ = setup
+        (tmp_path / "root.png").touch()
+        (tmp_path / "nest1").mkdir()
+        (tmp_path / "nest1" / "nest1.png").touch()
+        (tmp_path / "nest1" / "nest2").mkdir()
+        (tmp_path / "nest1" / "nest2" / "nest2.png").touch()
+
+        controller.load_folder(str(tmp_path))
+
+        assert model.rowCount() == 3
+        names = {model.get_image_filename(i) for i in range(model.rowCount())}
+        assert names == {"root.png", "nest1/nest1.png", "nest1/nest2/nest2.png"}
+
+    def test_same_basename_in_different_folders_are_distinct_rows(
+        self, setup, tmp_path
+    ):
+        """Two images sharing a basename in different subfolders don't collide."""
+        model, controller, _ = setup
+        (tmp_path / "nest1").mkdir()
+        (tmp_path / "nest1" / "dup.png").touch()
+        (tmp_path / "nest3").mkdir()
+        (tmp_path / "nest3" / "dup.png").touch()
+
+        controller.load_folder(str(tmp_path))
+
+        assert model.rowCount() == 2
+        names = {model.get_image_filename(i) for i in range(model.rowCount())}
+        assert names == {"nest1/dup.png", "nest3/dup.png"}
+
 
 class TestExportCsv:
     def test_csv_has_correct_columns(self, setup, tmp_path):
@@ -96,6 +131,35 @@ class TestExportCsv:
             row = list(csv.DictReader(f))[0]
         assert row["image_classes"] == "scratch,dent"
         assert row["pixel_classes"] == ""
+
+    def test_tray_is_per_image_parent_folder_for_nested_input(self, setup, tmp_path):
+        """tray reflects each image's immediate containing folder when nested."""
+        model, controller, _ = setup
+        (tmp_path / "root.png").touch()
+        (tmp_path / "nest1").mkdir()
+        (tmp_path / "nest1" / "nest1.png").touch()
+        (tmp_path / "nest1" / "nest2").mkdir()
+        (tmp_path / "nest1" / "nest2" / "nest2.png").touch()
+        controller.load_folder(str(tmp_path))
+        out_path = str(tmp_path / "out.csv")
+        controller.export_csv(out_path)
+        with open(out_path) as f:
+            rows = {r["image_name"]: r["tray"] for r in csv.DictReader(f)}
+        assert rows["root.png"] == tmp_path.name
+        assert rows["nest1/nest1.png"] == "nest1"
+        assert rows["nest1/nest2/nest2.png"] == "nest2"
+
+    def test_tray_is_one_constant_for_flat_input(self, setup, tmp_path):
+        """Unnested projects keep today's behavior: one tray value for every row."""
+        model, controller, _ = setup
+        (tmp_path / "a.jpg").touch()
+        (tmp_path / "b.jpg").touch()
+        controller.load_folder(str(tmp_path))
+        out_path = str(tmp_path / "out.csv")
+        controller.export_csv(out_path)
+        with open(out_path) as f:
+            trays = {r["tray"] for r in csv.DictReader(f)}
+        assert trays == {tmp_path.name}
 
 
 class TestAnnotationClassFiles:
@@ -250,6 +314,30 @@ class TestExportPixelTrainStructure:
             (tmp_path / "out").rglob("img.jpg")
         )
 
+    def test_nested_source_path_does_not_crash_and_flattens_to_basename(
+        self, setup, tmp_path
+    ):
+        """A nested image name must not raise FileNotFoundError on copy/mask write.
+
+        MVTec-style test/{defect}/ and ground_truth/{defect}/ are a single
+        category level determined by annotation class, not by the source
+        folder layout — so the source subfolder (e.g. "nest1") must NOT be
+        preserved as an extra nesting level in the output (that would double
+        up with the {defect} folder for real datasets whose source folders
+        happen to already be named after defect categories).
+        """
+        model, controller, _ = setup
+        (tmp_path / "nest1").mkdir()
+        self._make_jpg(tmp_path / "nest1" / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "crack", [(0, 0), (5, 0), (5, 5)])
+        model.set_review_decision(0, "reject")
+        out = str(tmp_path / "out")
+        controller.export_pixel_train_structure(out)
+        assert (tmp_path / "out" / "test" / "crack" / "img.jpg").exists()
+        assert (tmp_path / "out" / "ground_truth" / "crack" / "img.png").exists()
+        assert not (tmp_path / "out" / "test" / "crack" / "nest1").exists()
+
 
 class TestExportImageLevelTrainStructure:
     def _make_jpg(self, path):
@@ -304,3 +392,68 @@ class TestExportImageLevelTrainStructure:
         out = str(tmp_path / "out")
         controller.export_image_level_train_structure(out)
         assert not (tmp_path / "out" / "test").exists()
+
+    def test_nested_source_path_does_not_crash_and_flattens_to_basename(
+        self, setup, tmp_path
+    ):
+        """A nested image name must not raise FileNotFoundError, and the source
+        subfolder must not be preserved as an extra nesting level under
+        train/good/ (see the equivalent pixel-train-structure test for why)."""
+        model, controller, _ = setup
+        (tmp_path / "nest1").mkdir()
+        self._make_jpg(tmp_path / "nest1" / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.set_review_decision(0, "accept")
+        out = str(tmp_path / "out")
+        controller.export_image_level_train_structure(out)
+        assert (tmp_path / "out" / "train" / "good" / "img.jpg").exists()
+        assert not (tmp_path / "out" / "train" / "good" / "nest1").exists()
+
+
+class TestExportBinaryMasks:
+    def _make_jpg(self, path):
+        from PIL import Image as PILImage
+
+        PILImage.new("RGB", (10, 10)).save(path)
+
+    def test_mask_written_for_annotated_image(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "crack", [(0, 0), (5, 0), (5, 5)])
+        out = str(tmp_path / "ground_truth")
+        controller.export_binary_masks(out)
+        assert (tmp_path / "ground_truth" / "img.png").exists()
+
+    def test_image_without_annotations_is_skipped(self, setup, tmp_path):
+        model, controller, _ = setup
+        self._make_jpg(tmp_path / "img.jpg")
+        controller.load_folder(str(tmp_path))
+        out = str(tmp_path / "ground_truth")
+        controller.export_binary_masks(out)
+        assert not (tmp_path / "ground_truth" / "img.png").exists()
+
+    def test_nested_source_structure_is_mirrored(self, setup, tmp_path):
+        """Masks for nested images land at the same relative path under out_dir."""
+        model, controller, _ = setup
+        (tmp_path / "nest1" / "nest2").mkdir(parents=True)
+        self._make_jpg(tmp_path / "nest1" / "nest2" / "nest2.jpg")
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "crack", [(0, 0), (5, 0), (5, 5)])
+        out = str(tmp_path / "ground_truth")
+        controller.export_binary_masks(out)
+        assert (tmp_path / "ground_truth" / "nest1" / "nest2" / "nest2.png").exists()
+
+    def test_same_basename_in_different_folders_do_not_collide(self, setup, tmp_path):
+        model, controller, _ = setup
+        (tmp_path / "nest1").mkdir()
+        self._make_jpg(tmp_path / "nest1" / "dup.jpg")
+        (tmp_path / "nest3").mkdir()
+        self._make_jpg(tmp_path / "nest3" / "dup.jpg")
+        controller.load_folder(str(tmp_path))
+        model.add_annotation(0, "crack", [(0, 0), (5, 0), (5, 5)])
+        model.add_annotation(1, "void", [(0, 0), (5, 0), (5, 5)])
+        out = str(tmp_path / "ground_truth")
+        controller.export_binary_masks(out)
+        assert (tmp_path / "ground_truth" / "nest1" / "dup.png").exists()
+        assert (tmp_path / "ground_truth" / "nest3" / "dup.png").exists()

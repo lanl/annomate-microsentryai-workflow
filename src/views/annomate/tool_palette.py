@@ -2,61 +2,49 @@
 ToolPalette — left tool column for the AnnoMate main window.
 
 Layout (top to bottom):
-  ⬠  Polygon tool
-  ◢  Brush thickness popup
-  ── divider ──
-  ✦  SAM Segment tool
-  ⚙  SAM Options popup
+  hexagon        Polygon tool
+  point          Edit Points tool (add/remove vertices on a closed polygon)
+  auto_fix_high  SAM Segment tool
+  straighten     Measure Distance tool (disabled until a calibration scale exists)
+
+Tool-specific settings (brush thickness, SAM options, ...) live in the
+"Active Tool" tab of the right activity bar, not here -- this column is
+tool selection only.
 """
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QFrame,
+    QWidget,
     QVBoxLayout,
     QToolButton,
     QButtonGroup,
     QSizePolicy,
-    QMenu,
-    QWidgetAction,
-    QSlider,
-    QLabel,
-    QHBoxLayout,
-    QWidget,
-    QComboBox,
 )
-from PySide6.QtGui import QFont
 
-# Maps human-readable combo label → internal variant key used by SAMStrategy
-_SAM_VARIANT_MAP = {
-    "SAM2.1 Tiny": "sam2_t.pt",
-    "SAM2.1 Small": "sam2_s.pt",
-    "SAM2.1 Base+": "sam2_b.pt",
-    "SAM2.1 Large": "sam2_l.pt",
-}
+from views.icons import material_icon
 
 _BTN_W = 44
 _BTN_H = 40
+_ICON_SIZE = 22
 
 
-class ToolPalette(QFrame):
+class ToolPalette(QWidget):
     """Single-column tool panel.
 
     Signals:
         tool_selected (str): Emitted with the tool name when a button is pressed.
-        thickness_changed (float): Emitted when the brush thickness slider moves.
-        sam_variant_changed (str): Emitted when the SAM model variant combo changes.
     """
 
     tool_selected = Signal(str)
-    thickness_changed = Signal(float)
-    sam_variant_changed = Signal(str)
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, calibration_model=None) -> None:
         super().__init__(parent)
-        self.setFrameStyle(QFrame.StyledPanel | QFrame.Plain)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setStyleSheet("ToolPalette { border-right: 1px solid palette(mid); }")
         self.setFixedWidth(56)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
 
+        self._calib_model = calibration_model
         self._btn_tool: dict = {}
         self._active_tool: str = ""
         self._btn_group = QButtonGroup(self)
@@ -68,129 +56,71 @@ class ToolPalette(QFrame):
         layout.setSpacing(4)
         layout.setAlignment(Qt.AlignTop)
 
-        font = QFont()
-        font.setPointSize(18)
-
         # ------------------------------------------------------------------ #
         # Polygon tool
         # ------------------------------------------------------------------ #
         poly_btn = QToolButton()
-        poly_btn.setText("⬠")
+        poly_btn.setIcon(material_icon("hexagon", size=_ICON_SIZE, color="black"))
+        poly_btn.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
         poly_btn.setToolTip("Polygon (P)")
         poly_btn.setFixedSize(_BTN_W, _BTN_H)
         poly_btn.setCheckable(True)
-        poly_btn.setFont(font)
         self._btn_tool[poly_btn] = "polygon"
         self._btn_group.addButton(poly_btn)
         layout.addWidget(poly_btn)
         self._drawing_btns.append(poly_btn)
 
         # ------------------------------------------------------------------ #
-        # Brush thickness popup
+        # Edit Points tool
         # ------------------------------------------------------------------ #
-        btn_thickness = QToolButton()
-        btn_thickness.setText("◢")
-        btn_thickness.setToolTip("Brush Thickness")
-        btn_thickness.setFixedSize(_BTN_W, _BTN_H)
-        btn_thickness.setFont(font)
-        btn_thickness.setPopupMode(QToolButton.InstantPopup)
-        self._drawing_btns.append(btn_thickness)
-
-        thickness_menu = QMenu(self)
-        thickness_action = QWidgetAction(self)
-        t_container = QWidget()
-        t_h = QHBoxLayout(t_container)
-        t_h.setContentsMargins(8, 4, 8, 4)
-
-        self.slider_thickness = QSlider(Qt.Horizontal)
-        self.slider_thickness.setRange(1, 40)
-        self.slider_thickness.setValue(8)  # 8 × 0.25 = 2.00 px default
-        self.slider_thickness.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.slider_thickness.setTickInterval(4)
-        self.slider_thickness.setMinimumWidth(150)
-
-        self.lbl_thickness = QLabel("2.00 px")
-        self.lbl_thickness.setFixedWidth(55)
-
-        t_h.addWidget(self.slider_thickness)
-        t_h.addWidget(self.lbl_thickness)
-        thickness_action.setDefaultWidget(t_container)
-        thickness_menu.addAction(thickness_action)
-        btn_thickness.setMenu(thickness_menu)
-        layout.addWidget(btn_thickness)
-        self.slider_thickness.valueChanged.connect(self._on_slider_changed)
-
-        # ------------------------------------------------------------------ #
-        # Divider
-        # ------------------------------------------------------------------ #
-        divider = QFrame()
-        divider.setFrameShape(QFrame.HLine)
-        divider.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(divider)
+        point_btn = QToolButton()
+        point_btn.setIcon(material_icon("point", size=_ICON_SIZE, color="black"))
+        point_btn.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
+        point_btn.setToolTip("Edit Points (N)")
+        point_btn.setFixedSize(_BTN_W, _BTN_H)
+        point_btn.setCheckable(True)
+        self._btn_tool[point_btn] = "edit_points"
+        self._btn_group.addButton(point_btn)
+        layout.addWidget(point_btn)
+        self._drawing_btns.append(point_btn)
 
         # ------------------------------------------------------------------ #
         # SAM tool
         # ------------------------------------------------------------------ #
         sam_btn = QToolButton()
-        sam_btn.setText("✦")
+        sam_btn.setIcon(material_icon("auto_fix_high", size=_ICON_SIZE, color="black"))
+        sam_btn.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
         sam_btn.setToolTip("SAM Segment (S)")
         sam_btn.setFixedSize(_BTN_W, _BTN_H)
         sam_btn.setCheckable(True)
-        sam_btn.setFont(font)
         self._btn_tool[sam_btn] = "sam_bbox"
         self._btn_group.addButton(sam_btn)
         layout.addWidget(sam_btn)
         self._drawing_btns.append(sam_btn)
 
         # ------------------------------------------------------------------ #
-        # SAM options popup
+        # Measure tool -- needs a calibration scale to do anything useful
         # ------------------------------------------------------------------ #
-        btn_sam_opts = QToolButton()
-        btn_sam_opts.setText("⚙︎")
-        btn_sam_opts.setToolTip("SAM Options")
-        btn_sam_opts.setFixedSize(_BTN_W, _BTN_H)
-        btn_sam_opts.setFont(font)
-        btn_sam_opts.setPopupMode(QToolButton.InstantPopup)
-        self._drawing_btns.append(btn_sam_opts)
-
-        sam_menu = QMenu(self)
-        sam_action = QWidgetAction(self)
-        sam_container = QWidget()
-        sam_v = QVBoxLayout(sam_container)
-        sam_v.setContentsMargins(8, 6, 8, 6)
-        sam_v.setSpacing(4)
-
-        variant_row = QHBoxLayout()
-        variant_row.addWidget(QLabel("Variant:"))
-        self.sam_variant_combo = QComboBox()
-        self.sam_variant_combo.addItems(list(_SAM_VARIANT_MAP.keys()))
-        self.sam_variant_combo.setToolTip(
-            "SAM 2 model size — tiny is fastest, large is most accurate.\n"
-            "Weights are downloaded to sam_weights/ on first use."
-        )
-        self.sam_variant_combo.setMinimumWidth(130)
-        variant_row.addWidget(self.sam_variant_combo)
-        sam_v.addLayout(variant_row)
-
-        self.sam_status_lbl = QLabel("Model: not loaded")
-        self.sam_status_lbl.setStyleSheet("color: grey; font-style: italic;")
-        sam_v.addWidget(self.sam_status_lbl)
-
-        sam_action.setDefaultWidget(sam_container)
-        sam_menu.addAction(sam_action)
-        btn_sam_opts.setMenu(sam_menu)
-        layout.addWidget(btn_sam_opts)
-        self.sam_variant_combo.currentTextChanged.connect(self._on_sam_combo_changed)
+        measure_btn = QToolButton()
+        measure_btn.setIcon(material_icon("straighten", size=_ICON_SIZE, color="black"))
+        measure_btn.setIconSize(QSize(_ICON_SIZE, _ICON_SIZE))
+        measure_btn.setToolTip("Measure Distance (M)")
+        measure_btn.setFixedSize(_BTN_W, _BTN_H)
+        measure_btn.setCheckable(True)
+        self._btn_tool[measure_btn] = "measure"
+        self._btn_group.addButton(measure_btn)
+        layout.addWidget(measure_btn)
+        self._btn_measure = measure_btn
 
         self._btn_group.buttonClicked.connect(self._on_btn_clicked)
+
+        if self._calib_model is not None:
+            self._calib_model.calibration_changed.connect(self._refresh_measure_enabled)
+        self._refresh_measure_enabled()
 
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
-
-    def current_sam_variant(self) -> str:
-        """Return the internal variant key for the currently selected SAM model."""
-        return _SAM_VARIANT_MAP.get(self.sam_variant_combo.currentText(), "sam2_t.pt")
 
     def deselect_all(self) -> None:
         """Uncheck all tool buttons (called when the canvas cancels a tool)."""
@@ -220,12 +150,27 @@ class ToolPalette(QFrame):
         """Toggle the SAM segment tool on/off."""
         self._toggle_tool("sam_bbox")
 
+    def toggle_edit_points(self) -> None:
+        """Toggle the Edit Points tool on/off."""
+        self._toggle_tool("edit_points")
+
+    def toggle_measure(self) -> None:
+        """Toggle the measure tool on/off (no-op without a calibration scale)."""
+        if self._btn_measure.isEnabled():
+            self._toggle_tool("measure")
+
     # ------------------------------------------------------------------ #
     # Internal slots
     # ------------------------------------------------------------------ #
 
-    def _on_sam_combo_changed(self, display_name: str) -> None:
-        self.sam_variant_changed.emit(_SAM_VARIANT_MAP.get(display_name, "sam2_t.pt"))
+    def _refresh_measure_enabled(self) -> None:
+        scale_available = (
+            self._calib_model is not None and self._calib_model.has_scale()
+        )
+        self._btn_measure.setEnabled(scale_available)
+        if not scale_available and self._active_tool == "measure":
+            self.deselect_all()
+            self.tool_selected.emit("")
 
     def _on_btn_clicked(self, btn: QToolButton) -> None:
         tool_name = self._btn_tool.get(btn, "")
@@ -236,11 +181,6 @@ class ToolPalette(QFrame):
             self._active_tool = tool_name
             self.tool_selected.emit(tool_name)
 
-    def _on_slider_changed(self, value: int) -> None:
-        thickness = value * 0.25
-        self.lbl_thickness.setText(f"{thickness:.2f} px")
-        self.thickness_changed.emit(thickness)
-
     def _toggle_tool(self, tool_name: str) -> None:
         for btn, name in self._btn_tool.items():
             if name == tool_name:
@@ -249,8 +189,9 @@ class ToolPalette(QFrame):
                     self.tool_selected.emit("")
                 else:
                     self._active_tool = tool_name
-                    self._btn_group.setExclusive(False)
+                    # The group stays exclusive=True, so checking btn here
+                    # already auto-unchecks whichever tool was previously
+                    # active -- no need to toggle exclusivity off and on.
                     btn.setChecked(True)
-                    self._btn_group.setExclusive(True)
                     self.tool_selected.emit(tool_name)
                 return

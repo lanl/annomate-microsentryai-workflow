@@ -217,6 +217,61 @@ class TestIsReviewed:
         assert not state.is_reviewed("img.jpg")
 
 
+class TestDecisionSessionSeconds:
+    def test_session_seconds_stored_alongside_decision(self, state):
+        """Verify that session_seconds is recorded when a decision is set.
+
+        Success means decision_session_seconds holds the value passed in.
+        """
+        state.set_review_decision("img.jpg", "accept", session_seconds=123.5)
+        assert state.decision_session_seconds["img.jpg"] == 123.5
+
+    def test_decision_timestamp_and_session_seconds_both_recorded(self, state):
+        """Verify that both the wall-clock timestamp and session-relative seconds are stored.
+
+        Success means decision_timestamps and decision_session_seconds each have
+        an entry for the same image after a single call.
+        """
+        state.set_review_decision("img.jpg", "reject", session_seconds=42.0)
+        assert "img.jpg" in state.decision_timestamps
+        assert state.decision_session_seconds["img.jpg"] == 42.0
+
+    def test_session_seconds_omitted_when_not_supplied(self, state):
+        """Verify that no session-seconds entry is created if none is passed in.
+
+        Success means decision_session_seconds has no entry for the image, even
+        though the decision itself is still recorded.
+        """
+        state.set_review_decision("img.jpg", "accept")
+        assert state.review_decisions["img.jpg"] == "accept"
+        assert "img.jpg" not in state.decision_session_seconds
+
+    def test_session_seconds_cleared_when_decision_cleared(self, state):
+        """Verify that clearing a decision also clears its recorded session-seconds.
+
+        Success means decision_session_seconds no longer has an entry for the
+        image after the decision is set back to None.
+        """
+        state.set_review_decision("img.jpg", "accept", session_seconds=10.0)
+        state.set_review_decision("img.jpg", None)
+        assert "img.jpg" not in state.decision_session_seconds
+
+    def test_session_seconds_updates_on_redecision(self, state):
+        """Verify that re-setting a decision updates the stored session-seconds.
+
+        Success means the second call's session_seconds value overwrites the first.
+        """
+        state.set_review_decision("img.jpg", "reject", session_seconds=10.0)
+        state.set_review_decision("img.jpg", "accept", session_seconds=99.0)
+        assert state.decision_session_seconds["img.jpg"] == 99.0
+
+    def test_clear_removes_session_seconds(self, state):
+        """Verify that clear() wipes decision_session_seconds along with other per-folder data."""
+        state.set_review_decision("img.jpg", "accept", session_seconds=5.0)
+        state.clear()
+        assert state.decision_session_seconds == {}
+
+
 class TestAnnotationMode:
     def test_default_mode_is_pixel(self, state):
         assert state.annotation_mode == "pixel"

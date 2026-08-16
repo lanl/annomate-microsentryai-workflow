@@ -1,4 +1,4 @@
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QSize, Signal
 from PySide6.QtWidgets import (
     QWidget,
     QFrame,
@@ -7,9 +7,17 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 
+from views.icons import material_icon
+
+_ICON_SIZE = QSize(16, 16)
+_ICON_EXPANDED = "expand_more"  # chevron down -- body visible
+_ICON_COLLAPSED = "chevron_right"  # chevron right -- body hidden
+_SEP_SPACING = 4  # px gap on each side of the end-of-section separator
+_SEP_HEIGHT = 2  # px thickness of the separator itself
+
 
 class _CollapsibleSection(QWidget):
-    """Bold toggle-header + separator + collapsible body.
+    """Bold toggle-header + collapsible body + separator marking the section's end.
 
     Args:
         expandable: When True, the section uses an Expanding vertical size
@@ -40,8 +48,11 @@ class _CollapsibleSection(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        arrow = "▾" if expanded else "▸"
-        self._toggle_btn = QPushButton(f"{arrow}  {title}")
+        self._toggle_btn = QPushButton(f"  {title}")
+        self._toggle_btn.setIcon(
+            material_icon(_ICON_EXPANDED if expanded else _ICON_COLLAPSED)
+        )
+        self._toggle_btn.setIconSize(_ICON_SIZE)
         self._toggle_btn.setCheckable(True)
         self._toggle_btn.setChecked(expanded)
         self._toggle_btn.setStyleSheet(
@@ -50,26 +61,36 @@ class _CollapsibleSection(QWidget):
         self._toggle_btn.clicked.connect(self._on_toggle)
         root.addWidget(self._toggle_btn)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setFrameShadow(QFrame.Sunken)
-        root.addWidget(sep)
-
         self._body = QWidget()
         if expandable:
             self._body.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._body_layout = QVBoxLayout(self._body)
         self._body_layout.setContentsMargins(8, 6, 8, 8)
         self._body_layout.setSpacing(4)
-        self._body.setVisible(expanded)
         root.addWidget(self._body, stretch=1 if expandable else 0)
+        self._body.setVisible(expanded)
+
+        # Always visible (independent of expanded/collapsed) and placed after
+        # the body rather than under the header, so it consistently marks
+        # where this section ends -- not just a rule under its own title.
+        root.addSpacing(_SEP_SPACING)
+        sep = QFrame()
+        sep.setFixedHeight(_SEP_HEIGHT)
+        sep.setStyleSheet("background-color: black;")
+        root.addWidget(sep)
+        root.addSpacing(_SEP_SPACING)
 
     def body_layout(self) -> QVBoxLayout:
         return self._body_layout
 
+    def header_widget(self) -> QWidget:
+        """Return the toggle-button header, which stays visible when collapsed."""
+        return self._toggle_btn
+
     def _on_toggle(self, checked: bool) -> None:
         self._expanded = checked
         self._body.setVisible(checked)
-        arrow = "▾" if checked else "▸"
-        self._toggle_btn.setText(f"{arrow}  {self._title}")
+        self._toggle_btn.setIcon(
+            material_icon(_ICON_EXPANDED if checked else _ICON_COLLAPSED)
+        )
         self.toggled.emit(checked)

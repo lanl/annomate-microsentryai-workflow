@@ -1,12 +1,12 @@
 import os
 import logging
-from pathlib import Path
 
 from PySide6.QtCore import Qt, QAbstractTableModel, QModelIndex, Signal
 from PySide6.QtGui import QColor, QBrush
 
 from core.states.dataset_state import DatasetState
 from core.utils.geometry import polygon_area
+from core.utils.image_scan import to_native_path
 
 logger = logging.getLogger("AnnoMate.DatasetModel")
 
@@ -112,7 +112,7 @@ class DatasetTableModel(QAbstractTableModel):
 
         if role == Qt.DisplayRole:
             if col == 0:
-                return Path(filename).stem
+                return os.path.splitext(filename)[0]
             elif col == 1:
                 return "Reviewed" if self.state.is_reviewed(filename) else "Pending"
 
@@ -288,6 +288,11 @@ class DatasetTableModel(QAbstractTableModel):
     def add_class(self, name: str, color: tuple) -> bool:
         """Register a new class in the global class registry.
 
+        Emits ``dataChanged`` for the entire table so per-image class
+        pickers (e.g. image-level mode) see the new class immediately,
+        matching set_class_color/delete_class. Does nothing to the view if
+        no rows are loaded.
+
         Args:
             name (str): Class label to register.
             color (tuple): RGB color tuple to associate with the class.
@@ -300,6 +305,11 @@ class DatasetTableModel(QAbstractTableModel):
         if name in self.state.class_names:
             return False
         self.state.add_class(name, color)
+        if self.rowCount() > 0:
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(self.rowCount() - 1, self.columnCount() - 1),
+            )
         return True
 
     def set_class_color(self, name: str, color: tuple) -> None:
@@ -391,7 +401,7 @@ class DatasetTableModel(QAbstractTableModel):
             str: Absolute path constructed from the image directory and the
                 filename at *row*.
         """
-        return os.path.join(self.state.image_dir, self.state.image_files[row])
+        return to_native_path(self.state.image_dir, self.state.image_files[row])
 
     def get_annotations(self, row: int) -> list:
         """Return the annotation list for the image at *row*.
@@ -504,16 +514,22 @@ class DatasetTableModel(QAbstractTableModel):
             return False
         return self.state.is_reviewed(self.state.image_files[row])
 
-    def set_review_decision(self, row: int, decision) -> None:
+    def set_review_decision(
+        self, row: int, decision, session_seconds: float = None
+    ) -> None:
         """Set the image-level review decision for the image at *row*.
 
         Args:
             row (int): Zero-based row index of the target image.
             decision (str | None): ``"accept"``, ``"reject"``, or ``None`` to clear.
+            session_seconds (float | None): Cumulative project session-seconds at
+                the moment of decision. See ``DatasetState.set_review_decision``.
         """
         if not (0 <= row < self.rowCount()):
             return
-        self.state.set_review_decision(self.state.image_files[row], decision)
+        self.state.set_review_decision(
+            self.state.image_files[row], decision, session_seconds=session_seconds
+        )
         self._emit_row(row)
 
     def get_review_decision(self, row: int):
@@ -608,13 +624,14 @@ class DatasetTableModel(QAbstractTableModel):
         return len(self.state.annotations.get(self.state.image_files[row], []))
 
     def get_image_filename(self, row: int) -> str:
-        """Return the raw filename (basename) for the image at *row*.
+        """Return the image's path relative to the dataset root for *row*.
 
         Args:
             row (int): Zero-based row index of the target image.
 
         Returns:
-            str: Filename string, or an empty string for out-of-bounds rows.
+            str: Dataset-relative path (POSIX-separated), or an empty string
+                for out-of-bounds rows.
         """
         if not (0 <= row < self.rowCount()):
             return ""

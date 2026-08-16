@@ -21,7 +21,12 @@ from PySide6.QtWidgets import (
 
 
 def _slider_row(
-    parent_layout: QVBoxLayout, label: str, lo: int, hi: int, default: int
+    parent_layout: QVBoxLayout,
+    label: str,
+    lo: int,
+    hi: int,
+    default: int,
+    tooltip: str | None = None,
 ) -> tuple:
     """Add a label+slider pair to parent_layout. Returns (value_label, slider)."""
     row_w = QWidget()
@@ -43,6 +48,8 @@ def _slider_row(
     slider.setRange(lo, hi)
     slider.setValue(default)
     slider.setFixedWidth(130)
+    if tooltip:
+        slider.setToolTip(tooltip)
     parent_layout.addWidget(slider)
     return val_lbl, slider
 
@@ -119,13 +126,27 @@ class MicrosentryOverlay(QFrame):
         layout.addWidget(self._btn_accept)
 
         # Threshold slider (percentile 0–100, default 95)
-        self._thresh_val, self._thresh = _slider_row(layout, "Threshold", 0, 100, 95)
+        self._thresh_val, self._thresh = _slider_row(
+            layout,
+            "Threshold",
+            0,
+            100,
+            95,
+            tooltip="Anomaly score percentage above which pixels are included in segmentation polygons",
+        )
         self._thresh.valueChanged.connect(
             lambda v: (self._thresh_val.setText(str(v)), self._debounce.start())
         )
 
         # Transparency slider (alpha 0–100 → 0.0–1.0, default 45)
-        self._alpha_val, self._alpha = _slider_row(layout, "Transparency", 0, 100, 45)
+        self._alpha_val, self._alpha = _slider_row(
+            layout,
+            "Transparency",
+            0,
+            100,
+            45,
+            tooltip="Opacity of the heatmap overlay on the canvas image",
+        )
         self._alpha.valueChanged.connect(
             lambda v: (self._alpha_val.setText(str(v)), self._debounce.start())
         )

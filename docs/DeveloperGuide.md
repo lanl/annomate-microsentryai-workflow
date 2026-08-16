@@ -88,6 +88,41 @@ Make sure your environment is activated, then run from the project root:
 python src/main.py
 ```
 
+### Resetting the First-Run Tour
+
+The guided tour (`views/annomate/tour/`) only auto-launches the first time the
+app is opened, tracked by a `QSettings` flag (`onboarding/tour_completed`
+under `LANL`/`AnnoMateMicroSentryAI`). To make it play again automatically on
+the next launch, reset that flag using whichever method is easiest for you:
+
+**Any OS** — run this from your activated conda environment (goes through
+the same `QSettings` API the app itself uses, so it works identically
+everywhere):
+```bash
+python -c "from PySide6.QtCore import QSettings; QSettings('LANL', 'AnnoMateMicroSentryAI').setValue('onboarding/tour_completed', False)"
+```
+
+**macOS** — the settings are backed by a preferences plist:
+```bash
+defaults write com.LANL.AnnoMateMicroSentryAI onboarding.tour_completed -bool false
+```
+
+**Linux** — the settings are backed by an ini file at
+`~/.config/LANL/AnnoMateMicroSentryAI.conf`. Open it and add/edit:
+```ini
+[onboarding]
+tour_completed=false
+```
+
+**Windows** — the settings are backed by the registry. Delete the value
+(missing = "not completed yet", same as `false`):
+```powershell
+reg delete "HKCU\Software\LANL\AnnoMateMicroSentryAI\onboarding" /v tour_completed /f
+```
+
+Or just use **Help → Show Welcome Tour** in the running app to replay it on
+demand without touching settings at all.
+
 ### Pre-commit Hooks (if contributing)
 
 ```bash
@@ -171,7 +206,7 @@ annomate-microsentryai-workflow/
         └── model/
 ```
 
----
+
 
 ## 4. The Big Idea: MVC Architecture
 

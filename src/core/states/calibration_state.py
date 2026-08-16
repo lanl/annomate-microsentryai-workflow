@@ -41,8 +41,11 @@ class CalibrationState:
         self.calib_p2 = None
         self.real_distance = 1.0
         self.grid_visible = False
-        if self.grid_spacing_auto:
-            self.grid_spacing_world = 100.0
+        # Force Auto: a Fixed spacing value was typed in the old (now-cleared)
+        # unit -- carrying it over would silently reinterpret it in pixels,
+        # e.g. "5mm" spacing becoming an unusable "5px" spacing.
+        self.grid_spacing_auto = True
+        self.grid_spacing_world = 100.0
         self.meas_p1 = None
         self.meas_p2 = None
 

@@ -85,6 +85,16 @@ class TestStatusColumn:
         model.set_review_decision(0, "accept")
         assert model.data(model.index(0, 1)) == "Reviewed"
 
+    def test_set_review_decision_forwards_session_seconds_to_state(self, model):
+        """Verify that session_seconds passed to the model reaches the underlying state.
+
+        Success means state.decision_session_seconds holds the value passed to
+        set_review_decision on the model.
+        """
+        model.load_folder("/fake", ["img.jpg"])
+        model.set_review_decision(0, "accept", session_seconds=77.0)
+        assert model.state.decision_session_seconds["img.jpg"] == 77.0
+
     def test_status_becomes_reviewed_after_reject_with_annotation(self, model):
         """Verify that a Reject decision with an annotation marks an image as 'Reviewed'.
 

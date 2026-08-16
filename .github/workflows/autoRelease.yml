@@ -98,6 +98,7 @@ jobs:
       - name: Build with PyInstaller
         run: |
           conda run -n annomate-cpu pyinstaller --name "AnnoMate-CPU" --onefile --windowed \
+            --add-data "src/resources;resources" \
             --exclude-module pytest --exclude-module _pytest --exclude-module pytest_qt \
             --exclude-module ruff --exclude-module tkinter src/main.py
       - name: Package artifact
@@ -131,6 +132,7 @@ jobs:
       - name: Build with PyInstaller
         run: |
           conda run -n annomate-mac pyinstaller --name "AnnoMate-CPU" --onefile --windowed \
+            --add-data "src/resources:resources" \
             --exclude-module pytest --exclude-module _pytest --exclude-module pytest_qt \
             --exclude-module ruff --exclude-module tkinter src/main.py
       - name: Zip .app bundle

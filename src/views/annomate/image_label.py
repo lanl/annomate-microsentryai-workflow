@@ -31,6 +31,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
+from core.utils.geometry import nearest_point_on_edge
+
 logger = logging.getLogger("AnnoMate.ImageLabel")
 
 # Tool Constants
@@ -38,6 +40,17 @@ POLYGON = "polygon"
 SAM_BBOX = "sam_bbox"
 CALIBRATE = "calibrate"
 MEASURE = "measure"
+EDIT_POINTS = "edit_points"
+
+# Heatmap colormap choices, keyed by the string set in MicrosentrySection.get_settings().
+HEATMAP_COLORMAPS = {
+    "inferno": cv2.COLORMAP_INFERNO,
+    "magma": cv2.COLORMAP_MAGMA,
+    "viridis": cv2.COLORMAP_VIRIDIS,
+    "turbo": cv2.COLORMAP_TURBO,
+    "jet": cv2.COLORMAP_JET,
+    "hot": cv2.COLORMAP_HOT,
+}
 
 
 class ImageLabel(QLabel):
@@ -70,6 +83,7 @@ class ImageLabel(QLabel):
     polygonSelected = Signal(int)  # polygon index (-1 for deselect)
     toolCanceled = Signal()  # Escape pressed while a tool is active
     draw_attempted = Signal()  # left-click while a drawing tool is active
+    polygonDiscarded = Signal()  # pending (unclassified) polygon dropped by the user
     zoom_changed = Signal(float)  # emitted whenever _zoom changes
     image_loaded = Signal(int, int)  # (orig_w, orig_h) emitted when a new image is set
     ai_polygon_clicked = Signal(int, QPointF)  # (ai_idx, view_pos); -1 = deselect
@@ -78,6 +92,8 @@ class ImageLabel(QLabel):
     )  # x1,y1,x2,y2 in original image coords
     calibrationPointsPlaced = Signal(tuple, tuple)  # (p1_orig, p2_orig)
     centerCropChanged = Signal(dict)
+    hsvChanged = Signal(dict)
+    contrastChanged = Signal(dict)
 
     def __init__(self, parent: object = None) -> None:
         """Initialize ImageLabel with default zoom, pan, and annotation state.
@@ -111,6 +127,15 @@ class ImageLabel(QLabel):
         self._dragging_center_crop: bool = False
         self._center_crop_color: Optional[tuple] = None  # None = auto-contrast
 
+        self._resized_bgr: Optional[np.ndarray] = None
+        self._hsv_enabled: bool = False
+        self._hsv_hue: int = 0
+        self._hsv_saturation: int = 100
+        self._hsv_value: int = 100
+        self._contrast_enabled: bool = False
+        self._contrast_min: int = 0
+        self._contrast_max: int = 255
+
         self._base_scale = 1.0
         self._zoom = 1.0
         self._pan = QPointF(0, 0)
@@ -123,6 +148,7 @@ class ImageLabel(QLabel):
         self.current_polygon_points: List[QPointF] = []
         self._overlays: List[Tuple[List[QPointF], QColor, float, bool]] = []
         self._ai_overlays: List[List[QPointF]] = []
+        self._pending_polygon: Optional[List[QPointF]] = None
         self._anomaly_area_violations: set = set()
         self._anomaly_distance_pairs: set = set()
         self._anomaly_dist_values: dict = {}
@@ -138,6 +164,13 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx: int = -1
         self._dragging_vertex_poly: int = -1
         self._selected_ai_idx: int = -1
+
+        # --- Edit Points tool state ---
+        self._point_edit_mode: str = "add"  # "add" or "delete"
+        self._hover_vertex: Tuple[int, int] = (-1, -1)  # (poly_idx, vertex_idx)
+        self._hover_edge_point: Optional[Tuple[int, int, QPointF]] = (
+            None  # (poly_idx, edge_start_idx, point_disp)
+        )
 
         # --- SAM tool state (display coords) ---
         self._sam_bbox_start: Optional[QPointF] = None
@@ -178,14 +211,8 @@ class ImageLabel(QLabel):
         new_w = int(w * self._base_scale)
         new_h = int(h * self._base_scale)
 
-        resized_bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-        rgb = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
-
-        qimg = QImage(
-            rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format_RGB888
-        )
-        self._display_qpix = QPixmap.fromImage(qimg)
+        self._resized_bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        self._rebuild_display_pixmap()
         self.image_loaded.emit(w, h)
         self.reset_view()
 
@@ -193,6 +220,7 @@ class ImageLabel(QLabel):
         self.clear_current_polygon()
         self._overlays = []
         self._ai_overlays = []
+        self._pending_polygon = None
         self._anomaly_area_violations = set()
         self._anomaly_distance_pairs = set()
         self._anomaly_dist_values = {}
@@ -204,6 +232,8 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self._sam_bbox_start = None
         self._sam_bbox_end = None
         self._sam_ghost = None
@@ -218,33 +248,56 @@ class ImageLabel(QLabel):
         self.update()
 
     def set_heatmap_layer(
-        self, score_map: np.ndarray, alpha: float, heat_min_pct: int = 0
+        self,
+        score_map: np.ndarray,
+        alpha: float,
+        heat_min_pct: int = 0,
+        colormap: str = "inferno",
+        heat_ceiling_pct: int = 100,
+        heat_gamma: float = 1.0,
     ) -> None:
         """Overlay a heatmap on the canvas without resetting zoom or pan.
 
         Resizes *score_map* to match the stored display pixmap, applies the
-        COLORMAP_JET colormap, and stores the result as a semi-transparent
-        layer drawn at *alpha* opacity during paintEvent.
+        selected colormap, and stores the result as a semi-transparent layer
+        drawn at *alpha* opacity during paintEvent.
 
         Args:
-            score_map: 2-D float array of anomaly scores (any resolution).
+            score_map: 2-D float array of anomaly scores, already calibrated
+                to [0, 1] by the model's PostProcessor (0.5 = decision
+                boundary). Any resolution.
             alpha: Opacity 0.0–1.0.
-            heat_min_pct: Suppress scores below this percentile (0 = show all).
+            heat_min_pct: Fixed floor on the calibrated [0, 1] scale, as a
+                percentage (0 = show all scores, 100 = show nothing). Applied
+                identically across every image so heatmap colors stay
+                comparable image to image, instead of each image being
+                stretched to its own min/max.
+            colormap: Key into :data:`HEATMAP_COLORMAPS` (e.g. ``"inferno"``,
+                ``"turbo"``). Falls back to Inferno for an unrecognized key.
+            heat_ceiling_pct: Fixed ceiling on the calibrated [0, 1] scale, as
+                a percentage (100 = only a literal 1.0 hits full color). Values
+                below 100 push moderately-anomalous scores toward full color
+                sooner, matching how industrial anomaly-detection tools cap
+                their display range below the observed max so defects stand
+                out without needing to hit the absolute ceiling.
+            heat_gamma: Power-law exponent applied after the floor/ceiling
+                stretch (equivalent to matplotlib's ``PowerNorm``). Values
+                below 1.0 pull mid-to-high scores toward full intensity,
+                giving anomalous regions more visual contrast against the
+                background; 1.0 leaves the stretch linear.
         """
         if self._display_qpix is None or score_map is None:
             return
         self._heatmap_alpha = max(0.0, min(1.0, alpha))
         s = score_map.astype(np.float32)
-        if heat_min_pct > 0:
-            thr = np.percentile(s, heat_min_pct)
-            s = np.clip(s, thr, None)
-        s_min, s_max = float(s.min()), float(s.max())
-        if s_max <= s_min:
-            self._heatmap_pix = None
-            self.update()
-            return
-        s_norm = ((s - s_min) / (s_max - s_min) * 255.0).astype(np.uint8)
-        colored_bgr = cv2.applyColorMap(s_norm, cv2.COLORMAP_TURBO)
+        floor = min(heat_min_pct / 100.0, 0.99)
+        ceiling = max(heat_ceiling_pct / 100.0, floor + 0.01)
+        gamma = max(heat_gamma, 0.01)
+        t = np.clip((s - floor) / (ceiling - floor), 0.0, 1.0)
+        t = np.power(t, gamma)
+        s_norm = (t * 255.0).astype(np.uint8)
+        cv2_colormap = HEATMAP_COLORMAPS.get(colormap, cv2.COLORMAP_INFERNO)
+        colored_bgr = cv2.applyColorMap(s_norm, cv2_colormap)
         colored_rgb = cv2.cvtColor(colored_bgr, cv2.COLOR_BGR2RGB)
         pix_w, pix_h = self._display_qpix.width(), self._display_qpix.height()
         resized = cv2.resize(
@@ -271,6 +324,7 @@ class ImageLabel(QLabel):
         """Clear the displayed image and reset all canvas state to blank."""
         self._display_qpix = None
         self._orig_image_bgr = None
+        self._resized_bgr = None
         self._heatmap_pix = None
         self._heatmap_alpha = 0.0
         self._zoom = 1.0
@@ -286,12 +340,15 @@ class ImageLabel(QLabel):
         self.current_polygon_points.clear()
         self._overlays = []
         self._ai_overlays = []
+        self._pending_polygon = None
         self.selected_polygon_idx = -1
         self._dragging_polygon = False
         self._polygon_drag_moved = False
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self._sam_bbox_start = None
         self._sam_bbox_end = None
         self._sam_ghost = None
@@ -315,20 +372,14 @@ class ImageLabel(QLabel):
             self._pending_calib_pts = []
             if self._calib_model is not None:
                 self._calib_model.clear_measurement()
+        if self.current_tool == EDIT_POINTS and tool_name != EDIT_POINTS:
+            self._hover_vertex = (-1, -1)
+            self._hover_edge_point = None
         self.current_tool = tool_name
         if tool_name in (SAM_BBOX, CALIBRATE, MEASURE):
             self.setCursor(Qt.CrossCursor)
-        elif tool_name is None:
+        elif tool_name in (None, EDIT_POINTS):
             self.setCursor(Qt.ArrowCursor)
-
-    def set_active_color(self, color: QColor) -> None:
-        """Set the stroke color used when drawing a new polygon.
-
-        Args:
-            color (QColor): Desired color. Falls back to ``QColor(0, 200, 0)``
-                if *color* is not a valid :class:`~PySide6.QtGui.QColor`.
-        """
-        self._active_color = color if isinstance(color, QColor) else QColor(0, 200, 0)
 
     @property
     def center_crop_calibrating(self) -> bool:
@@ -346,6 +397,19 @@ class ImageLabel(QLabel):
         Args: thickness (float): The brush width in pixels.
         """
         self._line_thickness = thickness
+        self.update()
+
+    def set_point_edit_mode(self, mode: str) -> None:
+        """Set whether the Edit Points tool adds or removes vertices on click.
+
+        Args:
+            mode (str): ``"add"`` to insert a vertex on the clicked edge, or
+                ``"delete"`` to remove the clicked vertex. Any other value
+                falls back to ``"add"``.
+        """
+        self._point_edit_mode = mode if mode in ("add", "delete") else "add"
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self.update()
 
     _UNSET = object()
@@ -420,6 +484,112 @@ class ImageLabel(QLabel):
             "border_color": self._center_crop_color,
         }
 
+    def set_hsv_adjustment(
+        self,
+        enabled: Optional[bool] = None,
+        hue: Optional[int] = None,
+        saturation: Optional[int] = None,
+        value: Optional[int] = None,
+    ) -> None:
+        """Set the hue/saturation/value preview applied to the displayed image.
+
+        This is a read-only display filter: it recomputes the pixmap shown
+        in the viewport but never touches the source image data, annotations,
+        or the heatmap overlay. Settings persist across image switches --
+        each call to set_image() re-applies whatever is currently held here.
+        """
+        if enabled is not None:
+            self._hsv_enabled = bool(enabled)
+        if hue is not None:
+            self._hsv_hue = max(-179, min(179, int(hue)))
+        if saturation is not None:
+            self._hsv_saturation = max(0, min(200, int(saturation)))
+        if value is not None:
+            self._hsv_value = max(0, min(200, int(value)))
+        self._rebuild_display_pixmap()
+        self.update()
+        self.hsvChanged.emit(self.hsv_settings())
+
+    def hsv_settings(self) -> dict:
+        """Return the current HSV preview settings."""
+        return {
+            "enabled": self._hsv_enabled,
+            "hue": self._hsv_hue,
+            "saturation": self._hsv_saturation,
+            "value": self._hsv_value,
+        }
+
+    def set_contrast_adjustment(
+        self,
+        enabled: Optional[bool] = None,
+        min_value: Optional[int] = None,
+        max_value: Optional[int] = None,
+    ) -> None:
+        """Set the min/max linear contrast-stretch preview applied to the
+        displayed image (the same window/level Fiji applies to RGB pixel
+        values directly). Read-only display filter -- never touches source
+        image data, annotations, or the heatmap overlay. Settings persist
+        across image switches -- each call to set_image() re-applies
+        whatever is currently held here.
+        """
+        if enabled is not None:
+            self._contrast_enabled = bool(enabled)
+        if min_value is not None:
+            self._contrast_min = max(0, min(254, int(min_value)))
+            if self._contrast_max <= self._contrast_min:
+                self._contrast_max = self._contrast_min + 1
+        if max_value is not None:
+            self._contrast_max = max(1, min(255, int(max_value)))
+            if self._contrast_min >= self._contrast_max:
+                self._contrast_min = self._contrast_max - 1
+        self._rebuild_display_pixmap()
+        self.update()
+        self.contrastChanged.emit(self.contrast_settings())
+
+    def contrast_settings(self) -> dict:
+        """Return the current contrast-stretch preview settings."""
+        return {
+            "enabled": self._contrast_enabled,
+            "min": self._contrast_min,
+            "max": self._contrast_max,
+        }
+
+    def _rebuild_display_pixmap(self) -> None:
+        """Rebuild ``_display_qpix`` from ``_resized_bgr``, applying the
+        contrast stretch and HSV preview when enabled. Called on every image
+        load and every setting change -- cheap enough (tens of ms at display
+        resolution) to redo from scratch rather than cache."""
+        if self._resized_bgr is None:
+            self._display_qpix = None
+            return
+        bgr = self._resized_bgr
+        if self._contrast_enabled:
+            bgr = self._apply_contrast(bgr)
+        if self._hsv_enabled:
+            bgr = self._apply_hsv(bgr)
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        rgb = np.ascontiguousarray(rgb)
+        qimg = QImage(
+            rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format_RGB888
+        )
+        self._display_qpix = QPixmap.fromImage(qimg.copy())
+
+    def _apply_hsv(self, bgr: np.ndarray) -> np.ndarray:
+        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).astype(np.int16)
+        if self._hsv_hue:
+            hsv[..., 0] = (hsv[..., 0] + self._hsv_hue) % 180
+        if self._hsv_saturation != 100:
+            hsv[..., 1] = np.clip(hsv[..., 1] * (self._hsv_saturation / 100.0), 0, 255)
+        if self._hsv_value != 100:
+            hsv[..., 2] = np.clip(hsv[..., 2] * (self._hsv_value / 100.0), 0, 255)
+        return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
+    def _apply_contrast(self, bgr: np.ndarray) -> np.ndarray:
+        lo, hi = self._contrast_min, self._contrast_max
+        scale = 255.0 / (hi - lo)
+        out = (bgr.astype(np.float32) - lo) * scale
+        return np.clip(out, 0, 255).astype(np.uint8)
+
     def _ensure_center_crop_defaults(self, img_w: int, img_h: int) -> None:
         if self._center_crop_width is None:
             self._center_crop_width = 1210
@@ -483,6 +653,8 @@ class ImageLabel(QLabel):
                 coordinates. Hidden overlays keep their index but are not drawn
                 or hit-tested.
         """
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self._overlays = []
         for item in poly_list:
             pts_orig, color, thick = item[:3]
@@ -566,6 +738,11 @@ class ImageLabel(QLabel):
         self._selected_ai_idx = -1
         self.update()
 
+    def deselect_ai_polygon(self) -> None:
+        """Clear the AI-polygon selection highlight without discarding overlays."""
+        self._selected_ai_idx = -1
+        self.update()
+
     def get_ai_polygon_view_rect(self, idx: int) -> QRect:
         """Return the bounding rect of AI polygon *idx* in widget (view) coordinates."""
         if idx < 0 or idx >= len(self._ai_overlays):
@@ -575,6 +752,32 @@ class ImageLabel(QLabel):
             return QRect()
         xs = [p.x() * self._zoom + self._pan.x() for p in pts]
         ys = [p.y() * self._zoom + self._pan.y() for p in pts]
+        x0, x1 = int(min(xs)), int(max(xs))
+        y0, y1 = int(min(ys)), int(max(ys))
+        return QRect(x0, y0, x1 - x0, y1 - y0)
+
+    def set_pending_polygon(self, pts_orig: List[Tuple[float, float]]) -> None:
+        """Store a just-finished, not-yet-classified polygon for preview rendering.
+
+        Args:
+            pts_orig: Polygon vertices in original image coordinates. An empty
+                list clears the pending polygon.
+        """
+        if not pts_orig:
+            self._pending_polygon = None
+        else:
+            self._pending_polygon = [
+                QPointF(x * self._base_scale, y * self._base_scale)
+                for (x, y) in pts_orig
+            ]
+        self.update()
+
+    def get_pending_polygon_view_rect(self) -> QRect:
+        """Return the bounding rect of the pending polygon in widget (view) coordinates."""
+        if not self._pending_polygon:
+            return QRect()
+        xs = [p.x() * self._zoom + self._pan.x() for p in self._pending_polygon]
+        ys = [p.y() * self._zoom + self._pan.y() for p in self._pending_polygon]
         x0, x1 = int(min(xs)), int(max(xs))
         y0, y1 = int(min(ys)), int(max(ys))
         return QRect(x0, y0, x1 - x0, y1 - y0)
@@ -721,6 +924,62 @@ class ImageLabel(QLabel):
                     best_vert = vert_i
         return best_poly, best_vert
 
+    def _find_nearest_edge_point(
+        self, pos_view: QPointF, threshold: float = 10.0
+    ) -> Optional[Tuple[int, int, QPointF]]:
+        """Return (poly_idx, edge_start_idx, point_disp) for the closest point on
+        any overlay polygon's boundary within threshold screen pixels, or None."""
+        best = None
+        best_dist = threshold
+        for poly_i, (pts, _, _, visible) in enumerate(self._overlays):
+            if not visible or len(pts) < 2:
+                continue
+            view_pts = [
+                (p.x() * self._zoom + self._pan.x(), p.y() * self._zoom + self._pan.y())
+                for p in pts
+            ]
+            hit = nearest_point_on_edge(
+                view_pts, (pos_view.x(), pos_view.y()), threshold=best_dist
+            )
+            if hit is None:
+                continue
+            edge_idx, (vx, vy) = hit
+            dist = ((pos_view.x() - vx) ** 2 + (pos_view.y() - vy) ** 2) ** 0.5
+            if dist < best_dist:
+                best_dist = dist
+                disp_pt = QPointF(
+                    (vx - self._pan.x()) / self._zoom, (vy - self._pan.y()) / self._zoom
+                )
+                best = (poly_i, edge_idx, disp_pt)
+        return best
+
+    def _handle_edit_points_click(self, pos_view: QPointF) -> None:
+        """Insert or remove a vertex under the cursor, per :attr:`_point_edit_mode`.
+
+        Emits :attr:`polygonEdited` with the updated point list on success;
+        does nothing if the cursor isn't near a qualifying vertex/edge, or if
+        deleting would drop the polygon below 3 vertices.
+        """
+        if self._point_edit_mode == "delete":
+            poly_i, vert_i = self._find_nearest_vertex(pos_view)
+            if poly_i == -1:
+                return
+            pts, _, _, _ = self._overlays[poly_i]
+            if len(pts) <= 3:
+                return
+            new_pts = pts[:vert_i] + pts[vert_i + 1 :]
+        else:
+            hit = self._find_nearest_edge_point(pos_view)
+            if hit is None:
+                return
+            poly_i, edge_idx, disp_pt = hit
+            pts, _, _, _ = self._overlays[poly_i]
+            new_pts = list(pts)
+            new_pts.insert(edge_idx + 1, disp_pt)
+
+        pts_orig = [self.display_to_original(p) for p in new_pts]
+        self.polygonEdited.emit(poly_i, pts_orig)
+
     def finish_current_polygon(self) -> None:
         """Emit :attr:`polygonFinished` with the current polygon and clear it.
 
@@ -778,6 +1037,16 @@ class ImageLabel(QLabel):
                 return
 
         if event.key() == Qt.Key_Escape:
+            if self._pending_polygon is not None:
+                self._pending_polygon = None
+                self.update()
+                self.polygonDiscarded.emit()
+                return
+            if self._selected_ai_idx != -1:
+                self._selected_ai_idx = -1
+                self.update()
+                self.ai_polygon_clicked.emit(-1, QPointF())
+                return
             self.clear_current_polygon()
             self.set_tool(None)
             self.toolCanceled.emit()
@@ -789,18 +1058,6 @@ class ImageLabel(QLabel):
                 self.update()
                 return
         super().keyPressEvent(event)
-
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        """Finish the current polygon on double-click while drawing.
-
-        Args:
-            event (QMouseEvent): The mouse double-click event.
-        """
-        if self.current_tool == POLYGON and self.current_polygon_points:
-            self.finish_current_polygon()
-            return
-
-        super().mouseDoubleClickEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Handle left-click (add vertex / select / drag) and right-click (pan).
@@ -822,6 +1079,15 @@ class ImageLabel(QLabel):
         self.setFocus()
 
         if event.button() == Qt.LeftButton:
+            if self._pending_polygon is not None:
+                # Awaiting classification via the popup — only its X button
+                # or Escape may drop it; a stray canvas click must not.
+                return
+
+            if self._selected_ai_idx != -1:
+                # Same rule for a selected AI polygon awaiting classification.
+                return
+
             if self.current_tool in (SAM_BBOX, POLYGON):
                 self.draw_attempted.emit()
                 if (
@@ -858,6 +1124,11 @@ class ImageLabel(QLabel):
                 else:
                     # Start a new measurement
                     self._calib_model.set_meas_p1(orig_pt)
+                return
+
+            # --- Edit Points tool ---
+            if self.current_tool == EDIT_POINTS:
+                self._handle_edit_points_click(QPointF(event.pos()))
                 return
 
             pos_view = QPointF(event.pos())
@@ -1013,6 +1284,20 @@ class ImageLabel(QLabel):
                 self.setCursor(Qt.CrossCursor)
             else:
                 self.setCursor(Qt.ArrowCursor)
+            self.update()
+            return
+
+        if self.current_tool == EDIT_POINTS:
+            if self._point_edit_mode == "delete":
+                poly_i, vert_i = self._find_nearest_vertex(self._mouse_pos)
+                self._hover_vertex = (poly_i, vert_i)
+                self._hover_edge_point = None
+                self.setCursor(Qt.PointingHandCursor if poly_i != -1 else Qt.ArrowCursor)
+            else:
+                hit = self._find_nearest_edge_point(self._mouse_pos)
+                self._hover_edge_point = hit
+                self._hover_vertex = (-1, -1)
+                self.setCursor(Qt.CrossCursor if hit is not None else Qt.ArrowCursor)
             self.update()
             return
 
@@ -1516,6 +1801,29 @@ class ImageLabel(QLabel):
                 for p in pts:
                     painter.drawEllipse(p, r, r)
 
+        # Draw Edit Points hover affordance -- ghost insertion point on an edge
+        # (add mode) or a highlight ring on the vertex about to be removed
+        # (delete mode).
+        if self.current_tool == EDIT_POINTS:
+            if self._point_edit_mode == "delete":
+                poly_i, vert_i = self._hover_vertex
+                if 0 <= poly_i < len(self._overlays):
+                    pts, _, _, visible = self._overlays[poly_i]
+                    if visible and 0 <= vert_i < len(pts):
+                        r = 7.0 / self._zoom
+                        painter.setPen(QPen(QColor(220, 50, 50), 2.0 / self._zoom))
+                        painter.setBrush(QBrush(QColor(220, 50, 50, 90)))
+                        painter.drawEllipse(pts[vert_i], r, r)
+            elif self._hover_edge_point is not None:
+                poly_i, _, disp_pt = self._hover_edge_point
+                if 0 <= poly_i < len(self._overlays):
+                    _, color, _, visible = self._overlays[poly_i]
+                    if visible:
+                        r = 5.0 / self._zoom
+                        painter.setPen(QPen(color, 1.5 / self._zoom))
+                        painter.setBrush(QBrush(QColor(255, 255, 255, 180)))
+                        painter.drawEllipse(disp_pt, r, r)
+
         # Draw AI segmentation polygons as dashed ghost outlines
         for i, pts in enumerate(self._ai_overlays):
             if len(pts) < 3:
@@ -1531,6 +1839,18 @@ class ImageLabel(QLabel):
             fill_alpha = 60 if is_selected else 20
             painter.setBrush(QBrush(QColor(255, 80, 80, fill_alpha)))
             painter.drawPolygon(QPolygonF(pts + [pts[0]]))
+
+        # Draw the just-finished, not-yet-classified polygon awaiting a class pick.
+        # Same color as the in-progress line above and the SAM ghost below — the
+        # polygon only takes on its real class color once accepted.
+        if self._pending_polygon and len(self._pending_polygon) >= 3:
+            pending_color = QColor(self._active_color)
+            pending_pen = QPen(pending_color, 2.0 / self._zoom, Qt.DashLine)
+            pending_pen.setDashPattern([8, 4])
+            painter.setPen(pending_pen)
+            pending_color.setAlpha(45)
+            painter.setBrush(QBrush(pending_color))
+            painter.drawPolygon(QPolygonF(self._pending_polygon + [self._pending_polygon[0]]))
 
         # Draw SAM ghost polygon (pending accept/reject)
         if self._sam_ghost is not None:

@@ -77,6 +77,7 @@ class AppWindow(QMainWindow):
 
         self.annomate_view.new_project_requested.connect(self._new_project)
         self.annomate_view.open_project_requested.connect(self._open_project)
+        self.annomate_view.save_project_requested.connect(self._save_project)
         self.annomate_view.open_image_folder_requested.connect(self._open_image_folder)
         self.annomate_view.open_recent_project_requested.connect(
             self._open_recent_project
@@ -109,10 +110,12 @@ class AppWindow(QMainWindow):
     # ================================================================== #
 
     def _build_menu(self) -> None:
-        def add(menu, label, shortcut, slot):
+        def add(menu, label, shortcut, slot, status_tip=None):
             act = QAction(label, self)
             if shortcut:
                 act.setShortcut(QKeySequence(shortcut))
+            if status_tip:
+                act.setStatusTip(status_tip)
             act.triggered.connect(slot)
             menu.addAction(act)
 
@@ -123,9 +126,13 @@ class AppWindow(QMainWindow):
         add(file_menu, "Save Project As…", "Ctrl+Shift+S", self._save_project_as)
         file_menu.addSeparator()
         add(file_menu, "Open Image Folder…", "", self._open_image_folder)
-        add(file_menu, "Relocate Images…", "", self._relocate_images)
-        file_menu.addSeparator()
-        add(file_menu, "Preferences…", "", self._open_preferences)
+        add(
+            file_menu,
+            "Relocate Images…",
+            "",
+            self._relocate_images,
+            status_tip="Point the project at images that moved to a new folder, keeping existing annotations",
+        )
         file_menu.addSeparator()
         add(file_menu, "Exit", "Ctrl+Q", self.close)
 
@@ -145,20 +152,29 @@ class AppWindow(QMainWindow):
         )
         add(data_menu, "Export Binary Masks…", "", self._export_binary_masks)
         add(data_menu, "Export CSV…", "", self._export_csv)
+        add(data_menu, "Export COCO JSON…", "", self._export_coco)
         add(
             data_menu,
             "Export Pixel-Level Train Structure…",
             "",
             self._export_pixel_train_structure,
+            status_tip="Export an MVTec-style training folder with per-pixel ground-truth masks from polygon annotations",
         )
         add(
             data_menu,
             "Export Image-Level Train Structure…",
             "",
             self._export_image_level_train_structure,
+            status_tip="Export a classification-style training folder (good/defect) from image-level tags, without pixel masks",
         )
         data_menu.addSeparator()
-        add(data_menu, "Export Project Template…", "", self._export_project_template)
+        add(
+            data_menu,
+            "Export Project Template…",
+            "",
+            self._export_project_template,
+            status_tip="Export project settings (classes, calibration, constraints) as a reusable template, without images or annotations",
+        )
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
@@ -189,21 +205,26 @@ class AppWindow(QMainWindow):
             )
             return
 
-        if warnings:
+        saved_image_dir = project_data.get("dataset", {}).get("image_dir", "")
+        relocated = False
+        if (
+            saved_image_dir
+            and not project_data.get("is_template", False)
+            and not os.path.isdir(saved_image_dir)
+        ):
+            relocated = self._prompt_missing_image_dir(saved_image_dir)
+
+        # Load-time warnings (e.g. orphaned annotations) are stale once the
+        # user relocates — _relocate_images reports the fresh state instead.
+        if warnings and not relocated:
             QMessageBox.warning(self, "Open Project", "\n\n".join(warnings))
 
-        model_path = project_data.get("inference", {}).get("model_path", "")
-        self.annomate_view.set_saved_model_path(model_path)
-        if model_path and not self.inference_controller.has_model():
-            self.statusBar().showMessage(
-                f"Previous model saved: {os.path.basename(model_path)} — use 'Load Previous' in the MicroSentryAI panel.",
-                8000,
-            )
-
         self._remember_recent_project(path)
-        image_dir = project_data.get("dataset", {}).get("image_dir", "")
-        if image_dir:
-            self._remember_recent_image_dir(image_dir)
+        # After relocation the new folder was already remembered; don't
+        # overwrite it with the stale path from the project file.
+        if saved_image_dir and not relocated:
+            self._remember_recent_image_dir(saved_image_dir)
+        self.annomate_view.restore_last_panel_state()
         self._refresh_project_start_state()
 
     def _open_recent_project(self, path: str) -> None:
@@ -233,6 +254,7 @@ class AppWindow(QMainWindow):
         self.annomate_view.reset_model_state()
         self.io_controller.load_folder(directory)
         self._remember_recent_image_dir(directory)
+        self.annomate_view.restore_last_panel_state()
         self._refresh_project_start_state()
 
     # ================================================================== #
@@ -244,6 +266,7 @@ class AppWindow(QMainWindow):
             return
         self.annomate_view.reset_model_state()
         self.project_controller.new_project()
+        self.annomate_view.show_dataset_setup()
         self._refresh_project_start_state()
 
     def _open_project(self) -> None:
@@ -319,14 +342,40 @@ class AppWindow(QMainWindow):
             return
         self.annomate_view.reset_model_state()
         self.io_controller.load_folder(directory)
+        self.annomate_view.restore_last_panel_state()
 
-    def _relocate_images(self) -> None:
-        """Point to a new image directory without clearing annotations."""
+    def _prompt_missing_image_dir(self, saved_dir: str) -> bool:
+        """Inform the user the project's image folder is missing and offer
+        to relocate it immediately. Returns True if images were relocated."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle("Image Folder Not Found")
+        box.setText(
+            "This project's images are no longer at the location saved in "
+            "the project file.\n\n"
+            f"Saved location:\n{saved_dir}\n\n"
+            "Annotations are loaded, but images will not display until the "
+            "folder is relocated. You can also do this later via "
+            "File → Relocate Images…"
+        )
+        change_btn = box.addButton("Change Location…", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Ok)
+        box.setDefaultButton(change_btn)
+        box.exec()
+        if box.clickedButton() is change_btn:
+            return self._relocate_images()
+        return False
+
+    def _relocate_images(self) -> bool:
+        """Point to a new image directory without clearing annotations.
+
+        Returns True if the images were relocated, False if the user
+        cancelled or the folder could not be scanned."""
         new_dir = QFileDialog.getExistingDirectory(
             self, "Select New Image Folder", os.getcwd()
         )
         if not new_dir:
-            return
+            return False
         try:
             self.project_controller.relocate_images(new_dir)
             self._remember_recent_image_dir(new_dir)
@@ -335,7 +384,7 @@ class AppWindow(QMainWindow):
             QMessageBox.critical(
                 self, "Relocate Images", f"Could not scan folder:\n{exc}"
             )
-            return
+            return False
 
         orphan_msg = self.project_controller.orphaned_annotations_warning()
         if orphan_msg:
@@ -346,9 +395,7 @@ class AppWindow(QMainWindow):
                     "Continue?", "They will be dropped on the next save."
                 ),
             )
-
-    def _open_preferences(self) -> None:
-        QMessageBox.information(self, "Preferences", "Preferences coming soon.")
+        return True
 
     # ================================================================== #
     # Data menu handlers
@@ -395,7 +442,7 @@ class AppWindow(QMainWindow):
             return
         try:
             msg = self.io_controller.export_binary_masks(
-                os.path.join(chosen, "binary_masks")
+                os.path.join(chosen, "ground_truth")
             )
             QMessageBox.information(self, "Export Binary Masks", msg)
         except Exception as exc:
@@ -413,6 +460,21 @@ class AppWindow(QMainWindow):
         try:
             msg = self.io_controller.export_csv(out_path)
             QMessageBox.information(self, "Export", msg)
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Error", str(exc))
+
+    def _export_coco(self) -> None:
+        out_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save COCO JSON",
+            os.path.join(self._export_start_dir(), "annotations.coco.json"),
+            "COCO JSON (*.json)",
+        )
+        if not out_path:
+            return
+        try:
+            self.project_controller.export_coco(out_path)
+            QMessageBox.information(self, "Export", f"Exported COCO annotations to:\n{out_path}")
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 
@@ -483,7 +545,7 @@ class AppWindow(QMainWindow):
         name = self.project_controller.project_name
         if name:
             dirty = "*" if self.project_controller.is_dirty else ""
-            self.setWindowTitle(f"{name}{dirty} — {_APP_TITLE}")
+            self.setWindowTitle(f"{name}{dirty} - {_APP_TITLE}")
         else:
             self.setWindowTitle(_APP_TITLE)
 

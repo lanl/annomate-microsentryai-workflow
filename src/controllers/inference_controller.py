@@ -13,7 +13,6 @@ from typing import Optional, List, Tuple, Type
 import numpy as np
 import cv2
 from PIL import Image
-from scipy.ndimage import gaussian_filter
 from matplotlib import colormaps as mpl_cmaps
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -188,6 +187,21 @@ class InferenceController(QObject):
         """
         return self._strategy is not None
 
+    def switch_model(self, key: str) -> None:
+        """Switch which cached model's results are active (in-memory only).
+
+        Stops any running inference worker first. Does not touch disk —
+        loading the newly active model's cached heatmaps from its NPZ, if
+        any, and persisting the outgoing model's dirty heatmaps are the
+        caller's responsibility (see ProjectController.switch_active_model).
+
+        Args:
+            key (str): Model key to activate. Must already be registered via
+                ``inference_model.register_model()``.
+        """
+        self._stop_worker()
+        self.inference_model.switch_active_model(key)
+
     # ------------------------------------------------------------------ #
     # Image loading
     # ------------------------------------------------------------------ #
@@ -311,7 +325,11 @@ class InferenceController(QObject):
         if score_map is None:
             return left_image, left_image.copy(), scale, offset, None
 
-        s = gaussian_filter(score_map, sigma=sigma) if sigma > 0 else score_map.copy()
+        s = (
+            cv2.GaussianBlur(score_map, (0, 0), sigmaX=sigma, borderType=cv2.BORDER_REFLECT)
+            if sigma > 0
+            else score_map.copy()
+        )
 
         # Suppress the background noise floor using the percentile slider, then
         # keep the absolute [0, 1] scale intact. Re-normalizing per image (old

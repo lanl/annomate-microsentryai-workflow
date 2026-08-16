@@ -1,10 +1,9 @@
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QMessageBox, QTableView
+from PySide6.QtWidgets import QLabel, QMessageBox, QTableView
 
 from core.states.dataset_state import DatasetState
-from models.classes_model import CLASS_NAME_ROLE, ClassColumns
 from models.dataset_model import DatasetTableModel
 from views.annomate.sections.classes import ClassesSection
 
@@ -29,45 +28,143 @@ def classes_section(qtbot):
     return widget, model
 
 
-def _proxy_index_for_class(widget, name: str, column: int):
-    for row in range(widget._proxy.rowCount()):
-        index = widget._proxy.index(row, column)
-        if index.data(CLASS_NAME_ROLE) == name:
-            return index
-    raise AssertionError(f"Class not found in proxy: {name}")
+def row_order_class_names(widget):
+    """Class names in current on-screen (top-to-bottom) row order."""
+    return [
+        widget._rows_layout.itemAt(i).widget()._name
+        for i in range(widget._rows_layout.count())
+    ]
 
 
-def _click_index(qtbot, widget, proxy_index) -> None:
-    rect = widget._table.visualRect(proxy_index)
-    qtbot.mouseClick(widget._table.viewport(), Qt.LeftButton, pos=rect.center())
+def test_classes_section_uses_plain_widget_rows_sorted_by_name(classes_section):
+    """Verify ClassesSection builds one plain-widget row per class, sorted alphabetically.
 
-
-def test_clicking_sorted_row_emits_correct_class(classes_section, qtbot):
-    """Verify that clicking a sorted row emits class_selected with the correct class name.
-
-    Sorts alphabetically (alpha, beta, gamma) and clicks the 'gamma' row. Success means
-    the class_selected signal emits 'gamma' and _selected_name is set to 'gamma'.
+    No QTableView/QAbstractItemView involved -- rows are alphabetically ordered
+    by class name (alpha, beta, gamma) with no user-facing sort control.
     """
     widget, _model = classes_section
-    widget._proxy.sort(ClassColumns.CLASS, Qt.AscendingOrder)
-    index = _proxy_index_for_class(widget, "gamma", ClassColumns.CLASS)
+
+    assert widget.findChild(QTableView) is None
+    assert len(widget._rows) == 3
+    assert row_order_class_names(widget) == ["alpha", "beta", "gamma"]
+
+
+def test_clicking_row_emits_class_selected(classes_section, qtbot):
+    """Verify that clicking a row (outside its controls) emits class_selected with its name."""
+    widget, _model = classes_section
+    row = widget._rows["gamma"]
 
     with qtbot.waitSignal(widget.class_selected, timeout=1000) as signal:
-        _click_index(qtbot, widget, index)
+        qtbot.mouseClick(row, Qt.LeftButton)
 
     assert signal.args == ["gamma"]
     assert widget._selected_name == "gamma"
+    assert row.styleSheet() != ""  # selected row gets a highlight style
 
 
-def test_adding_class_selects_new_class_under_active_sort(classes_section, qtbot):
-    """Verify that adding a new class selects it and emits class_selected even when the proxy is sorted.
+def test_clicking_swatch_changes_color_without_emitting_class_selected(
+    classes_section, qtbot, monkeypatch
+):
+    """Verify clicking the color swatch opens the color picker without a row-click selection.
 
-    With a descending sort active, adds a new class 'Delta' via the input field. Success
-    means class_selected fires with 'delta', the class appears in the model, and
-    _selected_name reflects the new class.
+    The swatch is a nested clickable widget inside the row -- its own press
+    must be consumed there (QToolButton always accepts its press), not
+    propagate to the parent row's `activated` (which would emit
+    class_selected). _change_color re-selects the class internally
+    afterward, but silently (emit=False), so class_selected must not fire.
     """
     widget, model = classes_section
-    widget._proxy.sort(ClassColumns.CLASS, Qt.DescendingOrder)
+    row = widget._rows["beta"]
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QColorDialog.getColor",
+        lambda *args, **kwargs: QColor(101, 112, 123),
+    )
+
+    received = []
+    widget.class_selected.connect(received.append)
+    qtbot.mouseClick(row._swatch, Qt.LeftButton)
+
+    assert model.get_class_color("beta") == (101, 112, 123)
+    assert received == []
+    assert widget._selected_name == "beta"  # re-selected internally, just not emitted
+
+
+def test_deleting_class_targets_correct_row(classes_section, qtbot, monkeypatch):
+    """Verify clicking a row's delete button removes that class specifically."""
+    widget, model = classes_section
+    row = widget._rows["alpha"]
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.Yes,
+    )
+
+    qtbot.mouseClick(row._delete_btn, Qt.LeftButton)
+
+    assert "alpha" not in model.get_class_names()
+    assert "beta" in model.get_class_names()
+    assert "gamma" in model.get_class_names()
+
+
+def test_deleting_class_with_annotations_can_be_cancelled(
+    classes_section, qtbot, monkeypatch
+):
+    """Verify cancelling the delete confirmation keeps the class and its annotations intact."""
+    widget, model = classes_section
+    row = widget._rows["beta"]
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QMessageBox.question",
+        lambda *args, **kwargs: QMessageBox.No,
+    )
+
+    qtbot.mouseClick(row._delete_btn, Qt.LeftButton)
+
+    assert "beta" in model.get_class_names()
+    assert model.get_class_annotation_count("beta") == 2
+
+
+def test_deleting_class_without_annotations_does_not_prompt(
+    classes_section, qtbot, monkeypatch
+):
+    """Verify deleting a class with no annotations skips the confirmation dialog."""
+    widget, model = classes_section
+    model.add_class("Empty", (1, 2, 3))
+    widget._table_model.refresh_classes()
+    qtbot.wait(20)
+    row = widget._rows["empty"]
+
+    def fail_if_prompted(*args, **kwargs):
+        raise AssertionError("Delete confirmation should not be shown")
+
+    monkeypatch.setattr(
+        "views.annomate.sections.classes.QMessageBox.question",
+        fail_if_prompted,
+    )
+
+    qtbot.mouseClick(row._delete_btn, Qt.LeftButton)
+
+    assert "empty" not in model.get_class_names()
+
+
+def test_visibility_button_targets_correct_row(classes_section, qtbot):
+    """Verify clicking a row's eye button toggles only that class's visibility."""
+    widget, model = classes_section
+    row = widget._rows["alpha"]
+
+    qtbot.mouseClick(row._eye_btn, Qt.LeftButton)
+
+    assert model.is_class_visible("alpha") is False
+    assert model.is_class_visible("beta") is True
+    assert model.is_class_visible("gamma") is True
+
+    row = widget._rows["alpha"]  # rows were rebuilt after the model reset
+    qtbot.mouseClick(row._eye_btn, Qt.LeftButton)
+
+    assert model.is_class_visible("alpha") is True
+
+
+def test_adding_class_selects_new_class(classes_section, qtbot):
+    """Verify adding a class via the input field selects it and emits class_selected."""
+    widget, model = classes_section
     widget._name_input.setText("Delta")
 
     with qtbot.waitSignal(widget.class_selected, timeout=1000) as signal:
@@ -78,163 +175,90 @@ def test_adding_class_selects_new_class_under_active_sort(classes_section, qtbot
     assert widget._selected_name == "delta"
 
 
-def test_deleting_class_after_sort_targets_correct_class(
-    classes_section, qtbot, monkeypatch
-):
-    """Verify that clicking delete on a sorted row deletes the correct source class, not the proxy row class.
-
-    Sorts descending (gamma, beta, alpha) and clicks delete for the 'alpha' row.
-    Confirms the deletion by monkeypatching QMessageBox to return Yes. Success means
-    'alpha' is removed but 'beta' and 'gamma' remain.
-    """
-    widget, model = classes_section
-    widget._proxy.sort(ClassColumns.CLASS, Qt.DescendingOrder)
-    index = _proxy_index_for_class(widget, "alpha", ClassColumns.DELETE)
-    monkeypatch.setattr(
-        "views.annomate.sections.classes.QMessageBox.question",
-        lambda *args, **kwargs: QMessageBox.Yes,
-    )
-
-    _click_index(qtbot, widget, index)
-
-    assert "alpha" not in model.get_class_names()
-    assert "beta" in model.get_class_names()
-    assert "gamma" in model.get_class_names()
-
-
-def test_deleting_class_with_annotations_can_be_cancelled(
-    classes_section, qtbot, monkeypatch
-):
-    """Verify that cancelling the delete confirmation keeps the class and its annotations intact.
-
-    'beta' has 2 annotations. Clicking delete and choosing No in the confirmation dialog
-    should leave the class and all its annotations unchanged. Success means 'beta' is
-    still in the model with its 2 annotations.
-    """
-    widget, model = classes_section
-    index = _proxy_index_for_class(widget, "beta", ClassColumns.DELETE)
-    monkeypatch.setattr(
-        "views.annomate.sections.classes.QMessageBox.question",
-        lambda *args, **kwargs: QMessageBox.No,
-    )
-
-    _click_index(qtbot, widget, index)
-
-    assert "beta" in model.get_class_names()
-    assert model.get_class_annotation_count("beta") == 2
-
-
-def test_deleting_class_without_annotations_does_not_prompt(
-    classes_section, qtbot, monkeypatch
-):
-    """Verify that deleting a class with no annotations skips the confirmation dialog.
-
-    Adds an 'Empty' class with no annotations and deletes it. The QMessageBox should
-    never be shown for annotation-free classes. Success means no assertion error is
-    raised by the monkeypatched dialog and 'empty' is removed from the model.
-    """
-    widget, model = classes_section
-    model.add_class("Empty", (1, 2, 3))
-    widget._table_model.refresh_classes()
-    index = _proxy_index_for_class(widget, "empty", ClassColumns.DELETE)
-
-    def fail_if_prompted(*args, **kwargs):
-        raise AssertionError("Delete confirmation should not be shown")
-
-    monkeypatch.setattr(
-        "views.annomate.sections.classes.QMessageBox.question",
-        fail_if_prompted,
-    )
-
-    _click_index(qtbot, widget, index)
-
-    assert "empty" not in model.get_class_names()
-
-
-def test_visibility_button_after_sort_targets_correct_class(classes_section, qtbot):
-    """Verify that clicking the visibility button on a sorted row toggles only the targeted class.
-
-    Sorts descending and clicks visibility for 'alpha'. Only alpha should become hidden;
-    beta and gamma remain visible. Clicking again re-shows alpha. Success means only
-    the targeted class visibility changes each time.
-    """
-    widget, model = classes_section
-    widget._proxy.sort(ClassColumns.CLASS, Qt.DescendingOrder)
-    index = _proxy_index_for_class(widget, "alpha", ClassColumns.VISIBILITY)
-
-    _click_index(qtbot, widget, index)
-
-    assert model.is_class_visible("alpha") is False
-    assert model.is_class_visible("beta") is True
-    assert model.is_class_visible("gamma") is True
-
-    _click_index(qtbot, widget, index)
-
-    assert model.is_class_visible("alpha") is True
-
-
-def test_color_column_updates_correct_class_after_sort(
-    classes_section, qtbot, monkeypatch
-):
-    """Verify that clicking the color column on a sorted row opens the color picker and updates the correct class.
-
-    Sorts descending and clicks the color cell for 'beta'. Monkeypatches QColorDialog
-    to return a specific color (101, 112, 123). Success means 'beta' receives the new
-    color in the dataset model.
-    """
-    widget, model = classes_section
-    widget._proxy.sort(ClassColumns.CLASS, Qt.DescendingOrder)
-    index = _proxy_index_for_class(widget, "beta", ClassColumns.COLOR)
-
-    monkeypatch.setattr(
-        "views.annomate.sections.classes.QColorDialog.getColor",
-        lambda *args, **kwargs: QColor(101, 112, 123),
-    )
-
-    _click_index(qtbot, widget, index)
-
-    assert model.get_class_color("beta") == (101, 112, 123)
-
-
-def test_classes_section_uses_table_view(classes_section):
-    """Verify that ClassesSection uses a sortable QTableView with correct structural configuration.
-
-    Checks that the internal table is a QTableView with sorting enabled, the color
-    column has an empty header, and the initial sort indicator is on the CLASS column.
-    Success means all structural assertions pass.
-    """
+def test_header_labels_class_tot_only(classes_section):
+    """Verify the compact Class/Tot header labels and blank action headers."""
     widget, _model = classes_section
 
-    assert widget.findChild(QTableView) is widget._table
-    assert widget._table.isSortingEnabled()
-    assert widget._table_model.headerData(ClassColumns.COLOR, Qt.Horizontal) == ""
-    assert widget._table.horizontalHeader().sortIndicatorSection() == ClassColumns.CLASS
+    header_labels = widget._header_row.findChildren(QLabel)
+    header_texts = [lbl.text() for lbl in header_labels]
+
+    assert (
+        widget._table_model.headerData(1, Qt.Horizontal) in header_texts
+        or "Class" in header_texts
+    )
+    assert widget._total_header_lbl.text() == "Tot"
+    assert widget._total_header_lbl.toolTip() == "Class count for the whole dataset"
+    # Swatch/eye/delete columns stay blank -- three empty-text spacer labels.
+    assert header_texts.count("") == 3
 
 
-def test_classes_table_expands_to_show_all_rows(classes_section, qtbot):
-    """Verify that the classes table dynamically grows in height to show all rows without a scrollbar.
+def test_count_column_width_to_widest_displayed_value(classes_section, qtbot):
+    """Verify the Tot column shrinks-to-fit its widest value, not a fixed width.
 
-    Confirms the table has no vertical scrollbar and all rows are visible without
-    scrolling. After adding a new class, the table should grow taller to accommodate
-    the new row. Success means height increases and the last row remains visible.
+    'beta' has total count 2 (single digit) initially. Adding enough beta
+    annotations to reach a 3-digit total should widen both the header and
+    every row's Tot column to match, instead of clipping or leaving unused
+    fixed-width padding.
     """
+    from views.annomate.sections.classes import _cell_text_width
+
+    widget, model = classes_section
+    narrow_total_w = widget._total_col_w
+
+    for _ in range(100):
+        model.add_annotation(1, "Beta", [(0, 0), (1, 0), (1, 1)])
+    qtbot.wait(20)
+
+    assert widget._total_col_w > narrow_total_w
+    assert widget._total_col_w >= _cell_text_width("102")
+    assert widget._total_header_lbl.width() == widget._total_col_w
+    for row in widget._rows.values():
+        assert row._total_lbl.width() == widget._total_col_w
+
+
+def test_count_column_width_derives_from_widest_cell_or_header(classes_section):
+    """Verify the Tot column width equals max(header width, widest cell width).
+
+    Guards against reintroducing a hand-tuned fixed pixel constant that
+    wastes space around small counts or clips large ones.
+    """
+    from views.annomate.sections.classes import (
+        ClassColumns,
+        _cell_text_width,
+        _header_label_width,
+    )
+
     widget, _model = classes_section
 
-    assert widget._table.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOff
-    last_index = widget._proxy.index(widget._proxy.rowCount() - 1, ClassColumns.CLASS)
-    assert (
-        widget._table.visualRect(last_index).bottom()
-        < widget._table.viewport().height()
+    widest_cell = max(
+        _cell_text_width(
+            str(
+                widget._table_model.index(r, ClassColumns.TOTAL).data(Qt.DisplayRole)
+                or "0"
+            )
+        )
+        for r in range(widget._table_model.rowCount())
+    )
+    assert widget._total_col_w == max(
+        _header_label_width(widget._total_header_lbl.text()), widest_cell
     )
 
-    old_height = widget._table.height()
-    widget._name_input.setText("Delta")
-    widget._add_class()
-    qtbot.wait(50)
 
-    last_index = widget._proxy.index(widget._proxy.rowCount() - 1, ClassColumns.CLASS)
-    assert widget._table.height() > old_height
-    assert (
-        widget._table.visualRect(last_index).bottom()
-        < widget._table.viewport().height()
-    )
+def test_image_level_mode_hides_visibility_column(classes_section, qtbot):
+    """Verify switching to Image Level mode hides the eye button.
+
+    It stays visible in Pixel Level mode (the default) and hides once the
+    user switches modes, matching the old table's setColumnHidden behavior.
+    """
+    widget, _model = classes_section
+    row = widget._rows["alpha"]
+    assert row._eye_btn.isVisible() is True
+    assert widget._eye_header_spacer.isVisible() is True
+
+    with qtbot.waitSignal(widget.annotation_mode_changed, timeout=1000) as signal:
+        qtbot.mouseClick(widget._image_btn, Qt.LeftButton)
+
+    assert signal.args == ["image_level"]
+    assert widget._eye_header_spacer.isVisible() is False
+    row = widget._rows["alpha"]  # rows rebuilt after mode-driven data change
+    assert row._eye_btn.isVisible() is False

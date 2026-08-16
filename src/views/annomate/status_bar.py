@@ -58,10 +58,6 @@ class AnnoMateStatusBar(QWidget):
         h.addWidget(self._lbl_tool_hint)
 
         h.addWidget(self._pipe())
-        self._lbl_class = QLabel("Class: —")
-        h.addWidget(self._lbl_class)
-
-        h.addWidget(self._pipe())
         self._lbl_session = QLabel("Session: —")
         h.addWidget(self._lbl_session)
 
@@ -100,13 +96,15 @@ class AnnoMateStatusBar(QWidget):
         self._lbl_dims.setText(f"{w} × {h} px")
 
     _TOOL_HINTS = {
-        "polygon": "double-click to close · Backspace to undo point · Esc to cancel",
+        "polygon": "click start point to close · Backspace to undo point · Esc to cancel",
         "sam_bbox": "draw bbox over object · Enter=accept · Esc=cancel",
+        "edit_points": "Add: click an edge to insert · Delete: click a vertex to remove",
     }
 
     _TOOL_DISPLAY = {
         "polygon": "Polygon",
         "sam_bbox": "SAM BBox",
+        "edit_points": "Edit Points",
     }
 
     def set_tool(self, name: str) -> None:
@@ -120,9 +118,6 @@ class AnnoMateStatusBar(QWidget):
         """Update the tool hint area with a dynamic SAM status message."""
         self._lbl_tool_hint.setText(f"  —  {text}" if text else "")
         self._lbl_tool_hint.setVisible(bool(text))
-
-    def set_class(self, name: str) -> None:
-        self._lbl_class.setText(f"Class: {name}" if name else "Class: —")
 
     @staticmethod
     def _format_duration(seconds: float) -> str:

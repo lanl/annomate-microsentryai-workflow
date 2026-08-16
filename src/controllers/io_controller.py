@@ -7,7 +7,6 @@ Rules:
   - Errors are signalled by raising exceptions; callers (Views) handle display.
 """
 
-import os
 import csv
 import logging
 import shutil
@@ -18,6 +17,7 @@ import cv2
 import numpy as np
 
 from core.utils.constants import DEFAULT_CLASS_COLORS
+from core.utils.image_scan import scan_images
 
 logger = logging.getLogger("AnnoMate.IOController")
 
@@ -46,21 +46,19 @@ class IOController:
         self.model = model
 
     def load_folder(self, directory: str) -> None:
-        """Scan a directory for images and load them into the model.
+        """Recursively scan a directory for images and load them into the model.
 
         Only files with extensions ``.png``, ``.jpg``, ``.jpeg``, ``.bmp``,
-        ``.tif``, and ``.tiff`` (case-insensitive) are included. Results are
-        sorted alphabetically before being passed to the model.
+        ``.tif``, and ``.tiff`` (case-insensitive) are included, at any
+        subfolder depth. Results are sorted alphabetically as paths relative
+        to *directory* before being passed to the model.
 
         Args:
             directory (str): Absolute path to the folder to scan.
         """
         logger.debug("Scanning directory for images: %s", directory)
 
-        exts = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
-        files = sorted(
-            f for f in os.listdir(directory) if Path(f).suffix.lower() in exts
-        )
+        files = scan_images(directory)
 
         logger.debug("Found %d valid images in folder.", len(files))
         self.model.load_folder(directory, files)
@@ -87,7 +85,9 @@ class IOController:
         Columns: tray, image_name, decision, pixel_classes, image_classes,
         inspector, note.  ``pixel_classes`` is derived from polygon
         annotations; ``image_classes`` from image-level tags.  Both may be
-        populated on the same image when an A-merge has occurred.
+        populated on the same image when an A-merge has occurred.  ``tray``
+        is each image's immediate containing folder name (or the dataset
+        root folder's name for images directly in the root).
 
         Args:
             out_path (str): Absolute path for the output CSV file.
@@ -102,7 +102,12 @@ class IOController:
         if not state.image_files:
             raise RuntimeError("No images loaded.")
 
-        tray_name = Path(state.image_dir).name if state.image_dir else ""
+        root_name = Path(state.image_dir).name if state.image_dir else ""
+
+        def tray_for(name: str) -> str:
+            parent = Path(name).parent
+            return root_name if str(parent) == "." else parent.name
+
         rows = []
         for name in state.image_files:
             decision = state.review_decisions.get(name, "")
@@ -112,7 +117,7 @@ class IOController:
             img_cls = ",".join(state.image_classes.get(name, []))
             rows.append(
                 {
-                    "tray": tray_name,
+                    "tray": tray_for(name),
                     "image_name": name,
                     "decision": decision if reviewed else "",
                     "pixel_classes": pixel_cls,
@@ -146,7 +151,10 @@ class IOController:
         For each image that has at least one polygon annotation, renders all
         polygons onto a black canvas as white-filled regions and writes the
         result as a PNG. Images without annotations are skipped — they
-        represent defect-free ("good") samples that need no mask.
+        represent defect-free ("good") samples that need no mask. Each mask
+        is written at the same path, relative to *out_dir*, that its source
+        image has relative to the dataset root — nested source folders are
+        mirrored rather than flattened.
 
         Args:
             out_dir (str): Absolute path to the output directory.
@@ -187,8 +195,9 @@ class IOController:
                 pts = np.array(a["polygon"], dtype=np.int32).reshape((-1, 1, 2))
                 cv2.fillPoly(mask, [pts], 255)
 
-            stem = Path(name).stem
-            cv2.imwrite(str(out_path / f"{stem}.png"), mask)
+            dest = out_path / Path(name).with_suffix(".png")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            cv2.imwrite(str(dest), mask)
             saved += 1
 
         logger.debug("Exported %d binary mask(s) to: %s", saved, out_dir)
@@ -227,7 +236,11 @@ class IOController:
 
         Only images with a polygon ``reject`` decision contribute to test/.
         Rejected images without polygon annotations (image-level-only) are
-        skipped — they carry no mask information.
+        skipped — they carry no mask information. Images are grouped by
+        review decision and annotation class only — for a nested source
+        dataset, each image's own subfolder is not preserved in the output
+        (MVTec-style structures use a single category level, not the
+        source's folder layout).
 
         Args:
             out_dir: Root directory to write the structure into.
@@ -254,19 +267,20 @@ class IOController:
 
             decision = state.review_decisions.get(name, "")
             anns = state.annotations.get(name, [])
+            basename = Path(name).name
 
             if decision == "accept":
-                dest = root / "train" / "good"
-                dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest / name)
+                dest = root / "train" / "good" / basename
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
                 counts["train_good"] += 1
 
             elif decision == "reject" and anns:
                 folder = "-".join(sorted({a["category_name"] for a in anns}))
 
-                test_dest = root / "test" / folder
-                test_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, test_dest / name)
+                test_dest = root / "test" / folder / basename
+                test_dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, test_dest)
                 counts["test"] += 1
 
                 img = cv2.imread(str(src), cv2.IMREAD_GRAYSCALE)
@@ -276,9 +290,9 @@ class IOController:
                     for a in anns:
                         pts = np.array(a["polygon"], dtype=np.int32).reshape((-1, 1, 2))
                         cv2.fillPoly(mask, [pts], 255)
-                    gt_dest = root / "ground_truth" / folder
-                    gt_dest.mkdir(parents=True, exist_ok=True)
-                    cv2.imwrite(str(gt_dest / f"{src.stem}.png"), mask)
+                    gt_dest = root / "ground_truth" / folder / Path(basename).with_suffix(".png")
+                    gt_dest.parent.mkdir(parents=True, exist_ok=True)
+                    cv2.imwrite(str(gt_dest), mask)
                     counts["masks"] += 1
 
         logger.debug("Exported pixel train structure to: %s — %s", out_dir, counts)
@@ -303,7 +317,9 @@ class IOController:
             └── test/{defect}/ rejected images with image-level class tags
 
         No ground_truth masks are written — this export is for classification
-        or image-level anomaly models that do not use pixel masks.
+        or image-level anomaly models that do not use pixel masks. Images are
+        grouped by review decision and class tag only — for a nested source
+        dataset, each image's own subfolder is not preserved in the output.
 
         Args:
             out_dir: Root directory to write the structure into.
@@ -330,18 +346,19 @@ class IOController:
 
             decision = state.review_decisions.get(name, "")
             img_classes = state.image_classes.get(name, [])
+            basename = Path(name).name
 
             if decision == "accept":
-                dest = root / "train" / "good"
-                dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest / name)
+                dest = root / "train" / "good" / basename
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
                 counts["train_good"] += 1
 
             elif decision == "reject" and img_classes:
                 folder = "-".join(sorted(img_classes))
-                test_dest = root / "test" / folder
-                test_dest.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, test_dest / name)
+                test_dest = root / "test" / folder / basename
+                test_dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, test_dest)
                 counts["test"] += 1
 
         logger.debug(

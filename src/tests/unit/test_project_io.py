@@ -49,6 +49,42 @@ def _make_dataset(tmp_path):
     return state
 
 
+def _activate_model(inf, key="testmodel", model_path="/models/testmodel.pt"):
+    """Register and activate a model, mirroring what InferenceController does
+    before any scores are set — tests that poke inf.scores/inf.score_maps
+    directly need an active model for save_project to persist anything."""
+    inf.register_model(key, model_path, "")
+    inf.switch_active_model(key)
+    return key
+
+
+def _write_legacy_project(pio, ds, proj_dir):
+    """Write an old-style (v1.0) project: a separate annotations.coco.json,
+    referenced by "annotations_file", with no embedded "annotations" key.
+
+    Returns the path to the written .annoproj file.
+    """
+    proj_dir_path = Path(proj_dir)
+    proj_dir_path.mkdir(parents=True, exist_ok=True)
+    pio.export_coco(str(proj_dir_path / "annotations.coco.json"), ds)
+
+    annoproj_path = proj_dir_path / "legacy.annoproj"
+    legacy_data = {
+        "version": "1.0",
+        "project_name": "legacy",
+        "annotation_mode": ds.annotation_mode,
+        "dataset": {
+            "class_names": list(ds.class_names),
+            "class_colors": {k: list(v) for k, v in ds.class_colors.items()},
+        },
+        "annotations_file": "annotations.coco.json",
+        "per_image": {},
+        "inference": {"model_path": "", "score_maps_file": ""},
+    }
+    annoproj_path.write_text(json.dumps(legacy_data))
+    return str(annoproj_path)
+
+
 # ------------------------------------------------------------------ #
 # Polygon serialization helpers
 # ------------------------------------------------------------------ #
@@ -258,11 +294,11 @@ class TestCocoRoundTrip:
 
 class TestProjectRoundTrip:
     def test_save_creates_required_files(self, pio, tmp_path):
-        """Verify that save_project creates the .annoproj metadata file and the COCO annotations file.
+        """Verify that save_project creates only the .annoproj file, with annotations embedded.
 
-        Both the project manifest (.annoproj) and the COCO JSON file must exist on
-        disk after a successful save. Success means both files are present in the
-        project directory.
+        Annotations are now embedded directly in .annoproj instead of a separate
+        annotations.coco.json sidecar. Success means the manifest exists, contains
+        a top-level "annotations" section, and no COCO sidecar file is written.
         """
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
@@ -271,7 +307,11 @@ class TestProjectRoundTrip:
         pio.save_project(proj_dir, "myproject", ds, inf)
 
         assert (tmp_path / "proj" / "myproject.annoproj").exists()
-        assert (tmp_path / "proj" / "annotations.coco.json").exists()
+        assert not (tmp_path / "proj" / "annotations.coco.json").exists()
+
+        raw = json.loads((tmp_path / "proj" / "myproject.annoproj").read_text())
+        assert "img001.jpg" in raw["annotations"]
+        assert raw["annotations"]["img001.jpg"][0]["category_name"] == "defect"
 
     def test_round_trip_restores_class_names(self, pio, tmp_path):
         """Verify that class names and colors survive a full project save/load round-trip.
@@ -313,6 +353,33 @@ class TestProjectRoundTrip:
         assert "img001.jpg" in ds2.annotations
         assert len(ds2.annotations["img001.jpg"]) == 1
 
+    def test_round_trip_preserves_thickness_and_visibility(self, pio, tmp_path):
+        """Verify per-annotation thickness and visibility survive a full round-trip.
+
+        Annotations used to be routed through COCO export/import on every save
+        and load, which only round-tripped category_name and polygon — thickness
+        and visible silently reset to defaults on every reload. Now that
+        annotations are embedded directly in .annoproj, both fields must survive
+        exactly. Success means the restored annotation's thickness and visible
+        match the customized values, not the defaults (2.0 / True).
+        """
+        ds = _make_dataset(tmp_path)
+        ds.update_annotation_thickness("img001.jpg", 0, 4.5)
+        ds.set_annotation_visible("img001.jpg", 0, False)
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+
+        data = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(data, ds2, InferenceState())
+
+        restored = ds2.annotations["img001.jpg"][0]
+        assert restored["thickness"] == pytest.approx(4.5)
+        assert restored["visible"] is False
+
     def test_round_trip_restores_inspector_and_note(self, pio, tmp_path):
         """Verify that per-image inspector and note fields survive a full save/load round-trip.
 
@@ -343,9 +410,9 @@ class TestProjectRoundTrip:
         ds = _make_dataset(tmp_path)
         abs_img = str(tmp_path / "images" / "img001.jpg")
         inf = InferenceState()
-        inf.scores = {abs_img: 0.87}
-        inf.labels = {abs_img: "ANOMALY"}
-        inf.inference_cache = {abs_img: 0.87}
+        _activate_model(inf)
+        inf.scores[abs_img] = 0.87
+        inf.inference_cache[abs_img] = 0.87
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf)
 
@@ -357,16 +424,61 @@ class TestProjectRoundTrip:
         assert inf2.labels.get(abs_img) == "ANOMALY"
         assert inf2.inference_cache.get(abs_img) == pytest.approx(0.87)
 
+    def test_round_trip_nested_images_keep_distinct_scores_and_labels(
+        self, pio, tmp_path
+    ):
+        """Two images sharing a basename in different subfolders must not collide.
+
+        Before the fix, per_image/scores/labels were keyed by os.path.basename(),
+        which collapses "nest1/dup.jpg" and "nest3/dup.jpg" to the same "dup.jpg"
+        key and silently overwrites one image's score/label with the other's.
+        """
+        from PIL import Image as PILImage
+
+        img_dir = tmp_path / "images"
+        (img_dir / "nest1").mkdir(parents=True)
+        (img_dir / "nest3").mkdir(parents=True)
+        PILImage.new("RGB", (10, 10)).save(img_dir / "nest1" / "dup.jpg")
+        PILImage.new("RGB", (10, 10)).save(img_dir / "nest3" / "dup.jpg")
+
+        ds = DatasetState()
+        ds.image_dir = str(img_dir)
+        ds.image_files = ["nest1/dup.jpg", "nest3/dup.jpg"]
+
+        abs_nest1 = str(img_dir / "nest1" / "dup.jpg")
+        abs_nest3 = str(img_dir / "nest3" / "dup.jpg")
+        inf = InferenceState()
+        key = _activate_model(inf)
+        inf.scores[abs_nest1] = 0.1
+        inf.scores[abs_nest3] = 0.9
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["per_image"]["nest1/dup.jpg"]["inference"][key] == pytest.approx(0.1)
+        assert raw["per_image"]["nest3/dup.jpg"]["inference"][key] == pytest.approx(0.9)
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), inf2)
+        assert inf2.scores.get(abs_nest1) == pytest.approx(0.1)
+        assert inf2.scores.get(abs_nest3) == pytest.approx(0.9)
+        assert inf2.labels.get(abs_nest1) == "NORMAL"
+        assert inf2.labels.get(abs_nest3) == "ANOMALY"
+
     def test_score_maps_saved_and_restored(self, pio, tmp_path):
         """Verify that score map arrays are written to a .npz file and restored correctly.
 
         When save_score_maps=True is passed, a scoremaps.npz file should be created.
         After loading, the restored InferenceState should contain the original array
         for 'img001.jpg'. Success means the .npz file exists and the restored array
-        matches element-wise.
+        matches element-wise, within float16 storage precision (score maps are
+        downcast to float16 on save to keep the file small and fast to write).
         """
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
+        key = _activate_model(inf)
         arr = np.array([[0.1, 0.9], [0.5, 0.3]], dtype=np.float32)
         inf.score_maps["img001.jpg"] = arr
         inf.score_maps_dirty = True
@@ -374,14 +486,18 @@ class TestProjectRoundTrip:
 
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=True)
-        assert (tmp_path / "proj" / "scoremaps.npz").exists()
+        assert (
+            tmp_path / "proj" / "scoremaps" / f"myproject-{key}-scoremaps.npz"
+        ).exists()
 
         data = pio.load_project(path)
         inf2 = InferenceState()
         pio.apply_project_to_states(data, DatasetState(), inf2)
 
         assert "img001.jpg" in inf2.score_maps
-        np.testing.assert_array_almost_equal(inf2.score_maps["img001.jpg"], arr)
+        np.testing.assert_array_almost_equal(
+            inf2.score_maps["img001.jpg"], arr, decimal=3
+        )
 
     def test_score_maps_absolute_path_key_normalized_on_load(self, pio, tmp_path):
         """Verify that absolute-path keys in scoremaps.npz round-trip via OS-native separators.
@@ -395,6 +511,7 @@ class TestProjectRoundTrip:
 
         ds = _make_dataset(tmp_path)
         inf = InferenceState()
+        _activate_model(inf)
         arr = np.array([[0.2, 0.8]], dtype=np.float32)
         abs_key = str(tmp_path / "images" / "img001.jpg")
         inf.score_maps[abs_key] = arr
@@ -409,7 +526,9 @@ class TestProjectRoundTrip:
 
         expected_key = os.path.normpath(abs_key)
         assert expected_key in inf2.score_maps
-        np.testing.assert_array_almost_equal(inf2.score_maps[expected_key], arr)
+        np.testing.assert_array_almost_equal(
+            inf2.score_maps[expected_key], arr, decimal=3
+        )
 
     def test_skip_score_maps_flag(self, pio, tmp_path):
         """Verify that save_score_maps=False prevents writing the scoremaps.npz file.
@@ -428,22 +547,49 @@ class TestProjectRoundTrip:
 
         assert not (tmp_path / "proj" / "scoremaps.npz").exists()
 
-    def test_missing_coco_file_does_not_crash(self, pio, tmp_path):
-        """Verify that loading a project with a deleted COCO file does not raise an exception.
+    def test_legacy_format_loads_annotations_from_separate_coco_file(
+        self, pio, tmp_path
+    ):
+        """Verify that opening an old-style project still restores annotations.
 
-        Simulates a corrupted or moved project by deleting the COCO annotations file
-        after saving. apply_project_to_states should handle the missing file gracefully,
-        leaving annotations empty. Success means no exception is raised and annotations
+        Old .annoproj files have no top-level "annotations" key and instead
+        point at a sibling annotations.coco.json via "annotations_file". New
+        saves no longer produce this shape, but projects saved before this
+        change must keep loading correctly via the import_coco() fallback.
+        """
+        ds = _make_dataset(tmp_path)
+        proj_dir = str(tmp_path / "proj")
+        annoproj_path = _write_legacy_project(pio, ds, proj_dir)
+
+        data = pio.load_project(annoproj_path)
+        assert "annotations" not in data  # confirms this exercises the legacy branch
+
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(data, ds2, InferenceState())
+
+        assert "img001.jpg" in ds2.annotations
+        assert ds2.annotations["img001.jpg"][0]["category_name"] == "defect"
+        assert len(ds2.annotations["img001.jpg"][0]["polygon"]) == 3
+
+    def test_missing_coco_file_does_not_crash(self, pio, tmp_path):
+        """Verify that loading a legacy project with a deleted COCO file does not raise.
+
+        Simulates a corrupted or moved legacy project by deleting the COCO
+        annotations file after writing it. apply_project_to_states should
+        handle the missing file gracefully, leaving annotations empty, instead
+        of raising. Success means no exception is raised and annotations
         equals {}.
         """
         ds = _make_dataset(tmp_path)
         proj_dir = str(tmp_path / "proj")
-        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+        annoproj_path = _write_legacy_project(pio, ds, proj_dir)
 
-        # Remove the COCO file to simulate a corrupted/moved project
-        (tmp_path / "proj" / "annotations.coco.json").unlink()
+        # Remove the COCO file to simulate a corrupted/moved legacy project
+        (Path(proj_dir) / "annotations.coco.json").unlink()
 
-        data = pio.load_project(path)
+        data = pio.load_project(annoproj_path)
         ds2 = DatasetState()
         ds2.image_dir = ds.image_dir
         ds2.image_files = list(ds.image_files)
@@ -763,8 +909,8 @@ class TestProjectRoundTrip:
         ds.review_decisions["img001.jpg"] = "accept"
         abs_img = str(tmp_path / "images" / "img001.jpg")
         inf = InferenceState()
-        inf.scores = {abs_img: 0.42}
-        inf.labels = {abs_img: "NORMAL"}
+        _activate_model(inf)
+        inf.scores[abs_img] = 0.42
 
         proj_dir = str(tmp_path / "proj")
         path = pio.save_project(proj_dir, "myproject", ds, inf)
@@ -779,6 +925,45 @@ class TestProjectRoundTrip:
         assert ds2.review_decisions.get("img001.jpg") == "accept"
         assert inf2.scores.get(abs_img) == pytest.approx(0.42)
         assert inf2.labels.get(abs_img) == "NORMAL"
+
+    def test_decision_session_seconds_round_trips(self, pio, tmp_path):
+        """Verify that decision_session_seconds survives a save/load round-trip.
+
+        Sets a review decision along with a session-seconds value, saves the
+        project, and loads it back. Success means the session-seconds value is
+        restored alongside the decision in the new DatasetState.
+        """
+        ds = _make_dataset(tmp_path)
+        ds.set_review_decision("img001.jpg", "accept", session_seconds=321.0)
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["per_image"]["img001.jpg"]["decision_session_seconds"] == 321.0
+
+        data = pio.load_project(path)
+        ds2 = DatasetState()
+        ds2.image_dir = ds.image_dir
+        ds2.image_files = list(ds.image_files)
+        pio.apply_project_to_states(data, ds2, InferenceState())
+
+        assert ds2.decision_session_seconds.get("img001.jpg") == 321.0
+
+    def test_decision_session_seconds_absent_when_not_set(self, pio, tmp_path):
+        """Verify that decision_session_seconds is omitted when no value was recorded.
+
+        A decision made without a session-seconds value (e.g. no project session
+        active) should not add the key to the per_image entry.
+        """
+        ds = _make_dataset(tmp_path)
+        ds.review_decisions["img001.jpg"] = "reject"
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, InferenceState())
+
+        raw = json.loads(Path(path).read_text())
+        assert "decision_session_seconds" not in raw["per_image"]["img001.jpg"]
 
     def test_legacy_format_loads_review_status_and_decisions(self, pio, tmp_path):
         """Verify that the legacy 'review_status' and 'review_decisions' top-level keys are still readable.
@@ -862,6 +1047,192 @@ class TestProjectRoundTrip:
         saved_dir = raw["dataset"]["image_dir"]
         assert not saved_dir.startswith("/"), "image_dir should be relative"
         assert saved_dir == "../images"
+
+
+class TestMultiModelRoundTrip:
+    def test_all_known_models_scores_persist(self, pio, tmp_path):
+        """Verify every known model's scores round-trip, not just the active one.
+
+        Registers two models, gives each a score for the same image, and makes
+        "cfa" the active model at save time. Success means both models' scores
+        are restored after load — switching away from a model must not lose it.
+        """
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.register_model("cfa", "/models/cfa.pt", "")
+        inf.switch_active_model("cfa")
+        inf.scores[abs_img] = 0.46
+        inf.register_model("efficientad", "/models/efficientad.pt", "")
+        inf.switch_active_model("efficientad")
+        inf.scores[abs_img] = 0.51
+        inf.switch_active_model("cfa")
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["per_image"]["img001.jpg"]["inference"]["cfa"] == pytest.approx(0.46)
+        assert raw["per_image"]["img001.jpg"]["inference"]["efficientad"] == pytest.approx(
+            0.51
+        )
+        assert raw["inference"]["active_model_key"] == "cfa"
+        keys = {m["key"] for m in raw["inference"]["models"]}
+        assert keys == {"cfa", "efficientad"}
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), inf2)
+
+        assert inf2.model_scores["cfa"][abs_img] == pytest.approx(0.46)
+        assert inf2.model_scores["efficientad"][abs_img] == pytest.approx(0.51)
+        assert inf2.active_model_key == "cfa"
+        assert inf2.scores[abs_img] == pytest.approx(0.46)  # active model's view
+
+    def test_only_active_models_heatmaps_are_written(self, pio, tmp_path):
+        """Verify only the active model's NPZ gets written, at its own path.
+
+        Registers two models but only stores a heatmap for the active one
+        ("efficientad"). Success means exactly one NPZ file exists, named
+        after the project and that model's key, and cfa has no NPZ on disk
+        at all.
+        """
+        ds = _make_dataset(tmp_path)
+        inf = InferenceState()
+        inf.register_model("cfa", "/models/cfa.pt", "")
+        inf.register_model("efficientad", "/models/efficientad.pt", "")
+        inf.switch_active_model("efficientad")
+        inf.set_score_map("img001.jpg", 0.6, np.full((2, 2), 0.6, dtype=np.float32))
+
+        proj_dir = str(tmp_path / "proj")
+        pio.save_project(proj_dir, "myproject", ds, inf, save_score_maps=True)
+
+        scoremaps_dir = Path(proj_dir) / "scoremaps"
+        assert (scoremaps_dir / "myproject-efficientad-scoremaps.npz").exists()
+        assert not (scoremaps_dir / "myproject-cfa-scoremaps.npz").exists()
+
+    def test_scoremaps_filename_prefixed_with_project_name(self, pio, tmp_path):
+        """Verify two differently-named projects in the same folder don't collide.
+
+        Two projects sharing a parent directory and using the same model key
+        ("cfa") must write their heatmaps to different NPZ files — otherwise
+        saving one project would silently overwrite the other's cache.
+        """
+        ds_a = _make_dataset(tmp_path)
+        inf_a = InferenceState()
+        inf_a.register_model("cfa", "/models/cfa.pt", "")
+        inf_a.switch_active_model("cfa")
+        inf_a.set_score_map("img001.jpg", 0.1, np.full((2, 2), 0.1, dtype=np.float32))
+
+        # Same image folder as project A — two projects can legitimately
+        # point at the same dataset while remaining separate projects.
+        ds_b = DatasetState()
+        ds_b.image_dir = ds_a.image_dir
+        ds_b.image_files = list(ds_a.image_files)
+        inf_b = InferenceState()
+        inf_b.register_model("cfa", "/models/cfa.pt", "")
+        inf_b.switch_active_model("cfa")
+        inf_b.set_score_map("img001.jpg", 0.9, np.full((2, 2), 0.9, dtype=np.float32))
+
+        shared_dir = str(tmp_path / "shared")
+        pio.save_project(shared_dir, "project-a", ds_a, inf_a, save_score_maps=True)
+        pio.save_project(shared_dir, "project-b", ds_b, inf_b, save_score_maps=True)
+
+        scoremaps_dir = Path(shared_dir) / "scoremaps"
+        assert (scoremaps_dir / "project-a-cfa-scoremaps.npz").exists()
+        assert (scoremaps_dir / "project-b-cfa-scoremaps.npz").exists()
+
+        arr_a = pio.load_model_scoremaps(
+            str(scoremaps_dir / "project-a-cfa-scoremaps.npz")
+        )
+        arr_b = pio.load_model_scoremaps(
+            str(scoremaps_dir / "project-b-cfa-scoremaps.npz")
+        )
+        assert next(iter(arr_a.values()))[0, 0] == pytest.approx(0.1, abs=1e-3)
+        assert next(iter(arr_b.values()))[0, 0] == pytest.approx(0.9, abs=1e-3)
+
+    def test_switching_active_model_after_load_and_resaving(self, pio, tmp_path):
+        """Verify switching the active model and re-saving updates the registry.
+
+        Loads a project with two known models, switches the active one, and
+        saves again. Success means the newly-active key is what's persisted.
+        """
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        inf = InferenceState()
+        inf.register_model("cfa", "/models/cfa.pt", "")
+        inf.switch_active_model("cfa")
+        inf.scores[abs_img] = 0.46
+        inf.register_model("efficientad", "/models/efficientad.pt", "")
+        inf.switch_active_model("efficientad")
+        inf.scores[abs_img] = 0.51
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        data = pio.load_project(path)
+        inf2 = InferenceState()
+        pio.apply_project_to_states(data, DatasetState(), inf2)
+        assert inf2.active_model_key == "efficientad"
+
+        inf2.switch_active_model("cfa")
+        path2 = pio.save_project(proj_dir, "myproject", ds, inf2)
+        raw = json.loads(Path(path2).read_text())
+        assert raw["inference"]["active_model_key"] == "cfa"
+
+    def test_v20_project_migrates_to_single_model_registry(self, pio, tmp_path):
+        """Verify a pre-2.1 project file loads as a one-entry model registry.
+
+        Older project files have a single top-level inference.model_path and
+        inline per_image.score fields instead of the nested registry. Success
+        means the loader treats the model_path's filename stem as the sole
+        known model's key and its score lands under that key.
+        """
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        legacy_data = {
+            "version": "2.0",
+            "dataset": {"image_dir": str(tmp_path / "images")},
+            "per_image": {"img001.jpg": {"score": 0.73}},
+            "inference": {
+                "model_path": "/models/cfa.pt",
+                "score_maps_file": "scoremaps.npz",
+            },
+        }
+
+        inf2 = InferenceState()
+        pio.apply_project_to_states(legacy_data, DatasetState(), inf2)
+
+        assert inf2.active_model_key == "cfa"
+        assert inf2.known_models["cfa"]["model_path"] == "/models/cfa.pt"
+        assert inf2.model_scores["cfa"][abs_img] == pytest.approx(0.73)
+        assert inf2.scores[abs_img] == pytest.approx(0.73)
+        assert inf2.labels[abs_img] == "ANOMALY"
+
+    def test_v20_project_resaved_in_new_schema(self, pio, tmp_path):
+        """Verify saving a migrated v2.0 project writes the new v2.1 schema.
+
+        After loading a legacy project and saving it again, the file should
+        use the new nested registry shape, not the old flat one.
+        """
+        ds = _make_dataset(tmp_path)
+        abs_img = str(tmp_path / "images" / "img001.jpg")
+        legacy_data = {
+            "version": "2.0",
+            "dataset": {"image_dir": ds.image_dir},
+            "per_image": {"img001.jpg": {"score": 0.73}},
+            "inference": {"model_path": "/models/cfa.pt", "score_maps_file": ""},
+        }
+        inf = InferenceState()
+        pio.apply_project_to_states(legacy_data, DatasetState(), inf)
+
+        proj_dir = str(tmp_path / "proj")
+        path = pio.save_project(proj_dir, "myproject", ds, inf)
+
+        raw = json.loads(Path(path).read_text())
+        assert raw["version"] == "2.1"
+        assert "models" in raw["inference"]
+        assert raw["per_image"]["img001.jpg"]["inference"]["cfa"] == pytest.approx(0.73)
+        assert "score" not in raw["per_image"]["img001.jpg"]
 
 
 class TestAnnotationModeRoundTrip:
