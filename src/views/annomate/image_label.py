@@ -31,6 +31,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QLabel, QSizePolicy
 
+from core.utils.geometry import nearest_point_on_edge
+
 logger = logging.getLogger("AnnoMate.ImageLabel")
 
 # Tool Constants
@@ -38,6 +40,7 @@ POLYGON = "polygon"
 SAM_BBOX = "sam_bbox"
 CALIBRATE = "calibrate"
 MEASURE = "measure"
+EDIT_POINTS = "edit_points"
 
 
 class ImageLabel(QLabel):
@@ -152,6 +155,13 @@ class ImageLabel(QLabel):
         self._dragging_vertex_poly: int = -1
         self._selected_ai_idx: int = -1
 
+        # --- Edit Points tool state ---
+        self._point_edit_mode: str = "add"  # "add" or "delete"
+        self._hover_vertex: Tuple[int, int] = (-1, -1)  # (poly_idx, vertex_idx)
+        self._hover_edge_point: Optional[Tuple[int, int, QPointF]] = (
+            None  # (poly_idx, edge_start_idx, point_disp)
+        )
+
         # --- SAM tool state (display coords) ---
         self._sam_bbox_start: Optional[QPointF] = None
         self._sam_bbox_end: Optional[QPointF] = None
@@ -212,6 +222,8 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self._sam_bbox_start = None
         self._sam_bbox_end = None
         self._sam_ghost = None
@@ -302,6 +314,8 @@ class ImageLabel(QLabel):
         self._dragging_vertex_idx = -1
         self._dragging_vertex_poly = -1
         self._selected_ai_idx = -1
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self._sam_bbox_start = None
         self._sam_bbox_end = None
         self._sam_ghost = None
@@ -325,10 +339,13 @@ class ImageLabel(QLabel):
             self._pending_calib_pts = []
             if self._calib_model is not None:
                 self._calib_model.clear_measurement()
+        if self.current_tool == EDIT_POINTS and tool_name != EDIT_POINTS:
+            self._hover_vertex = (-1, -1)
+            self._hover_edge_point = None
         self.current_tool = tool_name
         if tool_name in (SAM_BBOX, CALIBRATE, MEASURE):
             self.setCursor(Qt.CrossCursor)
-        elif tool_name is None:
+        elif tool_name in (None, EDIT_POINTS):
             self.setCursor(Qt.ArrowCursor)
 
     @property
@@ -347,6 +364,19 @@ class ImageLabel(QLabel):
         Args: thickness (float): The brush width in pixels.
         """
         self._line_thickness = thickness
+        self.update()
+
+    def set_point_edit_mode(self, mode: str) -> None:
+        """Set whether the Edit Points tool adds or removes vertices on click.
+
+        Args:
+            mode (str): ``"add"`` to insert a vertex on the clicked edge, or
+                ``"delete"`` to remove the clicked vertex. Any other value
+                falls back to ``"add"``.
+        """
+        self._point_edit_mode = mode if mode in ("add", "delete") else "add"
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self.update()
 
     _UNSET = object()
@@ -590,6 +620,8 @@ class ImageLabel(QLabel):
                 coordinates. Hidden overlays keep their index but are not drawn
                 or hit-tested.
         """
+        self._hover_vertex = (-1, -1)
+        self._hover_edge_point = None
         self._overlays = []
         for item in poly_list:
             pts_orig, color, thick = item[:3]
@@ -854,6 +886,62 @@ class ImageLabel(QLabel):
                     best_vert = vert_i
         return best_poly, best_vert
 
+    def _find_nearest_edge_point(
+        self, pos_view: QPointF, threshold: float = 10.0
+    ) -> Optional[Tuple[int, int, QPointF]]:
+        """Return (poly_idx, edge_start_idx, point_disp) for the closest point on
+        any overlay polygon's boundary within threshold screen pixels, or None."""
+        best = None
+        best_dist = threshold
+        for poly_i, (pts, _, _, visible) in enumerate(self._overlays):
+            if not visible or len(pts) < 2:
+                continue
+            view_pts = [
+                (p.x() * self._zoom + self._pan.x(), p.y() * self._zoom + self._pan.y())
+                for p in pts
+            ]
+            hit = nearest_point_on_edge(
+                view_pts, (pos_view.x(), pos_view.y()), threshold=best_dist
+            )
+            if hit is None:
+                continue
+            edge_idx, (vx, vy) = hit
+            dist = ((pos_view.x() - vx) ** 2 + (pos_view.y() - vy) ** 2) ** 0.5
+            if dist < best_dist:
+                best_dist = dist
+                disp_pt = QPointF(
+                    (vx - self._pan.x()) / self._zoom, (vy - self._pan.y()) / self._zoom
+                )
+                best = (poly_i, edge_idx, disp_pt)
+        return best
+
+    def _handle_edit_points_click(self, pos_view: QPointF) -> None:
+        """Insert or remove a vertex under the cursor, per :attr:`_point_edit_mode`.
+
+        Emits :attr:`polygonEdited` with the updated point list on success;
+        does nothing if the cursor isn't near a qualifying vertex/edge, or if
+        deleting would drop the polygon below 3 vertices.
+        """
+        if self._point_edit_mode == "delete":
+            poly_i, vert_i = self._find_nearest_vertex(pos_view)
+            if poly_i == -1:
+                return
+            pts, _, _, _ = self._overlays[poly_i]
+            if len(pts) <= 3:
+                return
+            new_pts = pts[:vert_i] + pts[vert_i + 1 :]
+        else:
+            hit = self._find_nearest_edge_point(pos_view)
+            if hit is None:
+                return
+            poly_i, edge_idx, disp_pt = hit
+            pts, _, _, _ = self._overlays[poly_i]
+            new_pts = list(pts)
+            new_pts.insert(edge_idx + 1, disp_pt)
+
+        pts_orig = [self.display_to_original(p) for p in new_pts]
+        self.polygonEdited.emit(poly_i, pts_orig)
+
     def finish_current_polygon(self) -> None:
         """Emit :attr:`polygonFinished` with the current polygon and clear it.
 
@@ -989,6 +1077,11 @@ class ImageLabel(QLabel):
                 else:
                     # Start a new measurement
                     self._calib_model.set_meas_p1(orig_pt)
+                return
+
+            # --- Edit Points tool ---
+            if self.current_tool == EDIT_POINTS:
+                self._handle_edit_points_click(QPointF(event.pos()))
                 return
 
             pos_view = QPointF(event.pos())
@@ -1144,6 +1237,20 @@ class ImageLabel(QLabel):
                 self.setCursor(Qt.CrossCursor)
             else:
                 self.setCursor(Qt.ArrowCursor)
+            self.update()
+            return
+
+        if self.current_tool == EDIT_POINTS:
+            if self._point_edit_mode == "delete":
+                poly_i, vert_i = self._find_nearest_vertex(self._mouse_pos)
+                self._hover_vertex = (poly_i, vert_i)
+                self._hover_edge_point = None
+                self.setCursor(Qt.PointingHandCursor if poly_i != -1 else Qt.ArrowCursor)
+            else:
+                hit = self._find_nearest_edge_point(self._mouse_pos)
+                self._hover_edge_point = hit
+                self._hover_vertex = (-1, -1)
+                self.setCursor(Qt.CrossCursor if hit is not None else Qt.ArrowCursor)
             self.update()
             return
 
@@ -1646,6 +1753,29 @@ class ImageLabel(QLabel):
                 painter.setPen(QPen(QColor(20, 20, 20), 1.0 / self._zoom))
                 for p in pts:
                     painter.drawEllipse(p, r, r)
+
+        # Draw Edit Points hover affordance -- ghost insertion point on an edge
+        # (add mode) or a highlight ring on the vertex about to be removed
+        # (delete mode).
+        if self.current_tool == EDIT_POINTS:
+            if self._point_edit_mode == "delete":
+                poly_i, vert_i = self._hover_vertex
+                if 0 <= poly_i < len(self._overlays):
+                    pts, _, _, visible = self._overlays[poly_i]
+                    if visible and 0 <= vert_i < len(pts):
+                        r = 7.0 / self._zoom
+                        painter.setPen(QPen(QColor(220, 50, 50), 2.0 / self._zoom))
+                        painter.setBrush(QBrush(QColor(220, 50, 50, 90)))
+                        painter.drawEllipse(pts[vert_i], r, r)
+            elif self._hover_edge_point is not None:
+                poly_i, _, disp_pt = self._hover_edge_point
+                if 0 <= poly_i < len(self._overlays):
+                    _, color, _, visible = self._overlays[poly_i]
+                    if visible:
+                        r = 5.0 / self._zoom
+                        painter.setPen(QPen(color, 1.5 / self._zoom))
+                        painter.setBrush(QBrush(QColor(255, 255, 255, 180)))
+                        painter.drawEllipse(disp_pt, r, r)
 
         # Draw AI segmentation polygons as dashed ghost outlines
         for i, pts in enumerate(self._ai_overlays):

@@ -1,5 +1,5 @@
 import pytest
-from core.utils.geometry import polygon_area, polygon_bbox
+from core.utils.geometry import nearest_point_on_edge, polygon_area, polygon_bbox
 from core.utils.image_scan import scan_images
 
 
@@ -72,6 +72,57 @@ class TestPolygonBbox:
         pts = [(2, 3), (5, 3), (5, 7), (2, 7)]
         result = polygon_bbox(pts)
         assert result == pytest.approx([2.0, 3.0, 3.0, 4.0])
+
+
+class TestNearestPointOnEdge:
+    def test_point_above_top_edge_snaps_to_edge_midpoint(self):
+        """A query point centered above the top edge of a unit square snaps to that edge's midpoint.
+
+        Square corners are (0,0),(1,0),(1,1),(0,1); the top edge runs from
+        vertex 0 to vertex 1. Success means the returned edge_start_idx is 0
+        and the projected point is the edge midpoint (0.5, 0.0).
+        """
+        square = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        result = nearest_point_on_edge(square, (0.5, -1.0))
+        assert result is not None
+        edge_idx, point = result
+        assert edge_idx == 0
+        assert point == pytest.approx((0.5, 0.0))
+
+    def test_wraps_from_last_vertex_to_first(self):
+        """The closing edge (last vertex back to the first) is checked too.
+
+        For the unit square, edge 3 runs from (0,1) back to (0,0). A query
+        point to the left of that edge should snap onto it.
+        """
+        square = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        result = nearest_point_on_edge(square, (-1.0, 0.5))
+        assert result is not None
+        edge_idx, point = result
+        assert edge_idx == 3
+        assert point == pytest.approx((0.0, 0.5))
+
+    def test_projection_clamps_to_segment_endpoints(self):
+        """A query point beyond a segment's end projects onto the nearest endpoint.
+
+        Querying far past vertex 1 along the top edge's line should clamp to
+        vertex 1 itself rather than extrapolating past the segment.
+        """
+        square = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        result = nearest_point_on_edge(square, (5.0, 0.0))
+        assert result is not None
+        _, point = result
+        assert point == pytest.approx((1.0, 0.0))
+
+    def test_beyond_threshold_returns_none(self):
+        """A query point farther than *threshold* from every edge returns None."""
+        square = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        assert nearest_point_on_edge(square, (0.5, -10.0), threshold=1.0) is None
+
+    def test_fewer_than_2_points_returns_none(self):
+        """Fewer than 2 vertices cannot define an edge, so the result is None."""
+        assert nearest_point_on_edge([], (0, 0)) is None
+        assert nearest_point_on_edge([(0, 0)], (0, 0)) is None
 
 
 class TestScanImages:
