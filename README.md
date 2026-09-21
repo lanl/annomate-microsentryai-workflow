@@ -9,20 +9,35 @@ AnnoMate with MicroSentryAI is a desktop image-annotation and defect-detection t
 
 With features such as interactive SAM 2 masking, polygon creation, and standard annotation format exporting, AnnoMate simplifies the assessment process. Its integrated MicroSentryAI engine supports inspectors by highlighting potential defects using custom PyTorch models, enhancing decision-making and improving consistency in part evaluations.
 
-## Documentation
+## Quick Start
 
-Please refer to the following guides to get started and master the suite:
+Requires [Anaconda or Miniconda](https://docs.conda.io/en/latest/miniconda.html). Prebuilt Windows and macOS (arm64) apps are available on the [Releases](https://github.com/lanl/annomate-microsentryai-workflow/releases) page.
 
-1. **[Getting Started](./docs/GettingStarted.md):** Installation, environment setup, and basic project management.
-2. **[AnnoMate Guide](./docs/AnnoMate.md):** Manual annotation, SAM 2 interactive masking, dataset navigation, and exporting data.
-3. **[MicroSentryAI Guide](./docs/MicroSentryAI.md):** Loading custom AI models, batch inference, and utilizing defect heatmaps.
-4. **[Validation Guide](./docs/Validation.md):** Scientifically evaluating your AI model's accuracy against human ground-truth data.
+```bash
+git clone https://github.com/lanl/annomate-microsentryai-workflow.git
+cd annomate-microsentryai-workflow
+
+# Pick one: environment-cpu.yml, environment-cuda.yml (NVIDIA GPU), environment-mac.yml (Apple Silicon)
+conda env create -f environment-cpu.yml
+conda activate annomate-cpu   # or annomate-cuda / annomate-mac
+
+python src/main.py
+```
+
+To build a standalone executable (this mirrors the release workflow; on Windows use `;` instead of `:` in `--add-data`):
+
+```bash
+pyinstaller --name "AnnoMate" --onefile --windowed --add-data "src/resources:resources" \
+  --exclude-module pytest --exclude-module _pytest --exclude-module pytest_qt \
+  --exclude-module ruff --exclude-module tkinter src/main.py
+```
+
+Interested in contributing? See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Key Features
 * **Interactive AI Masking:** Use Meta's *Segment Anything 2 (SAM 2)* to instantly generate precise defect polygons using simple bounding boxes.
 * **MicroSentryAI Inference Engine:** Load your own custom PyTorch models (via Anomalib) to project defect heatmaps and AI-generated outlines directly onto your dataset.
 * **Robust Project System:** Save your progress, classes, and loaded models into a single `.annoproj` file with automatic backups.
-* **Scientific Validation:** A built-in module to compare AI predictions against human Ground Truth masks to calculate IoU, Precision, and Recall.
 * **Standardized Exporting:** Export datasets as COCO JSON, binary masks for AI training, or CSV reports for QA tracking.
 
 ## Initial Development Team
