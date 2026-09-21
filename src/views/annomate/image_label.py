@@ -211,7 +211,9 @@ class ImageLabel(QLabel):
         new_w = int(w * self._base_scale)
         new_h = int(h * self._base_scale)
 
-        self._resized_bgr = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        self._resized_bgr = cv2.resize(
+            bgr, (new_w, new_h), interpolation=cv2.INTER_AREA
+        )
         self._rebuild_display_pixmap()
         self.image_loaded.emit(w, h)
         self.reset_view()
@@ -1292,7 +1294,9 @@ class ImageLabel(QLabel):
                 poly_i, vert_i = self._find_nearest_vertex(self._mouse_pos)
                 self._hover_vertex = (poly_i, vert_i)
                 self._hover_edge_point = None
-                self.setCursor(Qt.PointingHandCursor if poly_i != -1 else Qt.ArrowCursor)
+                self.setCursor(
+                    Qt.PointingHandCursor if poly_i != -1 else Qt.ArrowCursor
+                )
             else:
                 hit = self._find_nearest_edge_point(self._mouse_pos)
                 self._hover_edge_point = hit
@@ -1850,7 +1854,9 @@ class ImageLabel(QLabel):
             painter.setPen(pending_pen)
             pending_color.setAlpha(45)
             painter.setBrush(QBrush(pending_color))
-            painter.drawPolygon(QPolygonF(self._pending_polygon + [self._pending_polygon[0]]))
+            painter.drawPolygon(
+                QPolygonF(self._pending_polygon + [self._pending_polygon[0]])
+            )
 
         # Draw SAM ghost polygon (pending accept/reject)
         if self._sam_ghost is not None:

@@ -63,9 +63,7 @@ class TestNavigatorTableModel:
         while a flat image keeps today's plain-stem look.
         """
         model = DatasetTableModel(DatasetState())
-        model.load_folder(
-            str(tmp_path), ["root.jpg", "nest1/dup.jpg", "nest3/dup.jpg"]
-        )
+        model.load_folder(str(tmp_path), ["root.jpg", "nest1/dup.jpg", "nest3/dup.jpg"])
         nav = NavigatorTableModel(model, inference_model)
 
         ids = {
@@ -111,7 +109,9 @@ class TestNavigatorTableModel:
             ("scratch", (10, 20, 30)),
         ]
 
-    def test_class_entries_empty_when_no_annotations(self, dataset_model, inference_model):
+    def test_class_entries_empty_when_no_annotations(
+        self, dataset_model, inference_model
+    ):
         model = NavigatorTableModel(dataset_model, inference_model)
         assert model.class_entries(0) == []
 
@@ -644,7 +644,9 @@ class TestProxyFilter:
 
         assert self._visible_source_rows(proxy) == [0]
 
-    def test_class_filter_excludes_images_without_annotations(self, proxy, dataset_model):
+    def test_class_filter_excludes_images_without_annotations(
+        self, proxy, dataset_model
+    ):
         dataset_model.add_class("crack", (255, 0, 0))
         dataset_model.add_annotation(0, "crack", _POLY)
         # rows 1, 2 have no annotations at all

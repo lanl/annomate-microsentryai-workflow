@@ -326,7 +326,9 @@ class InferenceController(QObject):
             return left_image, left_image.copy(), scale, offset, None
 
         s = (
-            cv2.GaussianBlur(score_map, (0, 0), sigmaX=sigma, borderType=cv2.BORDER_REFLECT)
+            cv2.GaussianBlur(
+                score_map, (0, 0), sigmaX=sigma, borderType=cv2.BORDER_REFLECT
+            )
             if sigma > 0
             else score_map.copy()
         )

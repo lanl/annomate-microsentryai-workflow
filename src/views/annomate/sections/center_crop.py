@@ -209,7 +209,9 @@ class CenterCropSection(QWidget):
 
         # Reset at the bottom
         self._btn_reset_crop = QPushButton("Reset Defaults")
-        self._btn_reset_crop.setToolTip("Reset crop shape, size, and opacity to defaults")
+        self._btn_reset_crop.setToolTip(
+            "Reset crop shape, size, and opacity to defaults"
+        )
         self._btn_reset_crop.clicked.connect(self._on_reset_crop_clicked)
         layout.addWidget(self._btn_reset_crop)
 
@@ -345,7 +347,9 @@ class CenterCropSection(QWidget):
             self._crop_color_btn.setStyleSheet(
                 f"background-color: rgb({r},{g},{b}); border: 1px solid #888;"
             )
-            self._crop_color_btn.setToolTip(f"Border color: rgb({r},{g},{b}), click to change")
+            self._crop_color_btn.setToolTip(
+                f"Border color: rgb({r},{g},{b}), click to change"
+            )
 
     def _on_reset_crop_clicked(self) -> None:
         if self._refreshing:
@@ -417,7 +421,9 @@ class CenterCropSection(QWidget):
             self._crop_height_spin.setValue(
                 max(1, min(int(height), self._crop_height_spin.maximum()))
             )
-        shape_label = {"rectangle": "Rectangle", "circle": "Circle"}.get(shape, "Rectangle")
+        shape_label = {"rectangle": "Rectangle", "circle": "Circle"}.get(
+            shape, "Rectangle"
+        )
         self._crop_shape_combo.setCurrentText(shape_label)
         self._crop_opacity_slider.setValue(opacity_pct)
         self._crop_opacity_lbl.setText(f"{opacity_pct}%")
@@ -467,5 +473,6 @@ class CenterCropSection(QWidget):
         # Also enabled mid-calibration so an unwanted calibrate can be
         # cancelled — clearing exits calibration and hides the crop overlay.
         self._btn_clear.setEnabled(
-            self._calibrating or (self._model is not None and self._model.has_template())
+            self._calibrating
+            or (self._model is not None and self._model.has_template())
         )

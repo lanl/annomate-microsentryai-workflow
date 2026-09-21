@@ -575,9 +575,9 @@ class ProjectIO:
                 if inf_scores:
                     # v2.1+: scores nested per model.
                     for key, score in inf_scores.items():
-                        inference_state.model_scores.setdefault(key, {})[
-                            abs_path
-                        ] = score
+                        inference_state.model_scores.setdefault(key, {})[abs_path] = (
+                            score
+                        )
                 elif info.get("score") is not None and active_key:
                     # Legacy (pre-2.1): single inline score, belongs to the one
                     # model this project knew about.

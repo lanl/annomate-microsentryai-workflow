@@ -99,7 +99,9 @@ class _PlaceholderPage(QWidget):
         layout.setSpacing(8)
 
         icon_lbl = QLabel()
-        icon_lbl.setPixmap(material_icon(icon_name, size=32, color="grey").pixmap(32, 32))
+        icon_lbl.setPixmap(
+            material_icon(icon_name, size=32, color="grey").pixmap(32, 32)
+        )
         icon_lbl.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon_lbl)
 
@@ -107,8 +109,6 @@ class _PlaceholderPage(QWidget):
         text_lbl.setAlignment(Qt.AlignCenter)
         text_lbl.setStyleSheet("color: grey;")
         layout.addWidget(text_lbl)
-
-
 
 
 class _ActivityRail(QFrame):
@@ -290,9 +290,7 @@ class RightPanel(QWidget):
         self.center_crop.center_calibration_accepted.connect(
             self.center_calibration_accepted
         )
-        self.center_crop.center_template_cleared.connect(
-            self.center_template_cleared
-        )
+        self.center_crop.center_template_cleared.connect(self.center_template_cleared)
         self.center_crop.center_template_import_requested.connect(
             self.center_template_import_requested
         )
@@ -463,7 +461,9 @@ class RightPanel(QWidget):
     def sam_variant_display_name(self) -> str:
         return self.active_tool.sam_variant_display_name()
 
-    def set_sam_status(self, text: str, color: str = "grey", italic: bool = True) -> None:
+    def set_sam_status(
+        self, text: str, color: str = "grey", italic: bool = True
+    ) -> None:
         self.active_tool.set_sam_status(text, color, italic)
 
     # ------------------------------------------------------------------ #

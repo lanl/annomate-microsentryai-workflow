@@ -169,19 +169,28 @@ class DataNavigatorSection(QWidget):
         self._lbl_count_undecided = QLabel("0")
         self._lbl_count_undecided.setStyleSheet("color: black;")
         self._add_filter_chip(
-            filter_h, "undecided", _status_icon("undecided"), self._lbl_count_undecided,
+            filter_h,
+            "undecided",
+            _status_icon("undecided"),
+            self._lbl_count_undecided,
             _TIP_UNDECIDED,
         )
         self._lbl_count_reviewed = QLabel("0")
         self._lbl_count_reviewed.setStyleSheet("color: black;")
         self._add_filter_chip(
-            filter_h, "reviewed", _status_icon("accept_clean"), self._lbl_count_reviewed,
+            filter_h,
+            "reviewed",
+            _status_icon("accept_clean"),
+            self._lbl_count_reviewed,
             _TIP_REVIEWED,
         )
         self._lbl_count_incomplete = QLabel("0")
         self._lbl_count_incomplete.setStyleSheet("color: black;")
         self._add_filter_chip(
-            filter_h, "incomplete", _status_icon("reject_incomplete"), self._lbl_count_incomplete,
+            filter_h,
+            "incomplete",
+            _status_icon("reject_incomplete"),
+            self._lbl_count_incomplete,
             _TIP_INCOMPLETE,
         )
         filter_h.addStretch()
@@ -263,7 +272,9 @@ class DataNavigatorSection(QWidget):
         self._shared_slot_layout.addWidget(self.image_classes)
         self._shared_slot_layout.addWidget(self.metadata)
 
-    def _add_filter_chip(self, layout, mode: str, icon, count_label: QLabel, tooltip: str):
+    def _add_filter_chip(
+        self, layout, mode: str, icon, count_label: QLabel, tooltip: str
+    ):
         chip = _ClickableFrame()
         chip.setObjectName("navigatorFilterChip")
         chip.setCursor(Qt.PointingHandCursor)
@@ -341,7 +352,9 @@ class DataNavigatorSection(QWidget):
         self._reposition_expanded_card()
 
     def _on_model_reset(self) -> None:
-        self._proxy.set_pinned_source_row(-1)  # old row index is meaningless against the new model
+        self._proxy.set_pinned_source_row(
+            -1
+        )  # old row index is meaningless against the new model
         self._collapse_expanded_widget()
         has_images = self.dataset_model.rowCount() > 0
         self._btn_prev.setVisible(has_images)
@@ -368,7 +381,9 @@ class DataNavigatorSection(QWidget):
         self._lbl_count_incomplete.setText(str(status_counts["incomplete"]))
         self._lbl_count_undecided.setText(str(status_counts["undecided"]))
         self.state_counts_changed.emit(
-            status_counts["undecided"], status_counts["reviewed"], status_counts["incomplete"]
+            status_counts["undecided"],
+            status_counts["reviewed"],
+            status_counts["incomplete"],
         )
         self._filter_panel.set_decision_counts(facet_counts["decision"])
         self._filter_panel.set_status_counts(status_counts)
@@ -404,10 +419,7 @@ class DataNavigatorSection(QWidget):
             # reporting the pre-resize width without this.
             self._list.doItemsLayout()
             self._reposition_expanded_card()
-        elif (
-            obj is self._expanded_card
-            and event.type() == QEvent.LayoutRequest
-        ):
+        elif obj is self._expanded_card and event.type() == QEvent.LayoutRequest:
             # The expanded card's body content (annotation count, expandable
             # notes, ...) can change size after the fact. Qt sends
             # LayoutRequest to a widget whenever its own layout's sizeHint
@@ -472,7 +484,9 @@ class DataNavigatorSection(QWidget):
         card = _NavigatorCard(
             row, self._table_model, self._microsentry_mode, parent=self._list.viewport()
         )
-        card.setAutoFillBackground(True)  # opaque -- otherwise the (unpainted) row shows through
+        card.setAutoFillBackground(
+            True
+        )  # opaque -- otherwise the (unpainted) row shows through
         card.set_expanded(True)
         card.clicked.connect(self._on_card_clicked)
         self._expanded_card = card
@@ -512,7 +526,9 @@ class DataNavigatorSection(QWidget):
         card = self._expanded_card
         self._release_shared_sections()  # detach the singletons BEFORE deleting the card
         card.removeEventFilter(self)
-        card.set_expanded(False)  # deleteLater() is deferred -- don't leave it visually stale meanwhile
+        card.set_expanded(
+            False
+        )  # deleteLater() is deferred -- don't leave it visually stale meanwhile
         self._delegate.set_expanded_row(-1)
         self._delegate.set_expanded_card(None)
         self._expanded_card = None

@@ -250,7 +250,9 @@ class ActiveToolSection(QWidget):
     def sam_variant_display_name(self) -> str:
         return self.sam_variant_combo.currentText()
 
-    def set_sam_status(self, text: str, color: str = "grey", italic: bool = True) -> None:
+    def set_sam_status(
+        self, text: str, color: str = "grey", italic: bool = True
+    ) -> None:
         style = f"color: {color};"
         if italic:
             style += " font-style: italic;"

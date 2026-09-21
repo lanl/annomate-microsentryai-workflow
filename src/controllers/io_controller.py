@@ -290,7 +290,12 @@ class IOController:
                     for a in anns:
                         pts = np.array(a["polygon"], dtype=np.int32).reshape((-1, 1, 2))
                         cv2.fillPoly(mask, [pts], 255)
-                    gt_dest = root / "ground_truth" / folder / Path(basename).with_suffix(".png")
+                    gt_dest = (
+                        root
+                        / "ground_truth"
+                        / folder
+                        / Path(basename).with_suffix(".png")
+                    )
                     gt_dest.parent.mkdir(parents=True, exist_ok=True)
                     cv2.imwrite(str(gt_dest), mask)
                     counts["masks"] += 1

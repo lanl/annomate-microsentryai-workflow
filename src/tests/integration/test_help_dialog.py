@@ -31,7 +31,9 @@ def test_empty_topic_list_does_not_crash(qtbot):
 
 def _visible_titles(dialog):
     lst = dialog._topic_list
-    return [lst.item(i).text() for i in range(lst.count()) if not lst.item(i).isHidden()]
+    return [
+        lst.item(i).text() for i in range(lst.count()) if not lst.item(i).isHidden()
+    ]
 
 
 def test_search_hides_topics_without_every_word(qtbot):

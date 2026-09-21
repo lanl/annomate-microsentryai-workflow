@@ -82,7 +82,9 @@ def test_clicking_tagged_row_removes_tag(qtbot, dataset_model):
     assert dataset_model.get_image_classes(0) == []
 
 
-def test_cannot_remove_tag_backed_by_pixel_annotations(qtbot, dataset_model, monkeypatch):
+def test_cannot_remove_tag_backed_by_pixel_annotations(
+    qtbot, dataset_model, monkeypatch
+):
     """Untagging a class that still has pixel annotations warns and refuses.
 
     Mirrors the same protection the Annotation Classes panel enforces

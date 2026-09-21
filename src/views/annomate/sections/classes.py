@@ -126,7 +126,9 @@ class _ClassRow(_ClickableFrame):
         self._delete_btn.setFixedSize(_ICON_BTN_W, _ICON_BTN_W)
         self._delete_btn.setAutoRaise(True)
         self._delete_btn.setToolTip(f'Delete "{self._name}"')
-        self._delete_btn.setIcon(material_icon("delete", size=_ICON_BTN_SIZE, color="black"))
+        self._delete_btn.setIcon(
+            material_icon("delete", size=_ICON_BTN_SIZE, color="black")
+        )
         self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self._name))
         h.addWidget(self._delete_btn)
 
@@ -293,7 +295,9 @@ class ClassesSection(QWidget):
         self._total_col_w = _header_label_width(total_header_text)
         self._total_header_lbl = QLabel(total_header_text)
         self._total_header_lbl.setToolTip(
-            self._table_model.headerData(ClassColumns.TOTAL, Qt.Horizontal, Qt.ToolTipRole)
+            self._table_model.headerData(
+                ClassColumns.TOTAL, Qt.Horizontal, Qt.ToolTipRole
+            )
         )
         self._total_header_lbl.setFixedWidth(self._total_col_w)
         self._total_header_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)

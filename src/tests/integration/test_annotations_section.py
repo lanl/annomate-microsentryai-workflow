@@ -51,9 +51,7 @@ def test_annotations_section_uses_plain_widget_rows_sorted_by_class(
 
     assert len(widget._rows) == 3
     ordered = row_order_annotation_indices(widget)
-    classes_in_order = [
-        widget._rows[idx]._combo.currentText() for idx in ordered
-    ]
+    classes_in_order = [widget._rows[idx]._combo.currentText() for idx in ordered]
     assert classes_in_order == ["crack", "scratch", "void"]
 
 
@@ -218,9 +216,7 @@ def test_numeric_columns_expand_to_fit_largest_displayed_value(
     from views.annomate.sections.annotations import _cell_text_width
 
     widget, model = annotations_section
-    model.add_annotation(
-        0, "crack", [(0, 0), (123000, 0), (123000, 1), (0, 1)]
-    )
+    model.add_annotation(0, "crack", [(0, 0), (123000, 0), (123000, 1), (0, 1)])
     qtbot.wait(20)
 
     assert widget._area_col_w >= _cell_text_width("123000")

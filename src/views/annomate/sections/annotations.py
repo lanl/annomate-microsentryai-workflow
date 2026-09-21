@@ -149,13 +149,13 @@ class _AnnotationRow(_ClickableFrame):
         self._delete_btn.setFixedSize(_ICON_BTN_W, _ICON_BTN_W)
         self._delete_btn.setAutoRaise(True)
         self._delete_btn.setToolTip("Delete annotation")
-        self._delete_btn.setIcon(material_icon("delete", size=_ICON_BTN_SIZE, color="black"))
+        self._delete_btn.setIcon(
+            material_icon("delete", size=_ICON_BTN_SIZE, color="black")
+        )
         self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self._idx))
         h.addWidget(self._delete_btn)
 
-        tooltip = table_model.index(idx, AnnotationColumns.CLASS).data(
-            Qt.ToolTipRole
-        )
+        tooltip = table_model.index(idx, AnnotationColumns.CLASS).data(Qt.ToolTipRole)
         self.setToolTip(tooltip or "")
 
     def _set_eye_icon(self, visible: bool) -> None:
@@ -289,16 +289,11 @@ class AnnotationsSection(QWidget):
         self._sync_selection()
 
     def _on_header_data_changed(self, orientation, first: int, last: int) -> None:
-        if (
-            orientation == Qt.Horizontal
-            and first <= AnnotationColumns.AREA <= last
-        ):
+        if orientation == Qt.Horizontal and first <= AnnotationColumns.AREA <= last:
             self._refresh_area_header()
 
     def _on_table_data_changed(self, top_left, bottom_right, roles=None) -> None:
-        if (
-            top_left.column() <= AnnotationColumns.AREA <= bottom_right.column()
-        ):
+        if top_left.column() <= AnnotationColumns.AREA <= bottom_right.column():
             self._refresh_numeric_column_widths()
             self._rebuild_rows()
             self._sync_selection()

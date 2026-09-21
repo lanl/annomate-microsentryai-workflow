@@ -56,9 +56,7 @@ def test_collapsed_delegate_exposes_card_and_icon_tooltips(navigator):
     delegate._flyweight.prepare_collapsed_render(400, delegate._collapsed_height)
 
     card = delegate._flyweight
-    icon_pos = card._annot_icon_lbl.mapTo(
-        card, card._annot_icon_lbl.rect().center()
-    )
+    icon_pos = card._annot_icon_lbl.mapTo(card, card._annot_icon_lbl.rect().center())
 
     assert delegate._tooltip_at(icon_pos) == "Has annotations"
     assert delegate._tooltip_at(card._header.rect().topLeft()) == card._header.toolTip()
@@ -335,9 +333,7 @@ def test_filter_panel_conflicting_checkbox_isolates_accept_conflict_rows(
     assert source_rows(widget) == [0]
 
 
-def test_chip_and_filter_panel_checkbox_stay_in_sync_bidirectionally(
-    navigator, qtbot
-):
+def test_chip_and_filter_panel_checkbox_stay_in_sync_bidirectionally(navigator, qtbot):
     widget, dataset_model, _inference_model, _tmp_path = navigator
     dataset_model.set_review_decision(0, "accept")
     qtbot.wait(20)
@@ -519,9 +515,7 @@ def test_selecting_a_second_row_collapses_the_first_accordion_style(navigator, q
     assert widget.metadata.parent() is widget._expanded_card.body_container()
 
 
-def test_clicking_expanded_row_collapses_then_navigation_reexpands(
-    navigator, qtbot
-):
+def test_clicking_expanded_row_collapses_then_navigation_reexpands(navigator, qtbot):
     """A repeated header click collapses the expanded row; programmatic image navigation re-expands it.
 
     Each expansion builds a fresh card (see module docstring in navigator.py
@@ -694,7 +688,9 @@ def test_collapsed_rail_counter_resets_when_project_cleared(qtbot):
     panel.set_counter(1, 2)
     assert panel._collapsed_rail._counter_lbl.text() == "2/2"
 
-    dataset_model.load_folder("/fake", [])  # simulates "New Project" clearing the dataset
+    dataset_model.load_folder(
+        "/fake", []
+    )  # simulates "New Project" clearing the dataset
 
     assert panel._collapsed_rail._counter_lbl.text() == "—/—"
     assert panel.is_collapsed()

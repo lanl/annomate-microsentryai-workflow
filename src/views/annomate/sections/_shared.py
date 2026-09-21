@@ -1,10 +1,19 @@
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+)
 
 _COLOR_REVIEWED = "#4caf50"
 _COLOR_UNDECIDED = "#888888"
 _COLOR_INCOMPLETE = "#ff9800"
-_COLOR_SELECTED_BG = "#d6d6d6"  # light grey, standing in for palette(highlight)'s accent blue
+_COLOR_SELECTED_BG = (
+    "#d6d6d6"  # light grey, standing in for palette(highlight)'s accent blue
+)
 
 # Applied to the QApplication itself (see main.py) so every tooltip in the
 # app looks the same, instead of each widget/section falling back to

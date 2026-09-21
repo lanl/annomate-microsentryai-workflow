@@ -222,7 +222,12 @@ class NavigatorTableModel(QAbstractTableModel):
         with 3 "crack" annotations counts once toward "crack"'s total.
         """
         decision_counts = {"accept": 0, "reject": 0}
-        status_counts = {"undecided": 0, "reviewed": 0, "incomplete": 0, "conflicting": 0}
+        status_counts = {
+            "undecided": 0,
+            "reviewed": 0,
+            "incomplete": 0,
+            "conflicting": 0,
+        }
         class_counts: dict = {}
         class_colors: dict = {}
         for row in range(self.rowCount()):
@@ -242,7 +247,8 @@ class NavigatorTableModel(QAbstractTableModel):
                 class_colors[name] = rgb
 
         class_options = [
-            (name, class_colors[name], class_counts[name]) for name in sorted(class_counts)
+            (name, class_colors[name], class_counts[name])
+            for name in sorted(class_counts)
         ]
         return {
             "decision": decision_counts,
@@ -489,7 +495,11 @@ class NavigatorSortProxyModel(QSortFilterProxyModel):
     def filterAcceptsRow(self, source_row: int, parent: QModelIndex) -> bool:
         if source_row == self._pinned_source_row:
             return True
-        if not self._decision_filter and not self._status_filter and not self._class_filter:
+        if (
+            not self._decision_filter
+            and not self._status_filter
+            and not self._class_filter
+        ):
             return True
         model = self.sourceModel()
         if model is None:

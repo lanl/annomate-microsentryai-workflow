@@ -1073,9 +1073,9 @@ class TestMultiModelRoundTrip:
 
         raw = json.loads(Path(path).read_text())
         assert raw["per_image"]["img001.jpg"]["inference"]["cfa"] == pytest.approx(0.46)
-        assert raw["per_image"]["img001.jpg"]["inference"]["efficientad"] == pytest.approx(
-            0.51
-        )
+        assert raw["per_image"]["img001.jpg"]["inference"][
+            "efficientad"
+        ] == pytest.approx(0.51)
         assert raw["inference"]["active_model_key"] == "cfa"
         keys = {m["key"] for m in raw["inference"]["models"]}
         assert keys == {"cfa", "efficientad"}
@@ -1215,7 +1215,6 @@ class TestMultiModelRoundTrip:
         use the new nested registry shape, not the old flat one.
         """
         ds = _make_dataset(tmp_path)
-        abs_img = str(tmp_path / "images" / "img001.jpg")
         legacy_data = {
             "version": "2.0",
             "dataset": {"image_dir": ds.image_dir},

@@ -177,7 +177,9 @@ class _ClassPickerPopup(QFrame):
                 widget.deleteLater()
 
         self._rows = {}
-        self._selected_class = active if active in names else (names[0] if names else "")
+        self._selected_class = (
+            active if active in names else (names[0] if names else "")
+        )
         for name, rgb in zip(names, colors):
             row = _ClassPickerRow(name, rgb)
             row.activated.connect(self._on_row_activated)
@@ -186,13 +188,18 @@ class _ClassPickerPopup(QFrame):
             self._rows[name] = row
         self._list_layout.addStretch()
 
-        text_w = max((QFontMetrics(self.font()).horizontalAdvance(n) for n in names), default=0)
+        text_w = max(
+            (QFontMetrics(self.font()).horizontalAdvance(n) for n in names), default=0
+        )
         scrollbar_w = self.style().pixelMetric(QStyle.PM_ScrollBarExtent)
         self._scroll.setFixedWidth(text_w + self._ROW_CHROME_W + scrollbar_w)
 
         row_h = next(iter(self._rows.values())).sizeHint().height() if self._rows else 0
         visible_rows = min(len(names), self._MAX_VISIBLE_ROWS)
-        list_h = visible_rows * row_h + max(0, visible_rows - 1) * self._list_layout.spacing()
+        list_h = (
+            visible_rows * row_h
+            + max(0, visible_rows - 1) * self._list_layout.spacing()
+        )
         self._scroll.setFixedHeight(list_h)
 
         self.adjustSize()
@@ -644,9 +651,7 @@ class AnnoMateWindow(QWidget):
         self.right_panel.center_template_import_requested.connect(
             self._on_center_template_import_requested
         )
-        self.right_panel.crop_overlay_toggled.connect(
-            self._on_crop_overlay_toggled
-        )
+        self.right_panel.crop_overlay_toggled.connect(self._on_crop_overlay_toggled)
         self.canvas.draw_attempted.connect(self._on_draw_attempted)
 
         # Route thickness signal directly to canvas setter
@@ -755,9 +760,7 @@ class AnnoMateWindow(QWidget):
         self.left_panel = LeftPanel(
             self.dataset_model, self.inference_model, self._calib_model, self
         )
-        self.left_panel.collapsed_changed.connect(
-            self._on_navigator_collapsed_changed
-        )
+        self.left_panel.collapsed_changed.connect(self._on_navigator_collapsed_changed)
         outer_splitter.addWidget(self.left_panel)
 
         canvas_area = QWidget()
@@ -1320,7 +1323,9 @@ class AnnoMateWindow(QWidget):
             return
         self._pending_manual_pts = pts
         self.canvas.set_pending_polygon(pts)
-        class_colors = [self.dataset_model.get_class_color(name) for name in class_names]
+        class_colors = [
+            self.dataset_model.get_class_color(name) for name in class_names
+        ]
         self._popup_mode = "manual"
         self._popup.set_classes(class_names, class_colors)
         bbox = self.canvas.get_pending_polygon_view_rect()
@@ -1782,7 +1787,9 @@ class AnnoMateWindow(QWidget):
                 "Add an annotation class before accepting AI segmentation polygons.",
             )
             return
-        class_colors = [self.dataset_model.get_class_color(name) for name in class_names]
+        class_colors = [
+            self.dataset_model.get_class_color(name) for name in class_names
+        ]
         self._popup_mode = "ai"
         self._popup.set_classes(class_names, class_colors)
         bbox = self.canvas.get_ai_polygon_view_rect(idx)

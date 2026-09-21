@@ -45,8 +45,12 @@ class InferenceState:
             False  # True when score_maps changed since last NPZ write
         )
 
-        self.known_models: dict[str, dict] = {}  # model_key -> {"model_path", "score_maps_file"}
-        self.model_scores: dict[str, dict[str, float]] = {}  # model_key -> {"img.jpg": float}
+        self.known_models: dict[
+            str, dict
+        ] = {}  # model_key -> {"model_path", "score_maps_file"}
+        self.model_scores: dict[
+            str, dict[str, float]
+        ] = {}  # model_key -> {"img.jpg": float}
         self.active_model_key: str = ""
 
     def clear(self) -> None:

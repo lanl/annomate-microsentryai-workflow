@@ -67,7 +67,10 @@ class _CollapsedNavigatorRail(QWidget):
             layout, "●", "Reviewed", "color: #45b85a; font-size: 16px;"
         )
         self._incomplete_glyph, self._incomplete_count = self._add_status(
-            layout, "!", "Incomplete", "color: #e68619; font-weight: bold; font-size: 16px;"
+            layout,
+            "!",
+            "Incomplete",
+            "color: #e68619; font-weight: bold; font-size: 16px;",
         )
 
     def _button(self, icon_name: str, tooltip: str) -> QToolButton:
@@ -102,7 +105,9 @@ class _CollapsedNavigatorRail(QWidget):
         self._counter_lbl.setToolTip(
             f"Image {current + 1} of {total}"
             if has_position
-            else f"{total} images loaded" if total > 0 else "No images loaded"
+            else f"{total} images loaded"
+            if total > 0
+            else "No images loaded"
         )
 
     def set_counts(self, undecided: int, reviewed: int, incomplete: int) -> None:
@@ -190,9 +195,7 @@ class LeftPanel(QWidget):
         expanded_layout.addWidget(self.navigator, stretch=1)
 
         self._collapsed_rail = _CollapsedNavigatorRail()
-        self._collapsed_rail.expand_requested.connect(
-            lambda: self.set_collapsed(False)
-        )
+        self._collapsed_rail.expand_requested.connect(lambda: self.set_collapsed(False))
         self._collapsed_rail.prev_requested.connect(self.prev_requested)
         self._collapsed_rail.next_requested.connect(self.next_requested)
 

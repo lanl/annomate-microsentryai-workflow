@@ -8,7 +8,6 @@ public hooks (refresh_violations / update_units) window.py pushes
 computed values into after each check run or calibration change.
 """
 
-from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QColorDialog,
@@ -165,11 +164,15 @@ class AnomalyConstraintsSection(QWidget):
         self._anomaly_enable_chk.toggled.connect(self._on_anomaly_enable_toggled)
         self._anomaly_area_chk.toggled.connect(self._on_anomaly_area_check_toggled)
         self._anomaly_area_spin.valueChanged.connect(self._on_anomaly_area_changed)
-        self._anomaly_area_color_btn.clicked.connect(self._on_anomaly_area_color_clicked)
+        self._anomaly_area_color_btn.clicked.connect(
+            self._on_anomaly_area_color_clicked
+        )
         self._anomaly_dist_chk.toggled.connect(self._on_anomaly_dist_check_toggled)
         self._anomaly_dist_spin.valueChanged.connect(self._on_anomaly_dist_changed)
         self._anomaly_centroid_radio.toggled.connect(self._on_anomaly_method_changed)
-        self._anomaly_dist_color_btn.clicked.connect(self._on_anomaly_dist_color_clicked)
+        self._anomaly_dist_color_btn.clicked.connect(
+            self._on_anomaly_dist_color_clicked
+        )
 
         if anomaly_constraint_model is not None:
             self.set_anomaly_constraint_model(anomaly_constraint_model)
@@ -237,7 +240,9 @@ class AnomalyConstraintsSection(QWidget):
         self._apply_color_swatch(self._anomaly_area_color_btn, self._model.area_color())
         self._anomaly_dist_chk.setChecked(self._model.distance_check_enabled())
         self._anomaly_dist_spin.setValue(self._model.distance_threshold())
-        self._anomaly_centroid_radio.setChecked(self._model.distance_method() == "centroid")
+        self._anomaly_centroid_radio.setChecked(
+            self._model.distance_method() == "centroid"
+        )
         self._anomaly_edge_radio.setChecked(self._model.distance_method() == "edge")
         self._apply_color_swatch(
             self._anomaly_dist_color_btn, self._model.distance_color()

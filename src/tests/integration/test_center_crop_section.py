@@ -110,7 +110,9 @@ def test_calibrate_accept_clear_emit_signals(canvas, template_model, qtbot):
     assert cleared == [True]
 
 
-def test_import_button_emits_path_from_file_dialog(canvas, template_model, qtbot, monkeypatch):
+def test_import_button_emits_path_from_file_dialog(
+    canvas, template_model, qtbot, monkeypatch
+):
     """Verify the Import button emits the path chosen in the file dialog.
 
     The dialog itself isn't testable headlessly, so getOpenFileName is
@@ -133,7 +135,9 @@ def test_import_button_emits_path_from_file_dialog(canvas, template_model, qtbot
     assert requested == ["/tmp/template.png"]
 
 
-def test_template_status_reflects_calibrating_then_saved_template(canvas, template_model, qtbot):
+def test_template_status_reflects_calibrating_then_saved_template(
+    canvas, template_model, qtbot
+):
     """Verify the status label tracks calibrating state, then template save state.
 
     Starts at "Template: none", switches to the mid-calibration hint once
@@ -156,7 +160,9 @@ def test_template_status_reflects_calibrating_then_saved_template(canvas, templa
     assert section._template_status_lbl.text() == "Template match: 0.874"
 
 
-def test_template_buttons_gated_by_has_image_and_calibrating(canvas, template_model, qtbot):
+def test_template_buttons_gated_by_has_image_and_calibrating(
+    canvas, template_model, qtbot
+):
     """Verify Calibrate/Import/Accept/Clear enablement follows has_image/calibrating/has_template.
 
     Calibrate and Import require an image; Accept additionally requires an

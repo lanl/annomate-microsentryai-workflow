@@ -214,9 +214,7 @@ class _NavigatorCard(QWidget):
         self._header = _ClickableFrame()
         self._header.setFrameShape(QFrame.StyledPanel)
         self._header.setCursor(Qt.PointingHandCursor)
-        self._header.clicked.connect(
-            lambda: self.clicked.emit(self._source_row)
-        )
+        self._header.clicked.connect(lambda: self.clicked.emit(self._source_row))
         h = QHBoxLayout(self._header)
         h.setContentsMargins(6, 4, 6, 4)
         h.setSpacing(6)
@@ -384,7 +382,9 @@ class _NavigatorCard(QWidget):
             decision_color = model.data(
                 model.index(row, NavigatorColumns.DECISION), Qt.ForegroundRole
             )
-            color = decision_color.color().name() if decision_color is not None else None
+            color = (
+                decision_color.color().name() if decision_color is not None else None
+            )
             self._decision_lbl.setText(decision)
             self._decision_lbl.setStyleSheet(
                 f"color: {color}; font-weight: bold;" if color else "font-weight: bold;"

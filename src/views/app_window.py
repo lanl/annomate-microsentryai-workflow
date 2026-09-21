@@ -486,7 +486,9 @@ class AppWindow(QMainWindow):
             return
         try:
             self.project_controller.export_coco(out_path)
-            QMessageBox.information(self, "Export", f"Exported COCO annotations to:\n{out_path}")
+            QMessageBox.information(
+                self, "Export", f"Exported COCO annotations to:\n{out_path}"
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
 
