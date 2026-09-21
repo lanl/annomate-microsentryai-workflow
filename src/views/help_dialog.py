@@ -1,6 +1,7 @@
 """HelpDialog — browsable in-app manual built from the bundled help topics."""
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QTextTable
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -13,6 +14,18 @@ from PySide6.QtWidgets import (
 )
 
 from core.utils.help_topics import HELP_DIR, load_topics
+
+# Qt's default rich-text margins run headings, tables and paragraphs together.
+_PAGE_STYLE = """
+h1 { margin-top: 4px; margin-bottom: 14px; }
+h2 { margin-top: 26px; margin-bottom: 10px; }
+h3 { margin-top: 20px; margin-bottom: 8px; }
+p { margin-top: 6px; margin-bottom: 10px; }
+ul, ol { margin-top: 6px; margin-bottom: 12px; }
+li { margin-top: 3px; margin-bottom: 3px; }
+th { padding: 6px 10px; }
+td { padding: 6px 10px; }
+"""
 
 
 class HelpDialog(QDialog):
@@ -46,6 +59,7 @@ class HelpDialog(QDialog):
         self._viewer = QTextBrowser()
         self._viewer.setSearchPaths([str(HELP_DIR)])
         self._viewer.setOpenExternalLinks(True)
+        self._viewer.document().setDefaultStyleSheet(_PAGE_STYLE)
 
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -83,11 +97,21 @@ class HelpDialog(QDialog):
         else:
             self._show_topic(current)
 
+    def _space_tables(self) -> None:
+        # CSS margins are ignored on tables, so set them on the table format.
+        for frame in self._viewer.document().rootFrame().childFrames():
+            if isinstance(frame, QTextTable):
+                fmt = frame.format()
+                fmt.setTopMargin(14)
+                fmt.setBottomMargin(8)
+                frame.setFormat(fmt)
+
     def _show_topic(self, row: int) -> None:
         if not 0 <= row < len(self._topics):
             self._viewer.setMarkdown("No topics match your search.")
             return
         self._viewer.setMarkdown(self._topics[row].text)
+        self._space_tables()
         words = self._search.text().split()
         if words:
             self._viewer.find(words[0])
