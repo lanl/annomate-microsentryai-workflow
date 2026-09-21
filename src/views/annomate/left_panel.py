@@ -273,6 +273,3 @@ class LeftPanel(QWidget):
 
     def navigator_set_annotation_mode(self, mode: str) -> None:
         self.navigator.set_annotation_mode(mode)
-
-    def navigator_header(self) -> QWidget:
-        return self._title_lbl

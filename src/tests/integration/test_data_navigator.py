@@ -593,9 +593,8 @@ def test_annotations_and_metadata_are_real_descendants_with_zero_images(qtbot):
     """Verify the shared Annotations/Metadata sections exist even with no images loaded.
 
     These widgets are constructed once up front and parked in a hidden
-    holding slot until a card is expanded -- this is what keeps the guided
-    tour's "navigator" step resolvable to a real widget before any dataset
-    is loaded.
+    holding slot until a card is expanded -- this keeps them real widgets
+    (rather than created lazily) before any dataset is loaded.
     """
     dataset_model = DatasetTableModel(DatasetState())
     widget = DataNavigatorSection(dataset_model)

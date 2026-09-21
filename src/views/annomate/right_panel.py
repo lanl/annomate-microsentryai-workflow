@@ -492,16 +492,6 @@ class RightPanel(QWidget):
         self._ms_section.set_scores_dirty(dirty)
 
     # ------------------------------------------------------------------ #
-    # Section header accessors (for tour/onboarding targeting)
-    # ------------------------------------------------------------------ #
-
-    def classes_header(self) -> QWidget:
-        return self._rail.button("classes")
-
-    def microsentry_header(self) -> QWidget:
-        return self._rail.button("microsentry")
-
-    # ------------------------------------------------------------------ #
     # Annotation mode
     # ------------------------------------------------------------------ #
 

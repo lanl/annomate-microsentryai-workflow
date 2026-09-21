@@ -42,7 +42,6 @@ from views.annomate.right_panel import RightPanel
 from views.annomate.tool_palette import ToolPalette
 from views.annomate.status_bar import AnnoMateStatusBar
 from views.annomate.viewport_actions import ViewportActionsBar
-from views.annomate.tour import TourManager
 from controllers.sam_controller import SAMController
 from controllers.anomaly_constraint_controller import AnomalyConstraintController
 from models.anomaly_constraint_model import AnomalyConstraintModel
@@ -579,7 +578,6 @@ class AnnoMateWindow(QWidget):
         self._accepting_ai: bool = False
         self._sam_controller = SAMController(parent=self)
         self._sam_loading: bool = False
-        self._tour_manager = TourManager(self, parent=self)
         self._session_timer = QTimer(self)
         self._session_timer.setInterval(60_000)
         self._session_timer.timeout.connect(self._update_session_display)
@@ -877,20 +875,13 @@ class AnnoMateWindow(QWidget):
         self.viewport_actions.reposition(self.canvas.size())
         self._review_bar.reposition(self.canvas.size())
         self._reposition_start_screen()
-        self._tour_manager.reposition()
 
     def eventFilter(self, obj, event) -> bool:
         if obj is self.canvas and event.type() == QEvent.Resize:
             self.viewport_actions.reposition(event.size())
             self._review_bar.reposition(event.size())
             self._reposition_start_screen()
-            self._tour_manager.reposition()
         return super().eventFilter(obj, event)
-
-    def start_tour(self, force: bool = False) -> None:
-        """Public entry point for replaying the guided tour programmatically."""
-        if force or self._tour_manager.should_run():
-            self._tour_manager.start()
 
     def _set_start_screen_visible(self, visible: bool) -> None:
         """Show the project start panel only while no dataset is loaded."""
