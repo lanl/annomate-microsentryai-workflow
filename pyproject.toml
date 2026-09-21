@@ -1,0 +1,5 @@
+# Keep the ruff version pinned in .pre-commit-config.yaml and
+# .github/workflows/autoLint.yml in step: ruff changes its default rules
+# between releases, so the rules are chosen explicitly here.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
