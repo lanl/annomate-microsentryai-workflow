@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QAction, QKeySequence
 
 from views.annomate.window import AnnoMateWindow
+from views.help_dialog import HelpDialog
 
 _APP_TITLE = "AnnoMate & MicroSentryAI"
 _LAST_IMAGE_DIR_KEY = "recent/last_image_dir"
@@ -52,6 +53,7 @@ class AppWindow(QMainWindow):
         self.setWindowTitle(_APP_TITLE)
         self.resize(1400, 900)
 
+        self._help_dialog = None
         self.dataset_model = dataset_model
         self.inference_model = inference_model
         self.io_controller = io_controller
@@ -175,6 +177,16 @@ class AppWindow(QMainWindow):
             self._export_project_template,
             status_tip="Export project settings (classes, calibration, constraints) as a reusable template, without images or annotations",
         )
+
+        help_menu = self.menuBar().addMenu("&Help")
+        add(help_menu, "Help", "F1", self._show_help)
+
+    def _show_help(self) -> None:
+        if self._help_dialog is None:
+            self._help_dialog = HelpDialog(parent=self)
+        self._help_dialog.show()
+        self._help_dialog.raise_()
+        self._help_dialog.activateWindow()
 
     def _refresh_project_start_state(self) -> None:
         """Refresh recent-action shortcuts on the empty project start screen."""
