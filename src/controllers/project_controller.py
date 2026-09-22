@@ -292,6 +292,56 @@ class ProjectController(QObject):
 
         return project_data, warnings
 
+    def new_project_from_import(self, dataset_dict: dict) -> None:
+        """Populate state from a public-dataset import (see build_dataset_from_category).
+
+        Same "start fresh, no project directory yet" contract as new_project(),
+        except the dataset fields come from an in-memory dict instead of being
+        blank. Leaves project_dir unset — the caller must Save Project As to
+        write a .annoproj. Marked dirty rather than clean, since imported data
+        has not been saved anywhere yet.
+
+        Callers should check is_dirty and prompt the user before calling this.
+
+        Args:
+            dataset_dict: Output of core.public_datasets.build.build_dataset_from_category —
+                a dict with image_dir, image_files, annotations, class_names,
+                class_colors, review_decisions, annotation_mode.
+        """
+        state = self._dataset_model.state
+        state.clear()
+        self._inference_model.state.clear()
+        if self._center_template_model is not None:
+            self._center_template_model.clear_template()
+
+        self._project_dir = None
+        self._project_name = ""
+        self._created_at = None
+        self._accumulated_seconds = 0.0
+        self._session_start = None
+        self._autosave_manager.stop()
+
+        self._loading = True
+        try:
+            if self._calibration_model is not None:
+                self._calibration_model.clear_calibration()
+
+            state.image_dir = dataset_dict["image_dir"]
+            state.image_files = dataset_dict["image_files"]
+            state.annotation_mode = dataset_dict.get("annotation_mode", "pixel")
+            state.annotations = dataset_dict["annotations"]
+            state.class_names = list(dataset_dict["class_names"])
+            state.class_colors = dict(dataset_dict["class_colors"])
+            state.class_visibility = {name: True for name in state.class_names}
+            state.review_decisions = dict(dataset_dict["review_decisions"])
+
+            self._dataset_model.beginResetModel()
+            self._dataset_model.endResetModel()
+        finally:
+            self._loading = False
+
+        self.mark_dirty()
+
     def save_project(self) -> str:
         """Save to the current project directory.
 

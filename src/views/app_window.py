@@ -11,10 +11,12 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QFileDialog,
     QMessageBox,
+    QDialog,
 )
 from PySide6.QtGui import QAction, QKeySequence
 
 from views.annomate.window import AnnoMateWindow
+from views.annomate.import_public_dataset_dialog import ImportPublicDatasetDialog
 from views.help_dialog import HelpDialog
 
 _APP_TITLE = "AnnoMate & MicroSentryAI"
@@ -139,6 +141,13 @@ class AppWindow(QMainWindow):
         add(file_menu, "Exit", "Ctrl+Q", self.close)
 
         data_menu = self.menuBar().addMenu("&Data")
+        add(
+            data_menu,
+            "Import Public Dataset…",
+            "",
+            self._import_public_dataset,
+            status_tip="Import one category of a public AD benchmark (e.g. MVTec AD) as a new project",
+        )
         add(
             data_menu,
             "Import Annotation Classes…",
@@ -412,6 +421,19 @@ class AppWindow(QMainWindow):
     # ================================================================== #
     # Data menu handlers
     # ================================================================== #
+
+    def _import_public_dataset(self) -> None:
+        if self.project_controller.is_dirty and not self._confirm_discard():
+            return
+
+        dialog = ImportPublicDatasetDialog(self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.annomate_view.reset_model_state()
+        self.project_controller.new_project_from_import(dialog.get_result())
+        self.annomate_view.restore_last_panel_state()
+        self._refresh_project_start_state()
 
     def _import_annotation_classes(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
