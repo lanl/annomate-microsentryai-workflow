@@ -9,6 +9,7 @@ interface — never to a concrete adapter's own on-disk conventions.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterator, Literal, Optional
 
 import numpy as np
@@ -110,6 +111,23 @@ class PublicDatasetAdapter(ABC):
         Returns:
             list[str]: Category names, or an empty list if none are found.
         """
+
+    def category_root(self, root: str, category: str) -> str:
+        """Return the directory DatasetState.image_dir should point at.
+
+        Defaults to ``root/category``, true for formats where a category is
+        a real subdirectory (MVTec AD, MVTec AD 2). Adapters whose category
+        is a synthetic label rather than an actual subdirectory (e.g. a
+        format with no category concept at all) must override this.
+
+        Args:
+            root: Absolute path to the dataset root.
+            category: One of the names returned by ``detect_categories``.
+
+        Returns:
+            str: Absolute path to use as the imported project's image_dir.
+        """
+        return str(Path(root, category).resolve())
 
     @abstractmethod
     def scan_category(self, root: str, category: str) -> CategoryStats:

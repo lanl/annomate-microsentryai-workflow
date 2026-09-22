@@ -7,7 +7,6 @@ building are written once.
 """
 
 import logging
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -73,7 +72,7 @@ def build_dataset_from_category(
         ``ProjectController.new_project_from_import()`` applies directly to
         DatasetState. No ``.annoproj`` file is written here.
     """
-    image_dir = str(Path(root, category).resolve())
+    image_dir = adapter.category_root(root, category)
     image_files = []
     annotations = {}
     review_decisions = {}
