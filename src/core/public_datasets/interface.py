@@ -58,11 +58,20 @@ class DatasetRecord:
             (e.g. a benchmark's held-out private test split).
         regions: Annotated regions for this image. Empty for normal or
             unlabeled images.
+        note: Free-text annotation carried by the source format (e.g.
+            VisA's per-image defect description), if any. Maps onto
+            DatasetState's existing per-image note field.
+        image_classes: Class tags known to apply to this image as a whole,
+            for formats that can name more defect types than a single
+            combined mask can attribute pixels to (e.g. VisA's multi-label
+            images). Maps onto DatasetState's existing image-level tags.
     """
 
     rel_path: str
     is_normal: Optional[bool]
     regions: list = field(default_factory=list)
+    note: str = ""
+    image_classes: list = field(default_factory=list)
 
 
 @dataclass

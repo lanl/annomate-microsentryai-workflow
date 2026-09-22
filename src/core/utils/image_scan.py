@@ -10,8 +10,10 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 # doesn't have that ground truth re-ingested as if it were new photos.
 # "ground_truth" and the "_mask" suffix are this app's own export
 # conventions (see export_pixel_train_structure / export_binary_masks);
-# "_label" additionally covers third-party benchmarks like KolektorSDD.
-_EXCLUDED_DIR_NAMES = {"ground_truth"}
+# "_label" additionally covers third-party benchmarks like KolektorSDD, and
+# "masks" covers VisA, whose per-image masks carry no distinguishing suffix
+# at all (just "000.png"), only a sibling "Masks/" folder instead.
+_EXCLUDED_DIR_NAMES = {"ground_truth", "masks"}
 _EXCLUDED_STEM_SUFFIXES = ("_mask", "_label")
 
 

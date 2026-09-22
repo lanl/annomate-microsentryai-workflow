@@ -306,7 +306,8 @@ class ProjectController(QObject):
         Args:
             dataset_dict: Output of core.public_datasets.build.build_dataset_from_category —
                 a dict with image_dir, image_files, annotations, class_names,
-                class_colors, review_decisions, annotation_mode.
+                class_colors, review_decisions, notes, image_classes,
+                annotation_mode.
         """
         state = self._dataset_model.state
         state.clear()
@@ -334,6 +335,10 @@ class ProjectController(QObject):
             state.class_colors = dict(dataset_dict["class_colors"])
             state.class_visibility = {name: True for name in state.class_names}
             state.review_decisions = dict(dataset_dict["review_decisions"])
+            state.notes = dict(dataset_dict.get("notes", {}))
+            state.image_classes = {
+                k: list(v) for k, v in dataset_dict.get("image_classes", {}).items()
+            }
 
             self._dataset_model.beginResetModel()
             self._dataset_model.endResetModel()

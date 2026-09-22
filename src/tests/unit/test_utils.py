@@ -182,3 +182,10 @@ class TestScanImages:
         (tmp_path / "photo.jpg").touch()
 
         assert scan_images(str(tmp_path)) == ["photo.jpg"]
+
+    def test_skips_masks_directory(self, tmp_path):
+        (tmp_path / "Masks").mkdir()
+        (tmp_path / "Masks" / "000.png").touch()
+        (tmp_path / "photo.png").touch()
+
+        assert scan_images(str(tmp_path)) == ["photo.png"]

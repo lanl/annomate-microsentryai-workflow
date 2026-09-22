@@ -67,8 +67,8 @@ def build_dataset_from_category(
 
     Returns:
         dict: Keys ``image_dir``, ``image_files``, ``annotations``,
-        ``class_names``, ``class_colors``, ``review_decisions``,
-        ``annotation_mode`` — the same shape
+        ``class_names``, ``class_colors``, ``review_decisions``, ``notes``,
+        ``image_classes``, ``annotation_mode`` — the same shape
         ``ProjectController.new_project_from_import()`` applies directly to
         DatasetState. No ``.annoproj`` file is written here.
     """
@@ -76,6 +76,8 @@ def build_dataset_from_category(
     image_files = []
     annotations = {}
     review_decisions = {}
+    notes = {}
+    image_classes = {}
     class_names = []
     class_colors = {}
 
@@ -94,6 +96,15 @@ def build_dataset_from_category(
         elif record.is_normal is False:
             review_decisions[record.rel_path] = "reject"
         # is_normal is None (no ground truth available) -> left undecided
+
+        if record.note:
+            notes[record.rel_path] = record.note
+
+        if record.image_classes:
+            tags = list(dict.fromkeys(name.lower() for name in record.image_classes))
+            for tag in tags:
+                _register_class(tag)
+            image_classes[record.rel_path] = tags
 
         recs = []
         for region in record.regions:
@@ -118,5 +129,7 @@ def build_dataset_from_category(
         "class_names": class_names,
         "class_colors": class_colors,
         "review_decisions": review_decisions,
+        "notes": notes,
+        "image_classes": image_classes,
         "annotation_mode": "pixel",
     }
