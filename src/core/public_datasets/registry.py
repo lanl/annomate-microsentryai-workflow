@@ -7,7 +7,9 @@ pipeline (build.py, the import dialog, menu wiring) needs to change.
 """
 
 from core.public_datasets.adapters.mvtec_ad import MVTecADAdapter
+from core.public_datasets.adapters.mvtec_ad2 import MVTecAD2Adapter
 
 PUBLIC_DATASET_ADAPTERS = {
     "MVTec AD": MVTecADAdapter(),
+    "MVTec AD 2": MVTecAD2Adapter(),
 }
