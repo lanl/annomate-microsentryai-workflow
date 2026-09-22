@@ -168,3 +168,17 @@ class TestScanImages:
 
     def test_empty_folder_returns_empty_list(self, tmp_path):
         assert scan_images(str(tmp_path)) == []
+
+    def test_skips_ground_truth_directory(self, tmp_path):
+        (tmp_path / "ground_truth").mkdir()
+        (tmp_path / "ground_truth" / "000_mask.png").touch()
+        (tmp_path / "photo.png").touch()
+
+        assert scan_images(str(tmp_path)) == ["photo.png"]
+
+    def test_skips_mask_and_label_suffixed_files(self, tmp_path):
+        (tmp_path / "000_mask.png").touch()
+        (tmp_path / "Part0_label.bmp").touch()
+        (tmp_path / "photo.jpg").touch()
+
+        assert scan_images(str(tmp_path)) == ["photo.jpg"]
