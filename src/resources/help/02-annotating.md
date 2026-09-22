@@ -17,8 +17,8 @@ You must have at least one class before you can create an annotation.
 
 At the top of the Dataset Setup tab, choose how you want to work:
 
-- **Pixel Level** — you draw polygons around defects. A rejected image needs at least one polygon to count as reviewed.
-- **Image Level** — you tag whole images with classes instead of drawing. Drawing tools are turned off. A rejected image needs at least one class tag to count as reviewed.
+- **Pixel Level**: you draw polygons around defects. A rejected image needs at least one polygon to count as reviewed.
+- **Image Level**: you tag whole images with classes instead of drawing. Drawing tools are turned off. A rejected image needs at least one class tag to count as reviewed.
 
 To tag an image in Image Level mode, expand its card in the Dataset Navigator and click a class to tag it. Click again to remove the tag.
 

@@ -27,8 +27,8 @@ Shows a shape on the image marking the region that matters, dimming everything o
 
 Automatic checks that flag annotations for you to look at again. Turn on **Enable Anomaly Constraints**, then choose the checks:
 
-- **Area Threshold** — flags annotations larger than **Max Area**.
-- **Proximity Threshold** — flags pairs of annotations closer together than **Min Dist**. Measure between **Centroid** (centres) or **Edge** (nearest edges).
+- **Area Threshold**: flags annotations larger than **Max Area**.
+- **Proximity Threshold**: flags pairs of annotations closer together than **Min Dist**. Measure between **Centroid** (centres) or **Edge** (nearest edges).
 
 Flagged annotations are outlined in the colour you choose, and a count is shown in the panel.
 
@@ -36,5 +36,5 @@ Flagged annotations are outlined in the colour you choose, and a count is shown 
 
 Temporary changes that help you see faint defects. They only affect the display, and they stay on as you move between images while enabled.
 
-- **HSV** — adjust **Hue**, **Saturation** and **Value**. **Reset** returns them to normal.
-- **Brightness/Contrast** — set a black level and a white level to stretch contrast. **Reset** returns it to normal.
+- **HSV**: adjust **Hue**, **Saturation** and **Value**. **Reset** returns them to normal.
+- **Brightness/Contrast**: set a black level and a white level to stretch contrast. **Reset** returns it to normal.

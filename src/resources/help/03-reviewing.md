@@ -29,9 +29,9 @@ Hover over an image's status for a plain-language explanation of what is still n
 
 Click **Filter** to narrow the list. You can filter by:
 
-- **Decision** — Accept or Reject
-- **Status** — Undecided, Reviewed, Incomplete or Conflicting
-- **Class** — only images that have annotations in a chosen class
+- **Decision**: Accept or Reject
+- **Status**: Undecided, Reviewed, Incomplete or Conflicting
+- **Class**: only images that have annotations in a chosen class
 
 Each option shows how many images match. Under **Sort by**, choose which column orders the list. **Clear filters** resets everything.
 
@@ -39,6 +39,6 @@ Each option shows how many images match. Under **Sort by**, choose which column 
 
 Expand an image's card to record who reviewed it and why:
 
-- **Inspector** — the name of the person reviewing. **Set as session inspector** fills the name in automatically on each new image as you go.
-- **Image note** — free text about the image.
+- **Inspector**: the name of the person reviewing. **Set as session inspector** fills the name in automatically on each new image as you go.
+- **Image note**: free text about the image.
 - To give many images the same inspector, use the bulk option, choose which images it applies to, and check the count shown before confirming.
